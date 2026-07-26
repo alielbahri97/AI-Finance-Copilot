@@ -1,31 +1,49 @@
-import { AiError, type AiChatMessage, type AiChatOptions, type AiClient } from "./types";
+import {
+  AiError,
+  parseSseData,
+  type AiChatMessage,
+  type AiChatOptions,
+  type AiClient,
+} from "./types";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 const DEFAULT_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
 
+async function request(
+  apiKey: string,
+  messages: AiChatMessage[],
+  options: AiChatOptions,
+  stream: boolean
+): Promise<Response> {
+  const response = await fetch(OPENAI_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: DEFAULT_MODEL,
+      messages,
+      max_tokens: options.maxTokens ?? 1500,
+      temperature: options.temperature ?? 0.4,
+      stream,
+    }),
+    signal: options.signal,
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new AiError(`OpenAI request failed (${response.status}): ${body}`, response.status);
+  }
+  return response;
+}
+
 export function createOpenAiClient(apiKey: string): AiClient {
   return {
     provider: "openai",
-    async chat(messages: AiChatMessage[], options: AiChatOptions = {}) {
-      const response = await fetch(OPENAI_API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: DEFAULT_MODEL,
-          messages,
-          max_tokens: options.maxTokens ?? 1024,
-          temperature: options.temperature ?? 0.4,
-        }),
-      });
 
-      if (!response.ok) {
-        const body = await response.text();
-        throw new AiError(`OpenAI request failed (${response.status}): ${body}`, response.status);
-      }
-
+    async chat(messages, options = {}) {
+      const response = await request(apiKey, messages, options, false);
       const data = (await response.json()) as {
         choices: { message: { content: string | null } }[];
       };
@@ -34,6 +52,26 @@ export function createOpenAiClient(apiKey: string): AiClient {
         throw new AiError("OpenAI returned an empty response");
       }
       return content;
+    },
+
+    async *chatStream(messages, options = {}) {
+      const response = await request(apiKey, messages, options, true);
+      if (!response.body) {
+        throw new AiError("OpenAI returned no stream body");
+      }
+
+      for await (const payload of parseSseData(response.body)) {
+        if (payload === "[DONE]") return;
+        try {
+          const event = JSON.parse(payload) as {
+            choices?: { delta?: { content?: string } }[];
+          };
+          const delta = event.choices?.[0]?.delta?.content;
+          if (delta) yield delta;
+        } catch {
+          // Ignore malformed keep-alive chunks.
+        }
+      }
     },
   };
 }

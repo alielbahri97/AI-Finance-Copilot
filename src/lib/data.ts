@@ -207,27 +207,3 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
     transactionCount: transactions.length,
   };
 }
-
-/** Compact plain-text summary of the user's finances for the AI system prompt. */
-export async function getFinancialContext(userId: string): Promise<string> {
-  const data = await getDashboardData(userId);
-  const lines = [
-    `Current month: income ${data.monthIncome.toFixed(2)}, expenses ${data.monthExpenses.toFixed(2)}, savings rate ${data.savingsRate}%`,
-    `All-time net balance: ${data.totalBalance.toFixed(2)}`,
-    `Top expense categories (last 6 months): ${
-      data.categoryBreakdown.map((c) => `${c.category} (${c.amount.toFixed(2)})`).join(", ") ||
-      "none recorded"
-    }`,
-    `Largest recent expenses: ${
-      data.largestExpenses
-        .map((tx) => `${tx.description} ${tx.amount.toFixed(2)} on ${tx.date.slice(0, 10)}`)
-        .join("; ") || "none"
-    }`,
-    `Recent transactions:`,
-    ...data.recentTransactions.map(
-      (tx) =>
-        `  * ${tx.date.slice(0, 10)} ${tx.type === "INCOME" ? "+" : "-"}${tx.amount.toFixed(2)} ${tx.category ?? "Uncategorized"}: ${tx.description}`
-    ),
-  ];
-  return lines.join("\n");
-}

@@ -2,23 +2,35 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { AiError, getAiClient, type AiChatMessage } from "@/lib/ai";
-import { getFinancialContext, getOrCreateProfile } from "@/lib/data";
+import { buildFinancialSnapshot } from "@/lib/ai/context";
+import { buildSystemPrompt } from "@/lib/ai/prompts";
+import { getOrCreateProfile } from "@/lib/data";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const requestSchema = z.object({
   message: z.string().min(1).max(4000),
+  conversationId: z.string().min(1).optional(),
 });
 
-const SYSTEM_PROMPT = `You are FinPilot, a friendly and pragmatic personal finance copilot.
-You help the user understand their spending, income, budgets and savings.
-Ground every answer in the financial data provided below. Be concise and concrete;
-use numbers from the data when relevant. If asked something unrelated to personal
-finance, politely steer the conversation back. Never invent transactions that are
-not in the data.`;
+const HISTORY_LIMIT = 20;
 
+function titleFromMessage(message: string): string {
+  const singleLine = message.replace(/\s+/g, " ").trim();
+  return singleLine.length > 60 ? `${singleLine.slice(0, 57)}…` : singleLine;
+}
+
+/**
+ * Streams an assistant reply. The response body is newline-delimited JSON:
+ *   {"type":"meta","conversationId":...,"title":...}   (once, first)
+ *   {"type":"delta","text":...}                        (repeated)
+ *   {"type":"done"} | {"type":"error","message":...}   (last)
+ * The user message is persisted before streaming; the assistant message is
+ * persisted when the stream finishes (including partial output if the client
+ * aborts mid-stream).
+ */
 export async function POST(request: Request) {
   try {
     const user = await getUser();
@@ -31,61 +43,130 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return NextResponse.json({ error: "Message is required" }, { status: 400 });
     }
+    const { message, conversationId } = parsed.data;
 
     const profile = await getOrCreateProfile(user);
-    const financialContext = await getFinancialContext(user.id);
 
-    // Last 20 messages give the model conversational memory.
-    const history = await prisma.chatMessage.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: "desc" },
-      take: 20,
-    });
+    // Resolve or create the conversation.
+    let conversation: { id: string; title: string };
+    let history: { role: "USER" | "ASSISTANT"; content: string }[] = [];
 
-    const messages: AiChatMessage[] = [
-      {
-        role: "system",
-        content: `${SYSTEM_PROMPT}\n\nUser currency: ${profile.currency}\n\n${financialContext}`,
-      },
-      ...history.reverse().map((message) => ({
-        role: message.role === "USER" ? ("user" as const) : ("assistant" as const),
-        content: message.content,
-      })),
-      { role: "user", content: parsed.data.message },
-    ];
-
-    const ai = getAiClient(profile.aiProvider === "ANTHROPIC" ? "anthropic" : "openai");
-    const reply = await ai.chat(messages);
+    if (conversationId) {
+      const existing = await prisma.conversation.findFirst({
+        where: { id: conversationId, userId: user.id },
+        select: { id: true, title: true },
+      });
+      if (!existing) {
+        return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
+      }
+      conversation = existing;
+      const recent = await prisma.chatMessage.findMany({
+        where: { conversationId: existing.id },
+        orderBy: { createdAt: "desc" },
+        take: HISTORY_LIMIT,
+        select: { role: true, content: true },
+      });
+      history = recent.reverse();
+    } else {
+      conversation = await prisma.conversation.create({
+        data: { userId: user.id, title: titleFromMessage(message) },
+        select: { id: true, title: true },
+      });
+    }
 
     await prisma.$transaction([
       prisma.chatMessage.create({
-        data: { userId: user.id, role: "USER", content: parsed.data.message },
+        data: {
+          userId: user.id,
+          conversationId: conversation.id,
+          role: "USER",
+          content: message,
+        },
       }),
-      prisma.chatMessage.create({
-        data: { userId: user.id, role: "ASSISTANT", content: reply },
+      prisma.conversation.update({
+        where: { id: conversation.id },
+        data: { updatedAt: new Date() },
       }),
     ]);
 
-    return NextResponse.json({ reply, provider: ai.provider });
+    const snapshot = await buildFinancialSnapshot(user.id, profile.currency);
+    const messages: AiChatMessage[] = [
+      { role: "system", content: buildSystemPrompt(snapshot) },
+      ...history.map((entry) => ({
+        role: entry.role === "USER" ? ("user" as const) : ("assistant" as const),
+        content: entry.content,
+      })),
+      { role: "user", content: message },
+    ];
+
+    const ai = getAiClient(profile.aiProvider === "ANTHROPIC" ? "anthropic" : "openai");
+    const encoder = new TextEncoder();
+
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const send = (event: Record<string, unknown>) => {
+          try {
+            controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+          } catch {
+            // Stream already closed (client aborted); persistence still runs below.
+          }
+        };
+
+        let reply = "";
+        let errorMessage: string | null = null;
+        send({ type: "meta", conversationId: conversation.id, title: conversation.title });
+
+        try {
+          for await (const delta of ai.chatStream(messages, { signal: request.signal })) {
+            reply += delta;
+            send({ type: "delta", text: delta });
+          }
+        } catch (error) {
+          const aborted =
+            request.signal.aborted || (error instanceof Error && error.name === "AbortError");
+          if (!aborted) {
+            console.error("Copilot stream failed:", error);
+            errorMessage =
+              error instanceof AiError ? error.message : "The assistant could not respond.";
+          }
+        }
+
+        // Persist before signaling completion so a client-side refresh
+        // immediately sees the full message (partial output is kept on abort).
+        if (reply.trim().length > 0) {
+          await prisma.chatMessage
+            .create({
+              data: {
+                userId: user.id,
+                conversationId: conversation.id,
+                role: "ASSISTANT",
+                content: reply,
+              },
+            })
+            .catch((error) => console.error("Failed to persist assistant message:", error));
+        }
+
+        send(errorMessage ? { type: "error", message: errorMessage } : { type: "done" });
+        try {
+          controller.close();
+        } catch {
+          // Already closed by a client abort.
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "application/x-ndjson; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        "X-Accel-Buffering": "no",
+      },
+    });
   } catch (error) {
     console.error("POST /api/copilot failed:", error);
     if (error instanceof AiError) {
       return NextResponse.json({ error: error.message }, { status: 502 });
     }
     return NextResponse.json({ error: "Copilot request failed" }, { status: 500 });
-  }
-}
-
-export async function DELETE() {
-  try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    await prisma.chatMessage.deleteMany({ where: { userId: user.id } });
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error("DELETE /api/copilot failed:", error);
-    return NextResponse.json({ error: "Failed to clear conversation" }, { status: 500 });
   }
 }

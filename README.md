@@ -21,8 +21,13 @@ Supabase, Prisma and OpenAI/Anthropic.
 - **Categories** — per-user category set seeded on first login, user-defined categories with
   colors, and auto-categorization rules (description/counterparty pattern matching) applied
   during import
-- **AI Copilot** — chat grounded in your real transaction data, with a provider abstraction
-  over OpenAI and Anthropic and persisted conversation history
+- **AI Copilot** — a streaming financial assistant grounded in a rich snapshot of your data:
+  12-month income/expense/net summaries, spending by category, top counterparties/suppliers,
+  largest expenses, recurring payment patterns, a trend-based 3-month cash forecast, and
+  statistically unusual transactions (z-score vs category norms). Multiple conversations with
+  auto-generated titles, rename/delete, markdown answers (tables, lists), data-driven
+  suggested questions, and a stop-generation button. Works with both OpenAI and Anthropic
+  through a shared streaming provider abstraction.
 - **Profile & Settings** — display name, preferred currency, AI provider choice, theme
   (light/dark/system) and password change
 - **UI** — responsive layout, dark mode, toast notifications, loading skeletons, error
@@ -73,7 +78,8 @@ Supabase, Prisma and OpenAI/Anthropic.
 │   │   ├── profile/ settings/ # profile & settings forms
 │   │   └── theme-*.tsx        # dark mode provider/toggle
 │   ├── lib/
-│   │   ├── ai/                # OpenAI/Anthropic provider abstraction
+│   │   ├── ai/                # OpenAI/Anthropic streaming abstraction, financial
+│   │   │                      # context snapshot, prompts, suggested questions
 │   │   ├── csv/               # CSV decoding, delimiter/format/column detection,
 │   │   │                      # row normalization (shared server + client)
 │   │   ├── supabase/          # browser/server/middleware clients
@@ -166,9 +172,16 @@ npm run db:seed -- <supabase-user-id> <email>
   re-check the user via `supabase.auth.getUser()`.
 - **Profiles**: a `profiles` row (same UUID as the Supabase auth user) is upserted on first
   authenticated visit, so no database trigger is required.
-- **AI abstraction**: `src/lib/ai` exposes a tiny `AiClient` interface with `openai` and
-  `anthropic` implementations over plain `fetch`; `getAiClient()` picks the user's preferred
-  provider and falls back to whichever has an API key.
+- **AI abstraction**: `src/lib/ai` exposes a tiny `AiClient` interface (`chat` +
+  `chatStream`) with `openai` and `anthropic` implementations over plain `fetch` and a
+  shared SSE parser; `getAiClient()` picks the user's preferred provider and falls back to
+  whichever has an API key.
+- **Copilot pipeline**: `src/lib/ai/context.ts` assembles a token-efficient financial
+  snapshot (balance, 12-month summaries, category/supplier spend, recurring patterns,
+  trend forecast, z-score anomalies) that `src/lib/ai/prompts.ts` injects into the system
+  prompt. `/api/copilot` streams the reply to the client as newline-delimited JSON events
+  (`meta` → `delta`* → `done`/`error`); the user message is persisted before streaming and
+  the assistant message after (partial output is kept if the user hits stop).
 - **Data isolation**: every query and mutation is scoped to the authenticated user id in the
   API routes; the AI copilot only ever sees the requesting user's aggregated data.
 - **CSV import**: `/api/import/parse` analyzes the upload (delimiter, encoding, number/date
