@@ -7,10 +7,20 @@ Supabase, Prisma and OpenAI/Anthropic.
 
 - **Authentication** — email/password sign up with email confirmation, sign in, forgot/reset
   password (Supabase Auth, PKCE flow, session refresh middleware)
-- **Dashboard** — balance, income, expenses and savings-rate cards, six-month cash-flow area
-  chart, spending-by-category donut chart, recent activity (Recharts)
-- **Transactions** — add and delete income/expense records with validated forms
-  (React Hook Form + Zod)
+- **Dashboard** — current-month income/expense cards with month-over-month trends, total
+  balance and savings rate, monthly cashflow chart (income/expense bars + net line),
+  spending-by-category donut, largest expenses, cash-balance history (Recharts)
+- **CSV bank statement import** — drag & drop upload; automatic detection of delimiter
+  (comma/semicolon/tab/pipe), encoding (UTF-8/UTF-16/Windows-1252), US vs European number
+  formats and date layouts; automatic column detection (date, description, amount or
+  debit/credit pair, balance, counterparty) with a correctable mapping preview; duplicate
+  rows are skipped across imports and every import is tracked as a batch that can be undone
+- **Transactions** — server-side search (description/counterparty), filters (date range,
+  category, type, amount range, import batch), pagination, inline category editing,
+  multi-select bulk actions (set category, delete), manual add with validated forms
+- **Categories** — per-user category set seeded on first login, user-defined categories with
+  colors, and auto-categorization rules (description/counterparty pattern matching) applied
+  during import
 - **AI Copilot** — chat grounded in your real transaction data, with a provider abstraction
   over OpenAI and Anthropic and persisted conversation history
 - **Profile & Settings** — display name, preferred currency, AI provider choice, theme
@@ -35,14 +45,20 @@ Supabase, Prisma and OpenAI/Anthropic.
 
 ```
 ├── prisma/
-│   ├── schema.prisma          # Profile, Transaction, Budget, ChatMessage models
+│   ├── schema.prisma          # Profile, Category, CategoryRule, ImportBatch,
+│   │                          # Transaction, Budget, ChatMessage models
+│   ├── migrations/            # SQL migrations (apply with npm run db:deploy)
 │   └── seed.ts                # Demo data seeder
 ├── prisma.config.ts           # Prisma 7 CLI config (datasource, migrations, seed)
+├── scripts/
+│   └── csv-smoke-test.ts      # Assertions for the CSV parsing pipeline
 ├── src/
 │   ├── app/
 │   │   ├── (auth)/            # login, signup, forgot-password, reset-password
-│   │   ├── (dashboard)/       # dashboard, transactions, copilot, profile, settings
-│   │   ├── api/               # transactions, profile, copilot route handlers
+│   │   ├── (dashboard)/       # dashboard, transactions, import, categories,
+│   │   │                      # copilot, profile, settings
+│   │   ├── api/               # transactions (+bulk), categories, rules,
+│   │   │                      # import (parse/commit/batches), profile, copilot
 │   │   ├── auth/              # Supabase callback + confirm handlers
 │   │   ├── error.tsx          # global error boundary
 │   │   └── not-found.tsx
@@ -50,14 +66,19 @@ Supabase, Prisma and OpenAI/Anthropic.
 │   │   ├── ui/                # shadcn/ui primitives (button, card, dialog, ...)
 │   │   ├── auth/              # auth forms
 │   │   ├── dashboard/         # sidebar, header, charts, stat cards
-│   │   ├── transactions/      # table + add-transaction dialog
+│   │   ├── transactions/      # table, toolbar (search/filters), add dialog
+│   │   ├── import/            # dropzone, mapping wizard, import history
+│   │   ├── categories/        # category + auto-categorization rule managers
 │   │   ├── copilot/           # chat interface
 │   │   ├── profile/ settings/ # profile & settings forms
 │   │   └── theme-*.tsx        # dark mode provider/toggle
 │   ├── lib/
 │   │   ├── ai/                # OpenAI/Anthropic provider abstraction
+│   │   ├── csv/               # CSV decoding, delimiter/format/column detection,
+│   │   │                      # row normalization (shared server + client)
 │   │   ├── supabase/          # browser/server/middleware clients
 │   │   ├── validations/       # Zod schemas
+│   │   ├── categories.ts      # default category seeding + rule matching
 │   │   ├── data.ts            # server-side data access & aggregation
 │   │   ├── env.ts             # validated environment variables
 │   │   ├── prisma.ts          # Prisma client singleton
@@ -96,7 +117,7 @@ Fill in the Supabase values and at least one AI provider key (`OPENAI_API_KEY` o
 ### 4. Create the database schema
 
 ```bash
-npm run db:push        # or: npm run db:migrate
+npm run db:deploy      # applies prisma/migrations (or: npm run db:push)
 ```
 
 ### 5. Run the app
@@ -150,3 +171,15 @@ npm run db:seed -- <supabase-user-id> <email>
   provider and falls back to whichever has an API key.
 - **Data isolation**: every query and mutation is scoped to the authenticated user id in the
   API routes; the AI copilot only ever sees the requesting user's aggregated data.
+- **CSV import**: `/api/import/parse` analyzes the upload (delimiter, encoding, number/date
+  formats, column roles) and returns a suggested mapping with a preview; the client lets the
+  user correct the mapping (re-normalizing samples locally with the same shared `lib/csv`
+  code) and then re-uploads the file with the confirmed mapping to `/api/import/commit`.
+  Each imported row gets a SHA-256 fingerprint (date, type, amount, description,
+  counterparty, in-file occurrence index) that is unique per user, so re-importing the same
+  statement skips duplicates. Deleting an `ImportBatch` cascades to its transactions, which
+  is how undo works. Run `npx tsx scripts/csv-smoke-test.ts` to exercise the parser.
+- **Categorization**: categories are per-user rows (seeded defaults on first login);
+  `CategoryRule` patterns are matched case-insensitively against description + counterparty
+  at import time, longest pattern first. Deleting a category sets its transactions to
+  uncategorized (FK `ON DELETE SET NULL`).

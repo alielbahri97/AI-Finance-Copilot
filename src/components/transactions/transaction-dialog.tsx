@@ -35,11 +35,12 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  INCOME_CATEGORIES,
-  TRANSACTION_CATEGORIES,
   transactionFormSchema,
   type TransactionFormValues,
 } from "@/lib/validations/transaction";
+import type { CategoryOption } from "./types";
+
+const UNCATEGORIZED = "uncategorized";
 
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
@@ -48,12 +49,16 @@ function todayIsoDate() {
 const EMPTY_VALUES: TransactionFormValues = {
   type: "EXPENSE",
   amount: "",
-  category: "" as TransactionFormValues["category"],
+  categoryId: UNCATEGORIZED,
   description: "",
   date: todayIsoDate(),
 };
 
-export function TransactionDialog() {
+interface TransactionDialogProps {
+  categories: CategoryOption[];
+}
+
+export function TransactionDialog({ categories }: TransactionDialogProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -64,12 +69,7 @@ export function TransactionDialog() {
   });
 
   const type = form.watch("type");
-  const categories =
-    type === "INCOME"
-      ? INCOME_CATEGORIES
-      : TRANSACTION_CATEGORIES.filter(
-          (category) => !(INCOME_CATEGORIES as readonly string[]).includes(category) || category === "Other"
-        );
+  const options = categories.filter((category) => category.type === type);
 
   async function onSubmit(values: TransactionFormValues) {
     setIsSubmitting(true);
@@ -80,7 +80,7 @@ export function TransactionDialog() {
         body: JSON.stringify({
           type: values.type,
           amount: Number(values.amount),
-          category: values.category,
+          categoryId: values.categoryId === UNCATEGORIZED ? null : values.categoryId,
           description: values.description,
           date: values.date,
         }),
@@ -108,7 +108,7 @@ export function TransactionDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>
+        <Button variant="outline">
           <PlusIcon />
           Add transaction
         </Button>
@@ -130,7 +130,7 @@ export function TransactionDialog() {
                       value={field.value}
                       onValueChange={(value) => {
                         field.onChange(value);
-                        form.resetField("category");
+                        form.setValue("categoryId", UNCATEGORIZED);
                       }}
                     >
                       <TabsList className="w-full">
@@ -180,20 +180,29 @@ export function TransactionDialog() {
             </div>
             <FormField
               control={form.control}
-              name="category"
+              name="categoryId"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Category</FormLabel>
-                  <Select value={field.value || undefined} onValueChange={field.onChange}>
+                  <Select value={field.value} onValueChange={field.onChange}>
                     <FormControl>
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder="Pick a category" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {categories.map((category) => (
-                        <SelectItem key={category} value={category}>
-                          {category}
+                      <SelectItem value={UNCATEGORIZED}>
+                        <span className="text-muted-foreground">Uncategorized</span>
+                      </SelectItem>
+                      {options.map((category) => (
+                        <SelectItem key={category.id} value={category.id}>
+                          <span className="flex items-center gap-2">
+                            <span
+                              className="size-2.5 rounded-full"
+                              style={{ backgroundColor: category.color }}
+                            />
+                            {category.name}
+                          </span>
                         </SelectItem>
                       ))}
                     </SelectContent>

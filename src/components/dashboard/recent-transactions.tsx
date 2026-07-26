@@ -3,11 +3,11 @@ import { ArrowDownLeftIcon, ArrowUpRightIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { DashboardData } from "@/lib/data";
+import type { TransactionSummary } from "@/lib/data";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
 
 interface RecentTransactionsProps {
-  transactions: DashboardData["recentTransactions"];
+  transactions: TransactionSummary[];
   currency: string;
 }
 
@@ -15,10 +15,15 @@ export function RecentTransactions({ transactions, currency }: RecentTransaction
   if (transactions.length === 0) {
     return (
       <div className="text-muted-foreground flex flex-col items-center gap-3 py-10 text-center text-sm">
-        <p>No transactions yet. Add your first one to see it here.</p>
-        <Button size="sm" asChild>
-          <Link href="/transactions">Add a transaction</Link>
-        </Button>
+        <p>No transactions yet. Add one manually or import a bank statement.</p>
+        <div className="flex gap-2">
+          <Button size="sm" asChild>
+            <Link href="/import">Import CSV</Link>
+          </Button>
+          <Button size="sm" variant="outline" asChild>
+            <Link href="/transactions">Add a transaction</Link>
+          </Button>
+        </div>
       </div>
     );
   }
@@ -46,8 +51,16 @@ export function RecentTransactions({ transactions, currency }: RecentTransaction
             <p className="truncate text-sm font-medium">{tx.description}</p>
             <p className="text-muted-foreground text-xs">{formatDate(tx.date)}</p>
           </div>
-          <Badge variant="secondary" className="hidden sm:inline-flex">
-            {tx.category}
+          <Badge
+            variant="secondary"
+            className="hidden sm:inline-flex"
+            style={
+              tx.categoryColor
+                ? { backgroundColor: `${tx.categoryColor}22`, color: tx.categoryColor }
+                : undefined
+            }
+          >
+            {tx.category ?? "Uncategorized"}
           </Badge>
           <span
             className={cn(

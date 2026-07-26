@@ -5,15 +5,6 @@ import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import type { CategoryPoint } from "@/lib/data";
 import { formatCurrency } from "@/lib/utils";
 
-const COLORS = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
-  "var(--muted-foreground)",
-];
-
 interface CategoryChartProps {
   data: CategoryPoint[];
   currency: string;
@@ -41,8 +32,8 @@ export function CategoryChart({ data, currency }: CategoryChartProps) {
             paddingAngle={3}
             strokeWidth={0}
           >
-            {data.map((entry, index) => (
-              <Cell key={entry.category} fill={COLORS[index % COLORS.length]} />
+            {data.map((entry) => (
+              <Cell key={entry.category} fill={entry.color} />
             ))}
           </Pie>
           <Tooltip
@@ -58,11 +49,11 @@ export function CategoryChart({ data, currency }: CategoryChartProps) {
         </PieChart>
       </ResponsiveContainer>
       <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 pt-2 sm:grid-cols-3">
-        {data.map((entry, index) => (
+        {data.map((entry) => (
           <div key={entry.category} className="flex items-center gap-1.5 text-xs">
             <span
               className="size-2.5 shrink-0 rounded-full"
-              style={{ backgroundColor: COLORS[index % COLORS.length] }}
+              style={{ backgroundColor: entry.color }}
             />
             <span className="text-muted-foreground truncate">{entry.category}</span>
           </div>
