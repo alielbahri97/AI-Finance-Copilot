@@ -21,13 +21,21 @@ Supabase, Prisma and OpenAI/Anthropic.
 - **Categories** — per-user category set seeded on first login, user-defined categories with
   colors, and auto-categorization rules (description/counterparty pattern matching) applied
   during import
+- **Cash flow forecasting** — a deterministic forecast engine (`/forecast`) that combines
+  recurring-payment scheduling, a linear spending trend and user-defined assumptions into
+  30-day, 90-day and 12-month projections with an ~80% confidence band. Computes cash
+  runway, net/gross burn rate, recurring income/expense totals and upcoming bills. Users can
+  add what-if assumptions (one-off amounts on a date, monthly recurring adjustments with
+  optional start/end dates, compounding % growth per month) and toggle them on/off — the
+  forecast recomputes on every change. A streamed "Explain this forecast" action asks the AI
+  for drivers, risks and recommendations.
 - **AI Copilot** — a streaming financial assistant grounded in a rich snapshot of your data:
   12-month income/expense/net summaries, spending by category, top counterparties/suppliers,
-  largest expenses, recurring payment patterns, a trend-based 3-month cash forecast, and
-  statistically unusual transactions (z-score vs category norms). Multiple conversations with
-  auto-generated titles, rename/delete, markdown answers (tables, lists), data-driven
-  suggested questions, and a stop-generation button. Works with both OpenAI and Anthropic
-  through a shared streaming provider abstraction.
+  largest expenses, recurring payment patterns, the full cash forecast (runway, burn,
+  projections, assumptions), and statistically unusual transactions (z-score vs category
+  norms). Multiple conversations with auto-generated titles, rename/delete, markdown answers
+  (tables, lists), data-driven suggested questions, and a stop-generation button. Works with
+  both OpenAI and Anthropic through a shared streaming provider abstraction.
 - **Profile & Settings** — display name, preferred currency, AI provider choice, theme
   (light/dark/system) and password change
 - **UI** — responsive layout, dark mode, toast notifications, loading skeletons, error
@@ -51,19 +59,22 @@ Supabase, Prisma and OpenAI/Anthropic.
 ```
 ├── prisma/
 │   ├── schema.prisma          # Profile, Category, CategoryRule, ImportBatch,
-│   │                          # Transaction, Budget, ChatMessage models
+│   │                          # Transaction, Budget, Conversation, ChatMessage,
+│   │                          # Assumption models
 │   ├── migrations/            # SQL migrations (apply with npm run db:deploy)
 │   └── seed.ts                # Demo data seeder
 ├── prisma.config.ts           # Prisma 7 CLI config (datasource, migrations, seed)
 ├── scripts/
-│   └── csv-smoke-test.ts      # Assertions for the CSV parsing pipeline
+│   ├── csv-smoke-test.ts      # Assertions for the CSV parsing pipeline
+│   └── forecast-smoke-test.ts # Assertions for the forecast engine
 ├── src/
 │   ├── app/
 │   │   ├── (auth)/            # login, signup, forgot-password, reset-password
 │   │   ├── (dashboard)/       # dashboard, transactions, import, categories,
-│   │   │                      # copilot, profile, settings
+│   │   │                      # forecast, copilot, profile, settings
 │   │   ├── api/               # transactions (+bulk), categories, rules,
-│   │   │                      # import (parse/commit/batches), profile, copilot
+│   │   │                      # import (parse/commit/batches), profile, copilot,
+│   │   │                      # conversations, forecast (+explain), assumptions
 │   │   ├── auth/              # Supabase callback + confirm handlers
 │   │   ├── error.tsx          # global error boundary
 │   │   └── not-found.tsx
@@ -74,6 +85,8 @@ Supabase, Prisma and OpenAI/Anthropic.
 │   │   ├── transactions/      # table, toolbar (search/filters), add dialog
 │   │   ├── import/            # dropzone, mapping wizard, import history
 │   │   ├── categories/        # category + auto-categorization rule managers
+│   │   ├── forecast/          # forecast chart, assumptions manager, bills,
+│   │   │                      # recurring tables, AI explanation
 │   │   ├── copilot/           # chat interface
 │   │   ├── profile/ settings/ # profile & settings forms
 │   │   └── theme-*.tsx        # dark mode provider/toggle
@@ -82,6 +95,7 @@ Supabase, Prisma and OpenAI/Anthropic.
 │   │   │                      # context snapshot, prompts, suggested questions
 │   │   ├── csv/               # CSV decoding, delimiter/format/column detection,
 │   │   │                      # row normalization (shared server + client)
+│   │   ├── finance/           # shared recurrence detection + forecast engine
 │   │   ├── supabase/          # browser/server/middleware clients
 │   │   ├── validations/       # Zod schemas
 │   │   ├── categories.ts      # default category seeding + rule matching
@@ -178,10 +192,25 @@ npm run db:seed -- <supabase-user-id> <email>
   whichever has an API key.
 - **Copilot pipeline**: `src/lib/ai/context.ts` assembles a token-efficient financial
   snapshot (balance, 12-month summaries, category/supplier spend, recurring patterns,
-  trend forecast, z-score anomalies) that `src/lib/ai/prompts.ts` injects into the system
-  prompt. `/api/copilot` streams the reply to the client as newline-delimited JSON events
-  (`meta` → `delta`* → `done`/`error`); the user message is persisted before streaming and
-  the assistant message after (partial output is kept if the user hits stop).
+  the full forecast with runway/burn/assumptions, z-score anomalies) that
+  `src/lib/ai/prompts.ts` injects into the system prompt. `/api/copilot` streams the reply
+  to the client as newline-delimited JSON events (`meta` → `delta`* → `done`/`error`); the
+  user message is persisted before streaming and the assistant message after (partial
+  output is kept if the user hits stop).
+- **Forecast engine**: `src/lib/finance/recurrence.ts` groups transactions by normalized
+  merchant and keeps groups with a stable amount (CV < 0.35) and a consistent interval
+  (weekly/biweekly/monthly/quarterly). `src/lib/finance/forecast.ts` schedules each
+  recurring item forward at its cadence, projects the non-recurring remainder with a
+  least-squares trend over the last six full months (recurring equivalents subtracted,
+  clamped at zero, spread across the days of each month), then applies user assumptions:
+  one-offs on their date, monthly adjustments on their day-of-month within their window,
+  and % growth compounding monthly on the organic flows of its side. The confidence band is
+  ±1.28σ of historical monthly net, widening with √time. Daily granularity feeds the
+  30/90-day charts and month-end sampling the 12-month chart; runway is the first projected
+  zero-crossing (extrapolated past the simulation if still trending down, `null` = infinite).
+  Everything is recomputed from current data on each request — assumption or transaction
+  changes are reflected immediately. Run `npx tsx scripts/forecast-smoke-test.ts` to
+  exercise the engine.
 - **Data isolation**: every query and mutation is scoped to the authenticated user id in the
   API routes; the AI copilot only ever sees the requesting user's aggregated data.
 - **CSV import**: `/api/import/parse` analyzes the upload (delimiter, encoding, number/date

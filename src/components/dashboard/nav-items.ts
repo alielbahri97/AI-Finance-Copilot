@@ -1,6 +1,7 @@
 import {
   ArrowLeftRightIcon,
   BotIcon,
+  ChartSplineIcon,
   LayoutDashboardIcon,
   SettingsIcon,
   TagsIcon,
@@ -20,6 +21,7 @@ export const NAV_ITEMS: NavItem[] = [
   { title: "Transactions", href: "/transactions", icon: ArrowLeftRightIcon },
   { title: "Import", href: "/import", icon: UploadIcon },
   { title: "Categories", href: "/categories", icon: TagsIcon },
+  { title: "Forecast", href: "/forecast", icon: ChartSplineIcon },
   { title: "Copilot", href: "/copilot", icon: BotIcon },
   { title: "Profile", href: "/profile", icon: UserIcon },
   { title: "Settings", href: "/settings", icon: SettingsIcon },

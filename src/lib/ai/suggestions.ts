@@ -35,10 +35,11 @@ export function buildSuggestedQuestions(snapshot: FinancialSnapshot): string[] {
     suggestions.push("Any unusual transactions I should look at?");
   }
 
-  // Forecast.
-  if (snapshot.forecast.length > 0) {
-    suggestions.push("Predict my cash for the next 3 months.");
+  // Runway and forecast.
+  if (snapshot.forecast.metrics.runwayMonths !== null) {
+    suggestions.push("How long is my cash runway?");
   }
+  suggestions.push("Predict my cash for the next 3 months.");
 
   // Top category.
   const topCategory = snapshot.categorySpend[0];

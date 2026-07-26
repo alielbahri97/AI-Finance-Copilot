@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
+  ArrowRightIcon,
+  ChartSplineIcon,
   PiggyBankIcon,
   TrendingDownIcon,
   TrendingUpIcon,
@@ -21,6 +24,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { getDashboardData, getOrCreateProfile } from "@/lib/data";
+import { buildForecast } from "@/lib/finance/data";
 import { getUser } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils";
 
@@ -32,8 +36,16 @@ export default async function DashboardPage() {
   if (!user) redirect("/login");
 
   const profile = await getOrCreateProfile(user);
-  const data = await getDashboardData(user.id);
+  const [data, forecast] = await Promise.all([
+    getDashboardData(user.id),
+    buildForecast(user.id, profile.currency),
+  ]);
   const firstName = profile.fullName?.split(" ")[0];
+
+  const runwayLabel =
+    forecast.metrics.runwayMonths === null
+      ? "∞ (cash-flow positive)"
+      : `~${Math.round(forecast.metrics.runwayMonths * 10) / 10} months`;
 
   return (
     <div className="flex flex-col gap-6">
@@ -77,6 +89,35 @@ export default async function DashboardPage() {
           icon={PiggyBankIcon}
         />
       </div>
+
+      <Link href="/forecast" className="group">
+        <Card className="hover:border-primary/40 gap-2 py-4 transition-colors">
+          <CardContent className="flex flex-wrap items-center gap-x-8 gap-y-3">
+            <div className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-lg">
+              <ChartSplineIcon className="size-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">Cash flow forecast</p>
+              <p className="text-muted-foreground text-xs">
+                Runway, projections and what-if assumptions
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
+              <div>
+                <p className="text-muted-foreground text-xs">Cash runway</p>
+                <p className="text-sm font-semibold">{runwayLabel}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Projected balance in 30 days</p>
+                <p className="text-sm font-semibold">
+                  {formatCurrency(forecast.metrics.projectedBalance30d, profile.currency)}
+                </p>
+              </div>
+            </div>
+            <ArrowRightIcon className="text-muted-foreground group-hover:text-primary ml-auto size-4 transition-colors" />
+          </CardContent>
+        </Card>
+      </Link>
 
       <div className="grid gap-4 lg:grid-cols-5">
         <Card className="lg:col-span-3">

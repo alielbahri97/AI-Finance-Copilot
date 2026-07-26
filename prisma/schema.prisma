@@ -26,6 +26,15 @@ enum AiProvider {
   ANTHROPIC
 }
 
+enum AssumptionKind {
+  /// A single future income/expense on a specific date.
+  ONE_OFF
+  /// A monthly recurring adjustment, optionally bounded by start/end dates.
+  RECURRING
+  /// A compounding % growth per month applied to projected income or expenses.
+  PERCENT_GROWTH
+}
+
 model Profile {
   /// Matches the Supabase Auth user id.
   id         String     @id @db.Uuid
@@ -44,8 +53,34 @@ model Profile {
   categoryRules CategoryRule[]
   importBatches ImportBatch[]
   conversations Conversation[]
+  assumptions   Assumption[]
 
   @@map("profiles")
+}
+
+/// A user-defined adjustment applied on top of the data-driven cash forecast.
+model Assumption {
+  id        String          @id @default(cuid())
+  userId    String          @map("user_id") @db.Uuid
+  kind      AssumptionKind
+  type      TransactionType
+  label     String
+  /// Amount for ONE_OFF and RECURRING assumptions.
+  amount    Decimal?        @db.Decimal(12, 2)
+  /// % per month for PERCENT_GROWTH assumptions.
+  percent   Decimal?        @db.Decimal(6, 2)
+  /// The date of a ONE_OFF assumption.
+  date      DateTime?
+  startDate DateTime?       @map("start_date")
+  endDate   DateTime?       @map("end_date")
+  enabled   Boolean         @default(true)
+  createdAt DateTime        @default(now()) @map("created_at")
+  updatedAt DateTime        @updatedAt @map("updated_at")
+
+  profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("assumptions")
 }
 
 model Category {
