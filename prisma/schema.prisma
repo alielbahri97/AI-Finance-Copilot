@@ -1,0 +1,91 @@
+// Prisma schema for the AI Finance Copilot.
+// The database lives in Supabase PostgreSQL; auth users are managed by
+// Supabase Auth and mirrored here via the Profile model (same UUID).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+enum ChatRole {
+  USER
+  ASSISTANT
+}
+
+enum AiProvider {
+  OPENAI
+  ANTHROPIC
+}
+
+model Profile {
+  /// Matches the Supabase Auth user id.
+  id         String     @id @db.Uuid
+  email      String     @unique
+  fullName   String?    @map("full_name")
+  avatarUrl  String?    @map("avatar_url")
+  currency   String     @default("USD")
+  aiProvider AiProvider @default(OPENAI) @map("ai_provider")
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+
+  transactions Transaction[]
+  budgets      Budget[]
+  chatMessages ChatMessage[]
+
+  @@map("profiles")
+}
+
+model Transaction {
+  id          String          @id @default(cuid())
+  userId      String          @map("user_id") @db.Uuid
+  type        TransactionType
+  amount      Decimal         @db.Decimal(12, 2)
+  category    String
+  description String
+  date        DateTime
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date(sort: Desc)])
+  @@map("transactions")
+}
+
+model Budget {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id") @db.Uuid
+  category  String
+  limit     Decimal  @db.Decimal(12, 2)
+  month     Int
+  year      Int
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category, month, year])
+  @@map("budgets")
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id") @db.Uuid
+  role      ChatRole
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("chat_messages")
+}
