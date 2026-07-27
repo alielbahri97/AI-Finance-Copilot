@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
+import { BusinessProfileCard } from "@/components/profile/business-profile-card";
 import { ProfileForm } from "@/components/profile/profile-form";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -11,6 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { getOrCreateProfile } from "@/lib/data";
+import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 import { SUPPORTED_CURRENCIES } from "@/lib/validations/profile";
 import { getInitials } from "@/lib/utils";
@@ -23,6 +25,9 @@ export default async function ProfilePage() {
   if (!user) redirect("/login");
 
   const profile = await getOrCreateProfile(user);
+  const businessProfile = await prisma.businessProfile.findUnique({
+    where: { userId: user.id },
+  });
   const currency = (SUPPORTED_CURRENCIES as readonly string[]).includes(profile.currency)
     ? (profile.currency as (typeof SUPPORTED_CURRENCIES)[number])
     : "USD";
@@ -56,6 +61,48 @@ export default async function ProfilePage() {
             email={profile.email}
             defaultValues={{ fullName: profile.fullName ?? "", currency }}
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Business profile</CardTitle>
+          <CardDescription>
+            Industry context and financial ratio guidelines for your business type.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {businessProfile ? (
+            <BusinessProfileCard
+              currency={currency}
+              businessType={businessProfile.businessType}
+              employeeRange={businessProfile.employeeRange}
+              monthlyRent={
+                businessProfile.monthlyRent != null ? Number(businessProfile.monthlyRent) : null
+              }
+              monthlyRevenue={
+                businessProfile.monthlyRevenue != null
+                  ? Number(businessProfile.monthlyRevenue)
+                  : null
+              }
+              location={businessProfile.location}
+              businessNotes={businessProfile.businessNotes}
+              completedAt={businessProfile.completedAt?.toISOString() ?? null}
+              skippedAt={businessProfile.skippedAt?.toISOString() ?? null}
+            />
+          ) : (
+            <BusinessProfileCard
+              currency={currency}
+              businessType="OTHER"
+              employeeRange="SOLO"
+              monthlyRent={null}
+              monthlyRevenue={null}
+              location={null}
+              businessNotes={null}
+              completedAt={null}
+              skippedAt={null}
+            />
+          )}
         </CardContent>
       </Card>
     </div>

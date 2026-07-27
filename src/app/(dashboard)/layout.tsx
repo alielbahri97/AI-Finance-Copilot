@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { Header } from "@/components/dashboard/header";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { getOrCreateProfile } from "@/lib/data";
+import { isOnboardingDone } from "@/lib/onboarding/benchmarks";
+import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 
 // Everything behind login is per-user data; keep it out of search engines.
@@ -18,6 +20,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }
 
   const profile = await getOrCreateProfile(user);
+
+  // First-run business onboarding — skip once the user completes or dismisses it.
+  const businessProfile = await prisma.businessProfile.findUnique({
+    where: { userId: user.id },
+    select: { completedAt: true, skippedAt: true },
+  });
+  if (!isOnboardingDone(businessProfile)) {
+    redirect("/onboarding");
+  }
 
   return (
     <div className="flex min-h-svh">

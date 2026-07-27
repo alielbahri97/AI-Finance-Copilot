@@ -102,6 +102,26 @@ enum AssumptionKind {
   PERCENT_GROWTH
 }
 
+enum BusinessType {
+  RESTAURANT
+  RETAIL
+  SERVICES
+  SAAS
+  CONSTRUCTION
+  PROFESSIONAL
+  HEALTHCARE
+  MANUFACTURING
+  OTHER
+}
+
+enum EmployeeRange {
+  SOLO
+  SMALL
+  MEDIUM
+  LARGE
+  ENTERPRISE
+}
+
 model Profile {
   /// Matches the Supabase Auth user id.
   id         String     @id @db.Uuid
@@ -138,8 +158,36 @@ model Profile {
   referralReceived       Referral?               @relation("Referred")
   analyticsEvents        AnalyticsEvent[]
   integrationConnections IntegrationConnection[]
+  businessProfile        BusinessProfile?
 
   @@map("profiles")
+}
+
+/// Captures light business context from post-signup onboarding so FinPilot
+/// can surface industry-typical financial ratio guidelines.
+model BusinessProfile {
+  id              String         @id @default(cuid())
+  userId          String         @unique @map("user_id") @db.Uuid
+  businessType    BusinessType   @map("business_type")
+  employeeRange   EmployeeRange  @map("employee_range")
+  /// Approximate monthly rent / occupancy cost (optional).
+  monthlyRent     Decimal?       @map("monthly_rent") @db.Decimal(12, 2)
+  /// Approximate monthly revenue (optional).
+  monthlyRevenue  Decimal?       @map("monthly_revenue") @db.Decimal(14, 2)
+  /// Free-form country or city (currency lives on Profile).
+  location        String?
+  /// Extra detail when businessType is OTHER (or any clarifying note).
+  businessNotes   String?        @map("business_notes")
+  /// Set when the user finishes the onboarding wizard.
+  completedAt     DateTime?      @map("completed_at")
+  /// Set when the user skips onboarding; they can still fill this in later.
+  skippedAt       DateTime?      @map("skipped_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("business_profiles")
 }
 
 /// A user's link to an external provider (bank, accounting, productivity).

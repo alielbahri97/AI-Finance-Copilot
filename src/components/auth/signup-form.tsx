@@ -44,7 +44,7 @@ export function SignupForm() {
             full_name: values.fullName,
             ...(referralCode ? { referral_code: referralCode } : {}),
           },
-          emailRedirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=/onboarding`,
         },
       });
 

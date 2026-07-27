@@ -12,7 +12,7 @@ export default function robots(): MetadataRoute.Robots {
         // here keeps crawlers from wasting budget on redirects to /login.
         disallow: ["/api/", "/dashboard", "/transactions", "/invoices", "/forecast",
           "/reports", "/copilot", "/integrations", "/billing", "/admin", "/settings",
-          "/notifications", "/import"],
+          "/notifications", "/import", "/profile", "/onboarding"],
       },
     ],
     sitemap: `${appUrl}/sitemap.xml`,
