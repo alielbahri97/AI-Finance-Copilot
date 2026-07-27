@@ -67,14 +67,14 @@ export default async function LandingPage() {
       <main id="main-content" tabIndex={-1} className="flex-1 outline-none">
         <section className="mx-auto flex w-full max-w-6xl flex-col items-center gap-6 px-4 py-24 text-center sm:px-6">
           <span className="bg-accent text-accent-foreground rounded-full px-3 py-1 text-xs font-medium">
-            Your AI Finance Copilot
+            For small and medium-sized businesses
           </span>
           <h1 className="max-w-3xl text-4xl font-bold tracking-tight text-balance sm:text-6xl">
             Understand your money with an AI copilot by your side
           </h1>
           <p className="text-muted-foreground max-w-2xl text-lg text-balance">
-            FinPilot tracks your income and expenses, turns them into beautiful insights, and
-            answers your financial questions using AI grounded in your real data.
+            FinPilot tracks income and expenses, turns them into clear insights, and answers your
+            financial questions with AI grounded in real data.
           </p>
           <div className="flex flex-col gap-3 sm:flex-row">
             <Button size="lg" asChild>

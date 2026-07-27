@@ -41,7 +41,7 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
         })}
       </nav>
       <div className="text-muted-foreground border-t p-4 text-xs">
-        <p>AI Finance Copilot</p>
+        <p>Built for small and medium-sized businesses</p>
         <ReportIssueButton
           variant="inline"
           className="mt-2 h-8 w-full justify-start px-2 text-xs"

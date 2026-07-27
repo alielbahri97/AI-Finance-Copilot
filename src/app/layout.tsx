@@ -15,13 +15,13 @@ export const metadata: Metadata = {
     template: "%s | FinPilot",
   },
   description:
-    "Track income and expenses, visualize spending, and get AI-powered insights about your money.",
+    "AI finance copilot for small and medium-sized businesses. Track income and expenses, visualize spending, and get grounded insights.",
   openGraph: {
     type: "website",
     siteName: "FinPilot",
     title: "FinPilot — AI Finance Copilot",
     description:
-      "Track income and expenses, visualize spending, and get AI-powered insights about your money.",
+      "AI finance copilot for small and medium-sized businesses. Track income and expenses, visualize spending, and get grounded insights.",
     url: appUrl,
   },
 };

@@ -60,7 +60,7 @@ export default async function DashboardPage() {
           {firstName ? `Welcome back, ${firstName}` : "Dashboard"}
         </h1>
         <p className="text-muted-foreground text-sm">
-          Your financial overview for the last six months.
+          Built for small and medium-sized businesses — your overview for the last six months.
         </p>
       </div>
 
