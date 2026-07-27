@@ -5,6 +5,7 @@ import { getOrCreateProfile } from "@/lib/data";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 import { SUPPORTED_CURRENCIES } from "@/lib/validations/profile";
+import { apiError } from "@/lib/api/response";
 
 const updateSchema = z
   .object({
@@ -44,7 +45,6 @@ export async function PATCH(request: Request) {
       },
     });
   } catch (error) {
-    console.error("PATCH /api/profile failed:", error);
-    return NextResponse.json({ error: "Failed to update profile" }, { status: 500 });
+    return apiError("PATCH /api/profile", "Failed to update profile", error);
   }
 }

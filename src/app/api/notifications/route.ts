@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
+import { apiError } from "@/lib/api/response";
 
 /** Latest notifications plus the unread count for the bell badge. */
 export async function GET() {
@@ -33,7 +34,6 @@ export async function GET() {
       unreadCount,
     });
   } catch (error) {
-    console.error("GET /api/notifications failed:", error);
-    return NextResponse.json({ error: "Failed to load notifications" }, { status: 500 });
+    return apiError("GET /api/notifications", "Failed to load notifications", error);
   }
 }

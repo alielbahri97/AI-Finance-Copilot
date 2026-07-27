@@ -5,6 +5,7 @@ import { serializeInvoice } from "@/lib/invoices/serialize";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 import { invoiceListQuerySchema } from "@/lib/validations/invoice";
+import { apiError } from "@/lib/api/response";
 
 export async function GET(request: Request) {
   try {
@@ -48,7 +49,6 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ invoices: invoices.map(serializeInvoice) });
   } catch (error) {
-    console.error("GET /api/invoices failed:", error);
-    return NextResponse.json({ error: "Failed to load invoices" }, { status: 500 });
+    return apiError("GET /api/invoices", "Failed to load invoices", error);
   }
 }

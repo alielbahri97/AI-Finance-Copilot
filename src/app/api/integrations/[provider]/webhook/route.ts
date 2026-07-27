@@ -5,6 +5,7 @@ import { saveConnection } from "@/lib/integrations/connections";
 import { requireIntegrationAccess } from "@/lib/integrations/guard";
 import { sendTeamsMessage, validateTeamsWebhookUrl } from "@/lib/integrations/providers/teams";
 import { getProvider } from "@/lib/integrations/registry";
+import { apiError } from "@/lib/api/response";
 
 const webhookSchema = z.object({
   url: z.string().min(12).max(2000),
@@ -63,7 +64,6 @@ export async function POST(
 
     return NextResponse.json({ ok: true });
   } catch (error) {
-    console.error(`POST /api/integrations/${providerId}/webhook failed:`, error);
-    return NextResponse.json({ error: "Failed to save the webhook" }, { status: 500 });
+    return apiError(`POST /api/integrations/${providerId}/webhook`, "Failed to save the webhook", error);
   }
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { apiError } from "@/lib/api/response";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 import {
@@ -59,8 +60,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     });
     return NextResponse.json({ assumption });
   } catch (error) {
-    console.error("PATCH /api/assumptions/[id] failed:", error);
-    return NextResponse.json({ error: "Failed to update assumption" }, { status: 500 });
+    return apiError("PATCH /api/assumptions/[id]", "Failed to update assumption", error);
   }
 }
 
@@ -79,7 +79,6 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("DELETE /api/assumptions/[id] failed:", error);
-    return NextResponse.json({ error: "Failed to delete assumption" }, { status: 500 });
+    return apiError("DELETE /api/assumptions/[id]", "Failed to delete assumption", error);
   }
 }

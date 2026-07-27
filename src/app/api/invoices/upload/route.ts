@@ -6,6 +6,9 @@ import { getOrCreateProfile } from "@/lib/data";
 import { ingestInvoiceDocument } from "@/lib/invoices/ingest";
 import { INVOICE_MIME_TYPES, MAX_INVOICE_FILE_BYTES } from "@/lib/invoices/storage";
 import { createClient, getUser } from "@/lib/supabase/server";
+import { enforceRateLimit } from "@/lib/api/rate-limit-guard";
+import { apiError } from "@/lib/api/response";
+import { logger, serializeError } from "@/lib/logger";
 
 export const maxDuration = 120;
 
@@ -21,6 +24,9 @@ export async function POST(request: Request) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const limited = await enforceRateLimit("upload", user.id);
+    if (limited) return limited;
 
     const formData = await request.formData().catch(() => null);
     const file = formData?.get("file");
@@ -69,7 +75,7 @@ export async function POST(request: Request) {
         attemptExtraction: extractionQuota.allowed,
       });
     } catch (error) {
-      console.error("Invoice upload to storage failed:", error);
+      logger.error("Invoice upload to storage", { error: serializeError(error) });
       return NextResponse.json(
         {
           error:
@@ -93,7 +99,6 @@ export async function POST(request: Request) {
       { status: 201 }
     );
   } catch (error) {
-    console.error("POST /api/invoices/upload failed:", error);
-    return NextResponse.json({ error: "Failed to upload the invoice" }, { status: 500 });
+    return apiError("POST /api/invoices/upload", "Failed to upload the invoice", error);
   }
 }

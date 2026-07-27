@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
+import { apiError } from "@/lib/api/response";
 
 export async function GET() {
   try {
@@ -24,7 +25,6 @@ export async function GET() {
       })),
     });
   } catch (error) {
-    console.error("GET /api/conversations failed:", error);
-    return NextResponse.json({ error: "Failed to load conversations" }, { status: 500 });
+    return apiError("GET /api/conversations", "Failed to load conversations", error);
   }
 }

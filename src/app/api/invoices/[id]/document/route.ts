@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createInvoiceSignedUrl } from "@/lib/invoices/storage";
 import { prisma } from "@/lib/prisma";
 import { createClient, getUser } from "@/lib/supabase/server";
+import { apiError } from "@/lib/api/response";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -44,7 +45,6 @@ export async function GET(_request: Request, context: RouteContext) {
 
     return NextResponse.json({ url, mimeType: invoice.mimeType, fileName: invoice.fileName });
   } catch (error) {
-    console.error("GET /api/invoices/[id]/document failed:", error);
-    return NextResponse.json({ error: "Failed to load document" }, { status: 500 });
+    return apiError("GET /api/invoices/[id]/document", "Failed to load document", error);
   }
 }

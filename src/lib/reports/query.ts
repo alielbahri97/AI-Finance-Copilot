@@ -2,6 +2,7 @@ import "server-only";
 
 import { getEntitlements, upgradeError } from "@/lib/billing/entitlements";
 import { getOrCreateProfile } from "@/lib/data";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { getUser } from "@/lib/supabase/server";
 import { reportQuerySchema } from "@/lib/validations/report";
 
@@ -23,6 +24,11 @@ export async function resolveReportRequest(
 ): Promise<{ context: ReportRequestContext } | { error: string; status: number }> {
   const user = await getUser();
   if (!user) return { error: "Unauthorized", status: 401 };
+
+  const limited = await checkRateLimit(`export:${user.id}`, RATE_LIMITS.export);
+  if (!limited.allowed) {
+    return { error: "Too many export requests — please wait a moment.", status: 429 };
+  }
 
   // Plan gating: exports are a paid feature.
   const entitlements = await getEntitlements(user.id);

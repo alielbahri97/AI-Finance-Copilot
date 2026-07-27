@@ -4,6 +4,7 @@ import { getOrCreateProfile } from "@/lib/data";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 import { pushSubscriptionSchema, pushUnsubscribeSchema } from "@/lib/validations/notification";
+import { apiError } from "@/lib/api/response";
 
 /** Registers (or refreshes) this browser's push subscription. */
 export async function POST(request: Request) {
@@ -37,8 +38,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true }, { status: 201 });
   } catch (error) {
-    console.error("POST /api/push/subscription failed:", error);
-    return NextResponse.json({ error: "Failed to save subscription" }, { status: 500 });
+    return apiError("POST /api/push/subscription", "Failed to save subscription", error);
   }
 }
 
@@ -62,7 +62,6 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (error) {
-    console.error("DELETE /api/push/subscription failed:", error);
-    return NextResponse.json({ error: "Failed to remove subscription" }, { status: 500 });
+    return apiError("DELETE /api/push/subscription", "Failed to remove subscription", error);
   }
 }

@@ -9,6 +9,8 @@ import { checkLimit, getEntitlements, incrementUsage, limitError } from "@/lib/b
 import { getOrCreateProfile } from "@/lib/data";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
+import { enforceRateLimit } from "@/lib/api/rate-limit-guard";
+import { logger, serializeError } from "@/lib/logger";
 
 export const maxDuration = 120;
 
@@ -39,6 +41,9 @@ export async function POST(request: Request) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const limited = await enforceRateLimit("ai", user.id);
+    if (limited) return limited;
 
     const body = await request.json();
     const parsed = requestSchema.safeParse(body);
@@ -136,7 +141,7 @@ export async function POST(request: Request) {
           const aborted =
             request.signal.aborted || (error instanceof Error && error.name === "AbortError");
           if (!aborted) {
-            console.error("Copilot stream failed:", error);
+            logger.error("Copilot stream", { error: serializeError(error) });
             errorMessage =
               error instanceof AiError ? error.message : "The assistant could not respond.";
           }
@@ -154,7 +159,7 @@ export async function POST(request: Request) {
                 content: reply,
               },
             })
-            .catch((error) => console.error("Failed to persist assistant message:", error));
+            .catch((error) => logger.error("Failed to persist assistant message", { error: serializeError(error) }));
         }
 
         send(errorMessage ? { type: "error", message: errorMessage } : { type: "done" });
@@ -174,7 +179,7 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    console.error("POST /api/copilot failed:", error);
+    logger.error("POST /api/copilot", { error: serializeError(error) });
     if (error instanceof AiError) {
       return NextResponse.json({ error: error.message }, { status: 502 });
     }

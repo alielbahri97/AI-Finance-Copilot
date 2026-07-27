@@ -5,6 +5,7 @@ import { incrementUsage } from "@/lib/billing/entitlements";
 import { buildReport, getReportTransactions } from "@/lib/reports/data";
 import { buildMonthlySummaryCsv, buildTransactionsCsv } from "@/lib/reports/export-csv";
 import { periodSlug, resolveReportRequest } from "@/lib/reports/query";
+import { apiError } from "@/lib/api/response";
 
 export const maxDuration = 60;
 
@@ -33,7 +34,6 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
-    console.error("GET /api/reports/export/csv failed:", error);
-    return NextResponse.json({ error: "Failed to generate CSV export" }, { status: 500 });
+    return apiError("GET /api/reports/export/csv", "Failed to generate CSV export", error);
   }
 }

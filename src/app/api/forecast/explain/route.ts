@@ -6,6 +6,8 @@ import { buildForecast, mapAssumptionRow } from "@/lib/finance/data";
 import { renderForecastText } from "@/lib/finance/render";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
+import { enforceRateLimit } from "@/lib/api/rate-limit-guard";
+import { logger, serializeError } from "@/lib/logger";
 
 export const maxDuration = 120;
 
@@ -19,6 +21,9 @@ export async function POST(request: Request) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const limited = await enforceRateLimit("ai", user.id);
+    if (limited) return limited;
 
     const profile = await getOrCreateProfile(user);
     const [forecast, assumptionRows] = await Promise.all([
@@ -70,7 +75,7 @@ ${renderForecastText(forecast, assumptions)}`,
           const aborted =
             request.signal.aborted || (error instanceof Error && error.name === "AbortError");
           if (!aborted) {
-            console.error("Forecast explanation stream failed:", error);
+            logger.error("Forecast explanation stream", { error: serializeError(error) });
             send({
               type: "error",
               message:
@@ -94,7 +99,7 @@ ${renderForecastText(forecast, assumptions)}`,
       },
     });
   } catch (error) {
-    console.error("POST /api/forecast/explain failed:", error);
+    logger.error("POST /api/forecast/explain", { error: serializeError(error) });
     if (error instanceof AiError) {
       return NextResponse.json({ error: error.message }, { status: 502 });
     }

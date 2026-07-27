@@ -6,6 +6,8 @@ import { getPlanPriceId, TRIAL_DAYS } from "@/lib/billing/plans";
 import { getOrCreateStripeCustomer, getStripe } from "@/lib/billing/stripe";
 import { getOrCreateProfile } from "@/lib/data";
 import { getUser } from "@/lib/supabase/server";
+import { enforceRateLimit } from "@/lib/api/rate-limit-guard";
+import { apiError } from "@/lib/api/response";
 
 const checkoutSchema = z.object({
   plan: z.enum(["PRO", "BUSINESS"]),
@@ -18,6 +20,9 @@ export async function POST(request: Request) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const limited = await enforceRateLimit("billing", user.id);
+    if (limited) return limited;
 
     const body = await request.json().catch(() => null);
     const parsed = checkoutSchema.safeParse(body);
@@ -64,7 +69,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ url: session.url });
   } catch (error) {
-    console.error("POST /api/billing/checkout failed:", error);
-    return NextResponse.json({ error: "Could not start checkout" }, { status: 500 });
+    return apiError("POST /api/billing/checkout", "Could not start checkout", error);
   }
 }

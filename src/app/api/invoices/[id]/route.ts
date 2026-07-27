@@ -5,6 +5,7 @@ import { serializeInvoice } from "@/lib/invoices/serialize";
 import { prisma } from "@/lib/prisma";
 import { createClient, getUser } from "@/lib/supabase/server";
 import { invoiceUpdateSchema } from "@/lib/validations/invoice";
+import { apiError } from "@/lib/api/response";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -26,8 +27,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
     return NextResponse.json({ invoice: serializeInvoice(invoice) });
   } catch (error) {
-    console.error("GET /api/invoices/[id] failed:", error);
-    return NextResponse.json({ error: "Failed to load invoice" }, { status: 500 });
+    return apiError("GET /api/invoices/[id]", "Failed to load invoice", error);
   }
 }
 
@@ -82,8 +82,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     return NextResponse.json({ invoice: serializeInvoice(invoice) });
   } catch (error) {
-    console.error("PATCH /api/invoices/[id] failed:", error);
-    return NextResponse.json({ error: "Failed to update invoice" }, { status: 500 });
+    return apiError("PATCH /api/invoices/[id]", "Failed to update invoice", error);
   }
 }
 
@@ -109,7 +108,6 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("DELETE /api/invoices/[id] failed:", error);
-    return NextResponse.json({ error: "Failed to delete invoice" }, { status: 500 });
+    return apiError("DELETE /api/invoices/[id]", "Failed to delete invoice", error);
   }
 }

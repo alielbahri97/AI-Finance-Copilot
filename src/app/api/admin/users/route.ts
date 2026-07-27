@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getAdminUsers, requireAdmin } from "@/lib/admin/stats";
+import { apiError } from "@/lib/api/response";
 
 const querySchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(200),
@@ -21,7 +22,6 @@ export async function GET(request: Request) {
     const users = await getAdminUsers(parsed.data.limit);
     return NextResponse.json({ users });
   } catch (error) {
-    console.error("GET /api/admin/users failed:", error);
-    return NextResponse.json({ error: "Failed to load users" }, { status: 500 });
+    return apiError("GET /api/admin/users", "Failed to load users", error);
   }
 }

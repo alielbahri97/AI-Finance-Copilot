@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getConnection, patchMetadata } from "@/lib/integrations/connections";
 import { requireIntegrationAccess } from "@/lib/integrations/guard";
 import { getProvider } from "@/lib/integrations/registry";
+import { apiError } from "@/lib/api/response";
 
 const optionsSchema = z
   .object({
@@ -44,7 +45,6 @@ export async function PATCH(
     await patchMetadata(connection.id, parsed.data);
     return NextResponse.json({ ok: true });
   } catch (error) {
-    console.error(`PATCH /api/integrations/${providerId}/options failed:`, error);
-    return NextResponse.json({ error: "Failed to update options" }, { status: 500 });
+    return apiError(`PATCH /api/integrations/${providerId}/options`, "Failed to update options", error);
   }
 }

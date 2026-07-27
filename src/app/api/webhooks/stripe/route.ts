@@ -6,6 +6,8 @@ import { planFromPriceId } from "@/lib/billing/plans";
 import { convertReferral } from "@/lib/billing/referrals";
 import { getStripe, mapStripeStatus, subscriptionPeriodEnd } from "@/lib/billing/stripe";
 import { prisma } from "@/lib/prisma";
+import { apiError } from "@/lib/api/response";
+import { logger, serializeError } from "@/lib/logger";
 
 export const maxDuration = 60;
 
@@ -31,7 +33,7 @@ export async function POST(request: Request) {
     const payload = await request.text();
     event = await stripe.webhooks.constructEventAsync(payload, signature, webhookSecret);
   } catch (error) {
-    console.error("[billing] webhook signature verification failed:", error);
+    logger.error("[billing] webhook signature verification", { error: serializeError(error) });
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
@@ -109,8 +111,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ received: true });
   } catch (error) {
-    console.error(`[billing] webhook handling failed for ${event.type}:`, error);
-    return NextResponse.json({ error: "Webhook handling failed" }, { status: 500 });
+    return apiError(`[billing] webhook handling failed for ${event.type}`, "Webhook handling failed", error);
   }
 }
 
@@ -150,8 +151,8 @@ async function syncSubscription(
     data,
   });
   if (updated.count === 0) {
-    console.error(
-      `[billing] webhook could not match subscription ${subscription.id} to a local user`
-    );
+    logger.warn("stripe webhook could not match subscription to a local user", {
+      stripeSubscriptionId: subscription.id,
+    });
   }
 }

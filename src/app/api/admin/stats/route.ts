@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getAdminStats, requireAdmin } from "@/lib/admin/stats";
+import { apiError } from "@/lib/api/response";
 
 export async function GET() {
   try {
@@ -11,7 +12,6 @@ export async function GET() {
     const stats = await getAdminStats();
     return NextResponse.json(stats);
   } catch (error) {
-    console.error("GET /api/admin/stats failed:", error);
-    return NextResponse.json({ error: "Failed to load admin stats" }, { status: 500 });
+    return apiError("GET /api/admin/stats", "Failed to load admin stats", error);
   }
 }

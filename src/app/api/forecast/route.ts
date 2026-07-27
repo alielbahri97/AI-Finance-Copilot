@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getOrCreateProfile } from "@/lib/data";
 import { buildForecast } from "@/lib/finance/data";
 import { getUser } from "@/lib/supabase/server";
+import { apiError } from "@/lib/api/response";
 
 export const maxDuration = 60;
 
@@ -19,7 +20,6 @@ export async function GET() {
 
     return NextResponse.json({ forecast });
   } catch (error) {
-    console.error("GET /api/forecast failed:", error);
-    return NextResponse.json({ error: "Failed to compute forecast" }, { status: 500 });
+    return apiError("GET /api/forecast", "Failed to compute forecast", error);
   }
 }

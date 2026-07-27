@@ -4,6 +4,7 @@ import { z } from "zod";
 import { saveConnection } from "@/lib/integrations/connections";
 import { requireIntegrationAccess } from "@/lib/integrations/guard";
 import { exchangePlaidPublicToken } from "@/lib/integrations/providers/plaid";
+import { logger, serializeError } from "@/lib/logger";
 
 const exchangeSchema = z.object({
   publicToken: z.string().min(10).max(500),
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (error) {
-    console.error("POST /api/integrations/plaid/exchange failed:", error);
+    logger.error("POST /api/integrations/plaid/exchange", { error: serializeError(error) });
     return NextResponse.json({ error: "Could not complete the connection" }, { status: 502 });
   }
 }

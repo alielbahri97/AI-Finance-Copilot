@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 import { bulkActionSchema } from "@/lib/validations/transaction";
+import { apiError } from "@/lib/api/response";
 
 export async function POST(request: Request) {
   try {
@@ -47,7 +48,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ affected: result.count });
   } catch (error) {
-    console.error("POST /api/transactions/bulk failed:", error);
-    return NextResponse.json({ error: "Bulk action failed" }, { status: 500 });
+    return apiError("POST /api/transactions/bulk", "Bulk action failed", error);
   }
 }

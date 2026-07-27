@@ -5,6 +5,8 @@ import { normalizeRows } from "@/lib/csv/normalize";
 import { parseCsv } from "@/lib/csv/parse";
 import { getUser } from "@/lib/supabase/server";
 import { MAX_IMPORT_FILE_BYTES, MAX_IMPORT_ROWS } from "@/lib/validations/import";
+import { enforceRateLimit } from "@/lib/api/rate-limit-guard";
+import { apiError } from "@/lib/api/response";
 
 export const maxDuration = 60;
 
@@ -20,6 +22,9 @@ export async function POST(request: Request) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const limited = await enforceRateLimit("upload", user.id);
+    if (limited) return limited;
 
     const formData = await request.formData();
     const file = formData.get("file");
@@ -62,7 +67,6 @@ export async function POST(request: Request) {
       previewErrors: preview.errors,
     });
   } catch (error) {
-    console.error("POST /api/import/parse failed:", error);
-    return NextResponse.json({ error: "Could not parse the file" }, { status: 500 });
+    return apiError("POST /api/import/parse", "Could not parse the file", error);
   }
 }

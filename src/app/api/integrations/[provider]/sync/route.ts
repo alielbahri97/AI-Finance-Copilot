@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 
+import { enforceRateLimit } from "@/lib/api/rate-limit-guard";
 import { getConnection } from "@/lib/integrations/connections";
 import { requireIntegrationAccess } from "@/lib/integrations/guard";
 import { getProvider } from "@/lib/integrations/registry";
 import { runSync } from "@/lib/integrations/sync";
+import { apiError } from "@/lib/api/response";
 
 export const maxDuration = 120;
 
@@ -17,6 +19,9 @@ export async function POST(
   try {
     const access = await requireIntegrationAccess();
     if (!access.ok) return access.response;
+
+    const limited = await enforceRateLimit("sync", access.user.id);
+    if (limited) return limited;
 
     const provider = getProvider(providerId);
     if (!provider) {
@@ -43,7 +48,6 @@ export async function POST(
     }
     return NextResponse.json({ ok: true, status: outcome.status, stats: outcome.stats ?? {} });
   } catch (error) {
-    console.error(`POST /api/integrations/${providerId}/sync failed:`, error);
-    return NextResponse.json({ error: "Sync failed" }, { status: 500 });
+    return apiError(`POST /api/integrations/${providerId}/sync`, "Sync failed", error);
   }
 }

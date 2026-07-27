@@ -5,6 +5,7 @@ import { evaluateLargeTransactions } from "@/lib/notifications/alerts";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 import { transactionSchema } from "@/lib/validations/transaction";
+import { apiError } from "@/lib/api/response";
 
 export async function POST(request: Request) {
   try {
@@ -63,7 +64,6 @@ export async function POST(request: Request) {
       { status: 201 }
     );
   } catch (error) {
-    console.error("POST /api/transactions failed:", error);
-    return NextResponse.json({ error: "Failed to create transaction" }, { status: 500 });
+    return apiError("POST /api/transactions", "Failed to create transaction", error);
   }
 }

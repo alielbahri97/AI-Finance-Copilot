@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 import { markReadSchema } from "@/lib/validations/notification";
+import { apiError } from "@/lib/api/response";
 
 /** Marks the given notifications (or all unread) as read. */
 export async function POST(request: Request) {
@@ -32,7 +33,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ updated: result.count });
   } catch (error) {
-    console.error("POST /api/notifications/read failed:", error);
-    return NextResponse.json({ error: "Failed to update notifications" }, { status: 500 });
+    return apiError("POST /api/notifications/read", "Failed to update notifications", error);
   }
 }

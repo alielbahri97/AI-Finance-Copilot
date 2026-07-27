@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
+import { apiError } from "@/lib/api/response";
 
 export async function GET() {
   try {
@@ -25,7 +26,6 @@ export async function GET() {
       })),
     });
   } catch (error) {
-    console.error("GET /api/import/batches failed:", error);
-    return NextResponse.json({ error: "Failed to load imports" }, { status: 500 });
+    return apiError("GET /api/import/batches", "Failed to load imports", error);
   }
 }

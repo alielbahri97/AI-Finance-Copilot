@@ -4,6 +4,7 @@ import { getOrCreateProfile } from "@/lib/data";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 import { categorySchema } from "@/lib/validations/category";
+import { apiError } from "@/lib/api/response";
 
 export async function GET() {
   try {
@@ -29,8 +30,7 @@ export async function GET() {
       })),
     });
   } catch (error) {
-    console.error("GET /api/categories failed:", error);
-    return NextResponse.json({ error: "Failed to load categories" }, { status: 500 });
+    return apiError("GET /api/categories", "Failed to load categories", error);
   }
 }
 
@@ -66,7 +66,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ category }, { status: 201 });
   } catch (error) {
-    console.error("POST /api/categories failed:", error);
-    return NextResponse.json({ error: "Failed to create category" }, { status: 500 });
+    return apiError("POST /api/categories", "Failed to create category", error);
   }
 }

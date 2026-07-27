@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { trackEvent } from "@/lib/analytics";
+import { enforceRateLimit } from "@/lib/api/rate-limit-guard";
+import { apiError } from "@/lib/api/response";
 import {
   checkLimit,
   getEntitlements,
@@ -39,6 +41,9 @@ export async function POST(request: Request) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const limited = await enforceRateLimit("upload", user.id);
+    if (limited) return limited;
 
     const formData = await request.formData();
     const file = formData.get("file");
@@ -206,7 +211,6 @@ export async function POST(request: Request) {
       batchId: batch.id,
     });
   } catch (error) {
-    console.error("POST /api/import/commit failed:", error);
-    return NextResponse.json({ error: "Import failed" }, { status: 500 });
+    return apiError("POST /api/import/commit", "Import failed", error);
   }
 }

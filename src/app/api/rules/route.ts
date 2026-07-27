@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 import { categoryRuleSchema } from "@/lib/validations/category";
+import { apiError } from "@/lib/api/response";
 
 export async function GET() {
   try {
@@ -19,8 +20,7 @@ export async function GET() {
 
     return NextResponse.json({ rules });
   } catch (error) {
-    console.error("GET /api/rules failed:", error);
-    return NextResponse.json({ error: "Failed to load rules" }, { status: 500 });
+    return apiError("GET /api/rules", "Failed to load rules", error);
   }
 }
 
@@ -63,7 +63,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ rule }, { status: 201 });
   } catch (error) {
-    console.error("POST /api/rules failed:", error);
-    return NextResponse.json({ error: "Failed to create rule" }, { status: 500 });
+    return apiError("POST /api/rules", "Failed to create rule", error);
   }
 }

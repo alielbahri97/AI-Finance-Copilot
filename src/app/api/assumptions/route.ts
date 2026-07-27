@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { apiError } from "@/lib/api/response";
 import { getEntitlements, upgradeError } from "@/lib/billing/entitlements";
 import { getOrCreateProfile } from "@/lib/data";
 import { prisma } from "@/lib/prisma";
@@ -24,8 +25,7 @@ export async function GET() {
 
     return NextResponse.json({ assumptions });
   } catch (error) {
-    console.error("GET /api/assumptions failed:", error);
-    return NextResponse.json({ error: "Failed to load assumptions" }, { status: 500 });
+    return apiError("GET /api/assumptions", "Failed to load assumptions", error);
   }
 }
 
@@ -65,7 +65,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ assumption }, { status: 201 });
   } catch (error) {
-    console.error("POST /api/assumptions failed:", error);
-    return NextResponse.json({ error: "Failed to create assumption" }, { status: 500 });
+    return apiError("POST /api/assumptions", "Failed to create assumption", error);
   }
 }

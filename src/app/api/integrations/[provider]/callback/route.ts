@@ -7,6 +7,7 @@ import { getProviderHooks } from "@/lib/integrations/providers";
 import { finalizeRequisition } from "@/lib/integrations/providers/gocardless";
 import { getProvider } from "@/lib/integrations/registry";
 import { getUser } from "@/lib/supabase/server";
+import { logger, serializeError } from "@/lib/logger";
 
 function finish(error?: string, connected?: string): NextResponse {
   const url = new URL("/integrations", appUrl());
@@ -86,7 +87,7 @@ export async function GET(
 
     return finish(undefined, provider.id);
   } catch (error) {
-    console.error(`GET /api/integrations/${providerId}/callback failed:`, error);
+    logger.error(`GET /api/integrations/${providerId}/callback`, { error: serializeError(error) });
     const message = error instanceof Error ? error.message : "Connection failed.";
     return finish(message);
   }

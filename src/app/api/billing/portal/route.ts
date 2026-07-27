@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { getOrCreateStripeCustomer, getStripe } from "@/lib/billing/stripe";
 import { getOrCreateProfile } from "@/lib/data";
 import { getUser } from "@/lib/supabase/server";
+import { enforceRateLimit } from "@/lib/api/rate-limit-guard";
+import { apiError } from "@/lib/api/response";
 
 /** Creates a Stripe Billing Portal session for managing the subscription. */
 export async function POST(request: Request) {
@@ -11,6 +13,9 @@ export async function POST(request: Request) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const limited = await enforceRateLimit("billing", user.id);
+    if (limited) return limited;
 
     const stripe = getStripe();
     if (!stripe) {
@@ -31,7 +36,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ url: session.url });
   } catch (error) {
-    console.error("POST /api/billing/portal failed:", error);
-    return NextResponse.json({ error: "Could not open the billing portal" }, { status: 500 });
+    return apiError("POST /api/billing/portal", "Could not open the billing portal", error);
   }
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getInvoiceReminders } from "@/lib/invoices/reminders";
 import { getUser } from "@/lib/supabase/server";
+import { apiError } from "@/lib/api/response";
 
 /**
  * Due-soon (next 7 days) and overdue unpaid invoices. Groundwork for the
@@ -17,7 +18,6 @@ export async function GET() {
     const reminders = await getInvoiceReminders(user.id);
     return NextResponse.json({ reminders });
   } catch (error) {
-    console.error("GET /api/invoices/reminders failed:", error);
-    return NextResponse.json({ error: "Failed to load reminders" }, { status: 500 });
+    return apiError("GET /api/invoices/reminders", "Failed to load reminders", error);
   }
 }

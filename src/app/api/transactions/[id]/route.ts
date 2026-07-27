@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 import { transactionUpdateSchema } from "@/lib/validations/transaction";
+import { apiError } from "@/lib/api/response";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -55,8 +56,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       },
     });
   } catch (error) {
-    console.error("PATCH /api/transactions/[id] failed:", error);
-    return NextResponse.json({ error: "Failed to update transaction" }, { status: 500 });
+    return apiError("PATCH /api/transactions/[id]", "Failed to update transaction", error);
   }
 }
 
@@ -75,7 +75,6 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("DELETE /api/transactions/[id] failed:", error);
-    return NextResponse.json({ error: "Failed to delete transaction" }, { status: 500 });
+    return apiError("DELETE /api/transactions/[id]", "Failed to delete transaction", error);
   }
 }

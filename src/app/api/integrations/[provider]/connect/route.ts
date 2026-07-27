@@ -9,6 +9,7 @@ import { appUrl, buildAuthUrl } from "@/lib/integrations/oauth";
 import { createRequisition } from "@/lib/integrations/providers/gocardless";
 import { getProvider, isProviderConfigured } from "@/lib/integrations/registry";
 import { getUser } from "@/lib/supabase/server";
+import { logger, serializeError } from "@/lib/logger";
 
 function backToIntegrations(error?: string): NextResponse {
   const url = new URL("/integrations", appUrl());
@@ -79,7 +80,7 @@ export async function GET(
     });
     return response;
   } catch (error) {
-    console.error(`GET /api/integrations/${providerId}/connect failed:`, error);
+    logger.error(`GET /api/integrations/${providerId}/connect`, { error: serializeError(error) });
     return backToIntegrations("Could not start the connection. Try again.");
   }
 }

@@ -6,6 +6,8 @@ import { requireIntegrationAccess } from "@/lib/integrations/guard";
 import { getProviderHooks } from "@/lib/integrations/providers";
 import { getProvider } from "@/lib/integrations/registry";
 import { prisma } from "@/lib/prisma";
+import { apiError } from "@/lib/api/response";
+import { logger, serializeError } from "@/lib/logger";
 
 /** Removes a connection; token revocation is best-effort where supported. */
 export async function POST(
@@ -39,14 +41,13 @@ export async function POST(
       await hooks
         .revoke(connection, token)
         .catch((error) =>
-          console.error(`[integrations] ${provider.id} revocation failed:`, error)
+          logger.error(`[integrations] ${provider.id} revocation`, { error: serializeError(error) })
         );
     }
 
     await prisma.integrationConnection.delete({ where: { id: connection.id } });
     return NextResponse.json({ ok: true });
   } catch (error) {
-    console.error(`POST /api/integrations/${providerId}/disconnect failed:`, error);
-    return NextResponse.json({ error: "Failed to disconnect" }, { status: 500 });
+    return apiError(`POST /api/integrations/${providerId}/disconnect`, "Failed to disconnect", error);
   }
 }

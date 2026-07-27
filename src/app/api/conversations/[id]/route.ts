@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
+import { apiError } from "@/lib/api/response";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -37,8 +38,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("PATCH /api/conversations/[id] failed:", error);
-    return NextResponse.json({ error: "Failed to rename conversation" }, { status: 500 });
+    return apiError("PATCH /api/conversations/[id]", "Failed to rename conversation", error);
   }
 }
 
@@ -58,7 +58,6 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("DELETE /api/conversations/[id] failed:", error);
-    return NextResponse.json({ error: "Failed to delete conversation" }, { status: 500 });
+    return apiError("DELETE /api/conversations/[id]", "Failed to delete conversation", error);
   }
 }

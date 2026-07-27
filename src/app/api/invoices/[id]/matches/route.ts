@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { suggestMatches } from "@/lib/invoices/match";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
+import { apiError } from "@/lib/api/response";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -87,7 +88,6 @@ export async function GET(_request: Request, context: RouteContext) {
       }),
     });
   } catch (error) {
-    console.error("GET /api/invoices/[id]/matches failed:", error);
-    return NextResponse.json({ error: "Failed to find matches" }, { status: 500 });
+    return apiError("GET /api/invoices/[id]/matches", "Failed to find matches", error);
   }
 }

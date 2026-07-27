@@ -7,6 +7,7 @@ import { isPushConfigured } from "@/lib/notifications/push";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 import { notificationPreferencesSchema } from "@/lib/validations/notification";
+import { apiError } from "@/lib/api/response";
 
 export async function GET() {
   try {
@@ -23,8 +24,7 @@ export async function GET() {
       channels: { emailConfigured: isEmailConfigured(), pushConfigured: isPushConfigured() },
     });
   } catch (error) {
-    console.error("GET /api/notifications/preferences failed:", error);
-    return NextResponse.json({ error: "Failed to load preferences" }, { status: 500 });
+    return apiError("GET /api/notifications/preferences", "Failed to load preferences", error);
   }
 }
 
@@ -53,7 +53,6 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ preferences: serializePreferences(updated) });
   } catch (error) {
-    console.error("PATCH /api/notifications/preferences failed:", error);
-    return NextResponse.json({ error: "Failed to update preferences" }, { status: 500 });
+    return apiError("PATCH /api/notifications/preferences", "Failed to update preferences", error);
   }
 }

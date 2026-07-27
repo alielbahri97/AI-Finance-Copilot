@@ -4,6 +4,7 @@ import { serializeInvoice } from "@/lib/invoices/serialize";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 import { invoiceLinkSchema } from "@/lib/validations/invoice";
+import { apiError } from "@/lib/api/response";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -50,8 +51,7 @@ export async function POST(request: Request, context: RouteContext) {
 
     return NextResponse.json({ invoice: serializeInvoice(updated) });
   } catch (error) {
-    console.error("POST /api/invoices/[id]/link failed:", error);
-    return NextResponse.json({ error: "Failed to link transaction" }, { status: 500 });
+    return apiError("POST /api/invoices/[id]/link", "Failed to link transaction", error);
   }
 }
 
@@ -80,7 +80,6 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
     return NextResponse.json({ invoice: serializeInvoice(updated) });
   } catch (error) {
-    console.error("DELETE /api/invoices/[id]/link failed:", error);
-    return NextResponse.json({ error: "Failed to unlink transaction" }, { status: 500 });
+    return apiError("DELETE /api/invoices/[id]/link", "Failed to unlink transaction", error);
   }
 }

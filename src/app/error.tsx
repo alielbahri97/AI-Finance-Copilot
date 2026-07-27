@@ -5,7 +5,7 @@ import { AlertTriangleIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
-export default function GlobalError({
+export default function RouteError({
   error,
   reset,
 }: {
@@ -13,7 +13,9 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error(error);
+    // The digest correlates this client report with the server-side log line
+    // (and with Sentry events when @sentry/nextjs is wired up).
+    console.error("[boundary]", error.digest ?? "", error);
   }, [error]);
 
   return (

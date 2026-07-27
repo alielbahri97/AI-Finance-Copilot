@@ -5,6 +5,7 @@ import { incrementUsage } from "@/lib/billing/entitlements";
 import { buildReport, getReportTransactions } from "@/lib/reports/data";
 import { buildExcelReport } from "@/lib/reports/export-excel";
 import { periodSlug, resolveReportRequest } from "@/lib/reports/query";
+import { apiError } from "@/lib/api/response";
 
 export const maxDuration = 60;
 
@@ -32,7 +33,6 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
-    console.error("GET /api/reports/export/excel failed:", error);
-    return NextResponse.json({ error: "Failed to generate Excel report" }, { status: 500 });
+    return apiError("GET /api/reports/export/excel", "Failed to generate Excel report", error);
   }
 }

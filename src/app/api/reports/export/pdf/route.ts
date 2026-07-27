@@ -5,6 +5,7 @@ import { incrementUsage } from "@/lib/billing/entitlements";
 import { buildReport } from "@/lib/reports/data";
 import { buildPdfReport } from "@/lib/reports/export-pdf";
 import { periodSlug, resolveReportRequest } from "@/lib/reports/query";
+import { apiError } from "@/lib/api/response";
 
 export const maxDuration = 60;
 
@@ -29,7 +30,6 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
-    console.error("GET /api/reports/export/pdf failed:", error);
-    return NextResponse.json({ error: "Failed to generate PDF report" }, { status: 500 });
+    return apiError("GET /api/reports/export/pdf", "Failed to generate PDF report", error);
   }
 }

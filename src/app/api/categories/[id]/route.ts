@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 import { categoryUpdateSchema } from "@/lib/validations/category";
+import { apiError } from "@/lib/api/response";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -51,8 +52,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     const category = await prisma.category.update({ where: { id }, data: parsed.data });
     return NextResponse.json({ category });
   } catch (error) {
-    console.error("PATCH /api/categories/[id] failed:", error);
-    return NextResponse.json({ error: "Failed to update category" }, { status: 500 });
+    return apiError("PATCH /api/categories/[id]", "Failed to update category", error);
   }
 }
 
@@ -72,7 +72,6 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("DELETE /api/categories/[id] failed:", error);
-    return NextResponse.json({ error: "Failed to delete category" }, { status: 500 });
+    return apiError("DELETE /api/categories/[id]", "Failed to delete category", error);
   }
 }
