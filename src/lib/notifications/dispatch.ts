@@ -1,5 +1,7 @@
 import "server-only";
 
+import { logger, serializeError } from "@/lib/logger";
+
 import type { NotificationPreference, NotificationType } from "@/generated/prisma/client";
 import { decryptSecret, isEncryptionConfigured } from "@/lib/integrations/crypto";
 import { sendSlackMessage } from "@/lib/integrations/providers/slack";
@@ -50,7 +52,7 @@ export async function dispatchNotification(
 
   if (prefs.channelEmail && event.emailHtml) {
     await sendEmail(user.email, event.emailSubject ?? event.title, event.emailHtml).catch(
-      (error) => console.error("[notifications] email channel failed:", error)
+      (error) => logger.error("[notifications] email channel", { error: serializeError(error) })
     );
   }
 
@@ -59,11 +61,11 @@ export async function dispatchNotification(
       title: event.title,
       body: event.body.length > 180 ? `${event.body.slice(0, 177)}...` : event.body,
       link: event.link,
-    }).catch((error) => console.error("[notifications] push channel failed:", error));
+    }).catch((error) => logger.error("[notifications] push channel", { error: serializeError(error) }));
   }
 
   await sendToChatIntegrations(user.id, event).catch((error) =>
-    console.error("[notifications] chat channel failed:", error)
+    logger.error("[notifications] chat channel", { error: serializeError(error) })
   );
 }
 
@@ -104,7 +106,7 @@ async function sendToChatIntegrations(
         await sendTeamsMessage(webhookUrl, message);
       }
     } catch (error) {
-      console.error(`[notifications] ${connection.provider} post failed:`, error);
+      logger.error(`[notifications] ${connection.provider} post`, { error: serializeError(error) });
       await prisma.integrationConnection
         .update({
           where: { id: connection.id },

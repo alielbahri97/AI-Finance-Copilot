@@ -4,6 +4,7 @@ import type { AiProvider, NotificationType } from "@/generated/prisma/client";
 import { getAiClient } from "@/lib/ai";
 import { buildFinancialSnapshot, renderSnapshot } from "@/lib/ai/context";
 import { buildForecast } from "@/lib/finance/data";
+import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency } from "@/lib/utils";
 
@@ -183,9 +184,9 @@ async function generateAiBody(
     const trimmed = text.trim();
     return trimmed.length > 0 ? trimmed : null;
   } catch (error) {
-    console.log(
-      `[notifications] AI summary unavailable, using fallback: ${error instanceof Error ? error.message : error}`
-    );
+    logger.info("AI summary unavailable, using deterministic fallback", {
+      detail: error instanceof Error ? error.message : String(error),
+    });
     return null;
   }
 }

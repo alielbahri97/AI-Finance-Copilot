@@ -1,5 +1,7 @@
 import "server-only";
 
+import { logger, serializeError } from "@/lib/logger";
+
 import { randomUUID } from "node:crypto";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -85,7 +87,7 @@ export async function ingestInvoiceDocument(
         );
       }
     } catch (error) {
-      console.error("Invoice extraction failed:", error);
+      logger.error("Invoice extraction", { error: serializeError(error) });
     }
   }
 

@@ -1,5 +1,7 @@
 import "server-only";
 
+import { logger, serializeError } from "@/lib/logger";
+
 import { extractText, getDocumentProxy } from "unpdf";
 
 /**
@@ -12,7 +14,7 @@ export async function getPdfText(buffer: ArrayBuffer): Promise<string | null> {
     const { text } = await extractText(document, { mergePages: true });
     return text;
   } catch (error) {
-    console.error("PDF text extraction failed:", error);
+    logger.error("PDF text extraction", { error: serializeError(error) });
     return null;
   }
 }

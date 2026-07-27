@@ -2,6 +2,8 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { logger } from "@/lib/logger";
+
 /**
  * Supabase Storage helpers for invoice documents. The bucket is private;
  * files live under a per-user prefix (userId/invoiceId/filename) and are
@@ -53,7 +55,7 @@ export async function createInvoiceSignedUrl(
     .from(INVOICE_BUCKET)
     .createSignedUrl(path, SIGNED_URL_TTL_SECONDS);
   if (error || !data?.signedUrl) {
-    console.error("Failed to create signed URL:", error?.message);
+    logger.error("failed to create signed URL", { detail: error?.message });
     return null;
   }
   return data.signedUrl;
@@ -66,6 +68,6 @@ export async function deleteInvoiceDocument(
   const { error } = await supabase.storage.from(INVOICE_BUCKET).remove([path]);
   if (error) {
     // The invoice row is being deleted anyway; log and continue.
-    console.error("Failed to delete stored document:", error.message);
+    logger.error("failed to delete stored document", { detail: error.message });
   }
 }

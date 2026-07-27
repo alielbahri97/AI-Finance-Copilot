@@ -1,5 +1,7 @@
 import "server-only";
 
+import { logger, serializeError } from "@/lib/logger";
+
 import { prisma } from "@/lib/prisma";
 
 import { getFreshAccessToken, patchMetadata } from "./connections";
@@ -80,7 +82,7 @@ export async function runSync(connectionId: string): Promise<SyncOutcome> {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Sync failed";
     const expired = error instanceof IntegrationAuthError;
-    console.error(`[integrations] ${connection.provider} sync failed:`, error);
+    logger.error(`[integrations] ${connection.provider} sync`, { error: serializeError(error) });
 
     await prisma
       .$transaction([
@@ -98,7 +100,7 @@ export async function runSync(connectionId: string): Promise<SyncOutcome> {
         }),
       ])
       .catch((persistError) =>
-        console.error("[integrations] failed to record sync failure:", persistError)
+        logger.error("[integrations] failed to record sync failure", { error: serializeError(persistError) })
       );
     return { status: "FAILED", error: message };
   }
@@ -153,7 +155,7 @@ export async function runDueSyncs(): Promise<{
     } catch (error) {
       // runSync already isolates errors; this is a belt-and-braces guard.
       failed += 1;
-      console.error("[integrations] sync crashed:", error);
+      logger.error("[integrations] sync crashed", { error: serializeError(error) });
     }
   }
 

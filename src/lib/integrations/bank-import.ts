@@ -1,5 +1,7 @@
 import "server-only";
 
+import { logger, serializeError } from "@/lib/logger";
+
 import { createHash } from "node:crypto";
 
 import { loadRuleMatchers, matchCategory } from "@/lib/categories";
@@ -94,7 +96,7 @@ export async function importBankTransactions(
       counterparty: row.counterparty,
       date: new Date(`${row.date}T00:00:00.000Z`),
     }))
-  ).catch((error) => console.error("[integrations] alert evaluation failed:", error));
+  ).catch((error) => logger.error("[integrations] alert evaluation", { error: serializeError(error) }));
 
   return { imported: fresh.length, duplicates, batchId: batch.id };
 }

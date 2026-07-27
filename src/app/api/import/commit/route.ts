@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import { NextResponse } from "next/server";
 
 import { trackEvent } from "@/lib/analytics";
@@ -12,6 +10,7 @@ import {
   limitError,
 } from "@/lib/billing/entitlements";
 import { loadRuleMatchers, matchCategory } from "@/lib/categories";
+import { fingerprintRows } from "@/lib/csv/fingerprint";
 import { normalizeRows } from "@/lib/csv/normalize";
 import { parseCsv } from "@/lib/csv/parse";
 import { getOrCreateProfile } from "@/lib/data";
@@ -25,10 +24,6 @@ import {
 } from "@/lib/validations/import";
 
 export const maxDuration = 60;
-
-function rowHash(userIdScopedKey: string): string {
-  return createHash("sha256").update(userIdScopedKey).digest("hex");
-}
 
 /**
  * Imports a CSV using the confirmed column mapping. Rows already imported in
@@ -128,22 +123,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Fingerprint each row. Repeated identical rows within the same file are
-    // legitimate (e.g. two identical card payments), so the occurrence index
-    // is part of the fingerprint.
-    const occurrence = new Map<string, number>();
-    const withHashes = rows.map((row) => {
-      const base = [
-        row.date,
-        row.type,
-        row.amount.toFixed(2),
-        row.description.toLowerCase(),
-        (row.counterparty ?? "").toLowerCase(),
-      ].join("|");
-      const index = occurrence.get(base) ?? 0;
-      occurrence.set(base, index + 1);
-      return { ...row, hash: rowHash(`${base}|#${index}`) };
-    });
+    const withHashes = fingerprintRows(rows);
 
     const existing = await prisma.transaction.findMany({
       where: { userId: user.id, hash: { in: withHashes.map((row) => row.hash) } },

@@ -1,5 +1,7 @@
 import "server-only";
 
+import { logger, serializeError } from "@/lib/logger";
+
 import type { NotificationPreference } from "@/generated/prisma/client";
 import { buildForecast } from "@/lib/finance/data";
 import { getInvoiceReminders } from "@/lib/invoices/reminders";
@@ -120,7 +122,7 @@ export async function evaluateLargeTransactions(
     });
   } catch (error) {
     // Alerting must never break the transaction write path.
-    console.error("[notifications] large transaction evaluation failed:", error);
+    logger.error("[notifications] large transaction evaluation", { error: serializeError(error) });
   }
 }
 

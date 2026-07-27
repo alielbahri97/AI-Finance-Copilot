@@ -1,5 +1,7 @@
 import "server-only";
 
+import { logger, serializeError } from "@/lib/logger";
+
 /**
  * Email channel via Resend's REST API (plain fetch, no SDK). When the
  * RESEND_API_KEY / EMAIL_FROM env vars are missing the send is logged and
@@ -16,7 +18,7 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.EMAIL_FROM;
   if (!apiKey || !from) {
-    console.log(`[notifications] email skipped (RESEND_API_KEY/EMAIL_FROM not set): "${subject}"`);
+    logger.info(`[notifications] email skipped (RESEND_API_KEY/EMAIL_FROM not set): "${subject}"`);
     return false;
   }
 
@@ -31,12 +33,12 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
     });
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
-      console.error(`[notifications] Resend returned ${response.status}: ${detail.slice(0, 300)}`);
+      logger.error(`[notifications] Resend returned ${response.status}: ${detail.slice(0, 300)}`);
       return false;
     }
     return true;
   } catch (error) {
-    console.error("[notifications] email send failed:", error);
+    logger.error("[notifications] email send", { error: serializeError(error) });
     return false;
   }
 }

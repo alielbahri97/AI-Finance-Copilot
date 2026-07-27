@@ -1,5 +1,7 @@
 import "server-only";
 
+import { logger, serializeError } from "@/lib/logger";
+
 import type { Subscription, UsageRecord } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 
@@ -106,7 +108,7 @@ export async function incrementUsage(userId: string, field: UsageField, by = 1):
       create: { userId, period, [field]: by },
     });
   } catch (error) {
-    console.error(`[billing] failed to increment ${field}:`, error);
+    logger.error(`[billing] failed to increment ${field}`, { error: serializeError(error) });
   }
 }
 

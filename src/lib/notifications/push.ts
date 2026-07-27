@@ -1,5 +1,7 @@
 import "server-only";
 
+import { logger, serializeError } from "@/lib/logger";
+
 import webpush from "web-push";
 
 import { prisma } from "@/lib/prisma";
@@ -23,7 +25,7 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
   const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   const privateKey = process.env.VAPID_PRIVATE_KEY;
   if (!publicKey || !privateKey) {
-    console.log(`[notifications] push skipped (VAPID keys not set): "${payload.title}"`);
+    logger.info(`[notifications] push skipped (VAPID keys not set): "${payload.title}"`);
     return 0;
   }
 
@@ -58,7 +60,7 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
           .delete({ where: { id: subscription.id } })
           .catch(() => undefined);
       } else {
-        console.error("[notifications] push send failed:", error);
+        logger.error("[notifications] push send", { error: serializeError(error) });
       }
     }
   }

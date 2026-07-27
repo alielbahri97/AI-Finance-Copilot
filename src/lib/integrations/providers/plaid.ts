@@ -1,5 +1,7 @@
 import "server-only";
 
+import { logger, serializeError } from "@/lib/logger";
+
 import { importBankTransactions, type BankTransaction } from "../bank-import";
 import { IntegrationAuthError, IntegrationError } from "../oauth";
 
@@ -133,7 +135,7 @@ async function revoke(
 ): Promise<void> {
   if (!accessToken) return;
   await plaidPost("/item/remove", { access_token: accessToken }).catch((error) =>
-    console.error("[integrations] Plaid item removal failed:", error)
+    logger.error("[integrations] Plaid item removal", { error: serializeError(error) })
   );
 }
 

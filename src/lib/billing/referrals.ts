@@ -1,5 +1,7 @@
 import "server-only";
 
+import { logger, serializeError } from "@/lib/logger";
+
 import { randomBytes } from "node:crypto";
 
 import { trackEvent } from "@/lib/analytics";
@@ -72,7 +74,7 @@ export async function attributeReferral(newUserId: string, code: string): Promis
     await trackEvent(newUserId, "referral_signup", { referrerId: referrer.id });
   } catch (error) {
     // Attribution must never break signup.
-    console.error("[referrals] attribution failed:", error);
+    logger.error("[referrals] attribution", { error: serializeError(error) });
   }
 }
 
@@ -108,7 +110,7 @@ export async function convertReferral(referredUserId: string): Promise<void> {
       rewardDays: REFERRAL_REWARD_DAYS,
     });
   } catch (error) {
-    console.error("[referrals] conversion failed:", error);
+    logger.error("[referrals] conversion", { error: serializeError(error) });
   }
 }
 

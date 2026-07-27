@@ -44,7 +44,8 @@ export function decryptSecret(payload: string): string {
     throw new Error("INTEGRATION_ENCRYPTION_KEY is not configured");
   }
   const raw = Buffer.from(payload, "base64");
-  if (raw.length < IV_LENGTH + TAG_LENGTH + 1) {
+  // GCM allows empty plaintext, so iv + tag alone is a valid payload.
+  if (raw.length < IV_LENGTH + TAG_LENGTH) {
     throw new Error("Invalid encrypted payload");
   }
   const iv = raw.subarray(0, IV_LENGTH);

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { logger, serializeError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -21,6 +22,6 @@ export async function trackEvent(
       },
     });
   } catch (error) {
-    console.error(`[analytics] failed to record "${name}":`, error);
+    logger.error("analytics event failed", { name, error: serializeError(error) });
   }
 }
