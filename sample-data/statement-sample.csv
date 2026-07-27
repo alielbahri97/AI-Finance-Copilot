@@ -1,0 +1,40 @@
+Date,Description,Counterparty,Amount,Balance
+2026-05-01,Salary payment,Acme Corp Payroll,4200.00,12400.00
+2026-05-02,Monthly rent,Parkview Properties,-1450.00,10950.00
+2026-05-03,Supermarket run,Whole Foods Market,-86.42,10863.58
+2026-05-05,Electricity and gas,GreenEnergy Utilities,-112.30,10751.28
+2026-05-07,Streaming subscription,Netflix,-15.99,10735.29
+2026-05-09,Dinner,Luigi's Trattoria,-64.80,10670.49
+2026-05-12,Fuel,Shell Station 402,-58.20,10612.29
+2026-05-14,Supermarket run,Whole Foods Market,-102.15,10510.14
+2026-05-15,Freelance invoice #204,Bright Design Studio,850.00,11360.14
+2026-05-16,Music subscription,Spotify,-10.99,11349.15
+2026-05-18,Internet bill,Comcast,-69.99,11279.16
+2026-05-20,Pharmacy,CVS Pharmacy,-24.35,11254.81
+2026-05-22,New office chair,IKEA,-329.00,10925.81
+2026-05-26,Supermarket run,Trader Joe's,-74.60,10851.21
+2026-05-28,Gym membership,FitLife Gym,-39.00,10812.21
+2026-06-01,Salary payment,Acme Corp Payroll,4200.00,15012.21
+2026-06-02,Monthly rent,Parkview Properties,-1450.00,13562.21
+2026-06-04,Supermarket run,Whole Foods Market,-93.75,13468.46
+2026-06-05,Electricity and gas,GreenEnergy Utilities,-98.60,13369.86
+2026-06-07,Streaming subscription,Netflix,-15.99,13353.87
+2026-06-10,Flight tickets,KLM Royal Dutch Airlines,-486.00,12867.87
+2026-06-14,Supermarket run,Trader Joe's,-88.30,12779.57
+2026-06-16,Music subscription,Spotify,-10.99,12768.58
+2026-06-18,Internet bill,Comcast,-69.99,12698.59
+2026-06-20,Team lunch reimbursement,Acme Corp Expenses,142.50,12841.09
+2026-06-24,Dinner,Sushi Ya,-78.40,12762.69
+2026-06-28,Gym membership,FitLife Gym,-39.00,12723.69
+2026-07-01,Salary payment,Acme Corp Payroll,4200.00,16923.69
+2026-07-02,Monthly rent,Parkview Properties,-1450.00,15473.69
+2026-07-03,Supermarket run,Whole Foods Market,-95.20,15378.49
+2026-07-05,Electricity and gas,GreenEnergy Utilities,-104.75,15273.74
+2026-07-07,Streaming subscription,Netflix,-15.99,15257.75
+2026-07-10,Car insurance,Geico Insurance,-128.50,15129.25
+2026-07-14,Supermarket run,Trader Joe's,-81.90,15047.35
+2026-07-15,Freelance invoice #211,Bright Design Studio,920.00,15967.35
+2026-07-16,Music subscription,Spotify,-10.99,15956.36
+2026-07-18,Internet bill,Comcast,-69.99,15886.37
+2026-07-20,Dinner,Luigi's Trattoria,-59.30,15827.07
+2026-07-22,Gym membership,FitLife Gym,-39.00,15788.07
