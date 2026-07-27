@@ -1,0 +1,100 @@
+import "server-only";
+
+import { createHash } from "node:crypto";
+
+import { loadRuleMatchers, matchCategory } from "@/lib/categories";
+import { evaluateLargeTransactions } from "@/lib/notifications/alerts";
+import { prisma } from "@/lib/prisma";
+
+/**
+ * Shared import pipeline for bank integrations (Plaid, Tink, GoCardless).
+ * Reuses the stage-2 machinery: an ImportBatch per sync, per-user hash
+ * dedupe, auto-categorization rules, and inline large-transaction alerts.
+ */
+
+export interface BankTransaction {
+  /** Stable provider-scoped id, used as the dedupe fingerprint. */
+  externalId: string;
+  /** ISO date (YYYY-MM-DD). */
+  date: string;
+  description: string;
+  counterparty: string | null;
+  /** Positive amount. */
+  amount: number;
+  type: "INCOME" | "EXPENSE";
+}
+
+export interface BankImportResult {
+  imported: number;
+  duplicates: number;
+  batchId: string | null;
+}
+
+function fingerprint(provider: string, externalId: string): string {
+  return createHash("sha256").update(`${provider}|${externalId}`).digest("hex");
+}
+
+export async function importBankTransactions(
+  userId: string,
+  currency: string,
+  provider: string,
+  label: string,
+  transactions: BankTransaction[]
+): Promise<BankImportResult> {
+  if (transactions.length === 0) {
+    return { imported: 0, duplicates: 0, batchId: null };
+  }
+
+  const withHashes = transactions.map((tx) => ({
+    ...tx,
+    hash: fingerprint(provider, tx.externalId),
+  }));
+
+  const existing = await prisma.transaction.findMany({
+    where: { userId, hash: { in: withHashes.map((tx) => tx.hash) } },
+    select: { hash: true },
+  });
+  const existingHashes = new Set(existing.map((row) => row.hash));
+  const fresh = withHashes.filter((tx) => !existingHashes.has(tx.hash));
+  const duplicates = withHashes.length - fresh.length;
+
+  if (fresh.length === 0) {
+    return { imported: 0, duplicates, batchId: null };
+  }
+
+  const matchers = await loadRuleMatchers(userId);
+  const batch = await prisma.$transaction(async (tx) => {
+    const created = await tx.importBatch.create({
+      data: { userId, fileName: label.slice(0, 200) },
+    });
+    await tx.transaction.createMany({
+      data: fresh.map((row) => ({
+        userId,
+        type: row.type,
+        amount: Math.round(row.amount * 100) / 100,
+        categoryId: matchCategory(matchers, row.description, row.counterparty),
+        description: row.description.slice(0, 500),
+        counterparty: row.counterparty?.slice(0, 300) ?? null,
+        date: new Date(`${row.date}T00:00:00.000Z`),
+        hash: row.hash,
+        importBatchId: created.id,
+      })),
+      skipDuplicates: true,
+    });
+    return created;
+  });
+
+  await evaluateLargeTransactions(
+    userId,
+    currency,
+    fresh.map((row) => ({
+      type: row.type,
+      amount: row.amount,
+      description: row.description,
+      counterparty: row.counterparty,
+      date: new Date(`${row.date}T00:00:00.000Z`),
+    }))
+  ).catch((error) => console.error("[integrations] alert evaluation failed:", error));
+
+  return { imported: fresh.length, duplicates, batchId: batch.id };
+}

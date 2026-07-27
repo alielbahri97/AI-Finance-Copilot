@@ -22,6 +22,13 @@ export async function GET(_request: Request, context: RouteContext) {
     if (!invoice) {
       return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
     }
+    // Invoices synced from accounting systems have no stored document.
+    if (!invoice.storagePath) {
+      return NextResponse.json(
+        { error: "This invoice was synced from an integration and has no document attached." },
+        { status: 404 }
+      );
+    }
 
     const supabase = await createClient();
     const url = await createInvoiceSignedUrl(supabase, invoice.storagePath);

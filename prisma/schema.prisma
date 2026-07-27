@@ -49,6 +49,18 @@ enum ExtractionStatus {
   MANUAL
 }
 
+enum IntegrationStatus {
+  CONNECTED
+  ERROR
+  EXPIRED
+}
+
+enum SyncRunStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
 enum PlanId {
   FREE
   PRO
@@ -124,8 +136,59 @@ model Profile {
   referralsMade          Referral[]              @relation("Referrer")
   referralReceived       Referral?               @relation("Referred")
   analyticsEvents        AnalyticsEvent[]
+  integrationConnections IntegrationConnection[]
 
   @@map("profiles")
+}
+
+/// A user's link to an external provider (bank, accounting, productivity).
+/// Tokens are encrypted at rest with AES-256-GCM (INTEGRATION_ENCRYPTION_KEY).
+model IntegrationConnection {
+  id       String            @id @default(cuid())
+  userId   String            @map("user_id") @db.Uuid
+  provider String
+  status   IntegrationStatus @default(CONNECTED)
+
+  /// Encrypted (iv || tag || ciphertext, base64). For webhook-style providers
+  /// (Slack incoming webhook, Teams) this holds the encrypted webhook URL.
+  accessToken  String?   @map("access_token")
+  refreshToken String?   @map("refresh_token")
+  expiresAt    DateTime? @map("expires_at")
+
+  /// External account info and per-provider options (realmId, tenantId,
+  /// account ids, channel name, calendar toggle...). Never holds secrets.
+  metadata Json?
+
+  lastSyncAt          DateTime? @map("last_sync_at")
+  lastError           String?   @map("last_error")
+  /// Failed syncs in a row; drives exponential backoff in the cron.
+  consecutiveFailures Int       @default(0) @map("consecutive_failures")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  profile  Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  syncRuns SyncRun[]
+
+  @@unique([userId, provider])
+  @@map("integration_connections")
+}
+
+/// One synchronization attempt for a connection.
+model SyncRun {
+  id           String        @id @default(cuid())
+  connectionId String        @map("connection_id")
+  startedAt    DateTime      @default(now()) @map("started_at")
+  finishedAt   DateTime?     @map("finished_at")
+  status       SyncRunStatus @default(RUNNING)
+  /// Provider-specific counters, e.g. { imported: 12, duplicates: 3 }.
+  stats        Json?
+  error        String?
+
+  connection IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@index([connectionId, startedAt(sort: Desc)])
+  @@map("sync_runs")
 }
 
 /// The user's billing state. Free/trial users have a row with no Stripe ids;
@@ -298,6 +361,9 @@ model Invoice {
   notes            String?
   /// Linked bank transaction; linking marks the invoice paid.
   transactionId    String?          @unique @map("transaction_id")
+  /// Stable id of the source record for integration syncs, e.g.
+  /// "xero:INV-123" — used to dedupe re-synced invoices.
+  externalRef      String?          @map("external_ref")
   createdAt        DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
 
@@ -308,6 +374,7 @@ model Invoice {
   @@index([userId, status])
   @@index([userId, dueDate])
   @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, externalRef])
   @@map("invoices")
 }
 

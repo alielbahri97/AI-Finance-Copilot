@@ -18,6 +18,8 @@ export interface PlanLimits {
   exportsEnabled: boolean;
   /** What-if assumptions on the forecast page. */
   assumptionsEnabled: boolean;
+  /** Bank/accounting/productivity integrations (Business and up). */
+  integrationsEnabled: boolean;
   /** Seats included (informational; the app is single-user per account today). */
   seats: number | null;
 }
@@ -47,6 +49,7 @@ export const PLANS: Record<PlanId, Plan> = {
       invoiceExtractionsPerMonth: 5,
       exportsEnabled: false,
       assumptionsEnabled: false,
+      integrationsEnabled: false,
       seats: 1,
     },
     highlights: [
@@ -69,6 +72,7 @@ export const PLANS: Record<PlanId, Plan> = {
       invoiceExtractionsPerMonth: 50,
       exportsEnabled: true,
       assumptionsEnabled: true,
+      integrationsEnabled: false,
       seats: 1,
     },
     highlights: [
@@ -92,12 +96,14 @@ export const PLANS: Record<PlanId, Plan> = {
       invoiceExtractionsPerMonth: 500,
       exportsEnabled: true,
       assumptionsEnabled: true,
+      integrationsEnabled: true,
       seats: 5,
     },
     highlights: [
       "Everything in Pro",
       "Unlimited AI copilot messages",
       "500 AI invoice extractions per month",
+      "Bank, accounting & productivity integrations",
       "20,000 rows per import",
       "5 seats included",
     ],
@@ -114,6 +120,7 @@ export const PLANS: Record<PlanId, Plan> = {
       invoiceExtractionsPerMonth: null,
       exportsEnabled: true,
       assumptionsEnabled: true,
+      integrationsEnabled: true,
       seats: null,
     },
     highlights: [

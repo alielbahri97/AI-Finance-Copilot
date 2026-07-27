@@ -10,6 +10,7 @@ const PROTECTED_PREFIXES = [
   "/forecast",
   "/reports",
   "/copilot",
+  "/integrations",
   "/billing",
   "/admin",
   "/profile",

@@ -1,0 +1,40 @@
+import "server-only";
+
+import type { IntegrationConnection } from "@/generated/prisma/client";
+
+import type { TokenSet } from "../oauth";
+
+/** What afterConnect returns to be stored on the connection. */
+export interface ConnectResult {
+  accessToken?: string | null;
+  refreshToken?: string | null;
+  expiresAt?: Date | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SyncContext {
+  connection: IntegrationConnection;
+  userId: string;
+  currency: string;
+  aiProvider: "OPENAI" | "ANTHROPIC";
+  /** Fresh decrypted access token; null for providers that mint their own. */
+  accessToken: string | null;
+  metadata: Record<string, unknown>;
+  patchMetadata: (patch: Record<string, unknown>) => Promise<void>;
+}
+
+/** Counters recorded on the SyncRun (e.g. { imported: 12, duplicates: 3 }). */
+export type SyncStats = Record<string, number>;
+
+export interface ProviderHooks {
+  /** OAuth flows: shape the exchanged tokens/metadata before storage. */
+  afterConnect?: (args: {
+    userId: string;
+    tokens: TokenSet;
+    query: Record<string, string>;
+  }) => Promise<ConnectResult>;
+  /** One synchronization pass. Throw IntegrationAuthError for token problems. */
+  sync?: (ctx: SyncContext) => Promise<SyncStats>;
+  /** Best-effort token revocation on disconnect. */
+  revoke?: (connection: IntegrationConnection, accessToken: string | null) => Promise<void>;
+}

@@ -1,6 +1,9 @@
 import "server-only";
 
 import type { NotificationPreference, NotificationType } from "@/generated/prisma/client";
+import { decryptSecret, isEncryptionConfigured } from "@/lib/integrations/crypto";
+import { sendSlackMessage } from "@/lib/integrations/providers/slack";
+import { sendTeamsMessage } from "@/lib/integrations/providers/teams";
 import { prisma } from "@/lib/prisma";
 
 import { sendEmail } from "./email";
@@ -57,5 +60,60 @@ export async function dispatchNotification(
       body: event.body.length > 180 ? `${event.body.slice(0, 177)}...` : event.body,
       link: event.link,
     }).catch((error) => console.error("[notifications] push channel failed:", error));
+  }
+
+  await sendToChatIntegrations(user.id, event).catch((error) =>
+    console.error("[notifications] chat channel failed:", error)
+  );
+}
+
+const APP_URL = () => (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+
+/**
+ * Slack/Teams act as additional outgoing channels: being connected on the
+ * integrations page is the opt-in. Each webhook post is best-effort.
+ */
+async function sendToChatIntegrations(
+  userId: string,
+  event: NotificationEvent
+): Promise<void> {
+  if (!isEncryptionConfigured()) return;
+
+  const connections = await prisma.integrationConnection.findMany({
+    where: {
+      userId,
+      provider: { in: ["slack", "teams"] },
+      status: "CONNECTED",
+      accessToken: { not: null },
+    },
+    select: { id: true, provider: true, accessToken: true },
+  });
+
+  const message = {
+    title: event.title,
+    body: event.body,
+    link: event.link ? `${APP_URL()}${event.link}` : undefined,
+  };
+
+  for (const connection of connections) {
+    try {
+      const webhookUrl = decryptSecret(connection.accessToken!);
+      if (connection.provider === "slack") {
+        await sendSlackMessage(webhookUrl, message);
+      } else {
+        await sendTeamsMessage(webhookUrl, message);
+      }
+    } catch (error) {
+      console.error(`[notifications] ${connection.provider} post failed:`, error);
+      await prisma.integrationConnection
+        .update({
+          where: { id: connection.id },
+          data: {
+            status: "ERROR",
+            lastError: error instanceof Error ? error.message.slice(0, 500) : "Webhook post failed",
+          },
+        })
+        .catch(() => undefined);
+    }
   }
 }

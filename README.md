@@ -81,6 +81,17 @@ Supabase, Prisma and OpenAI/Anthropic.
   (plan/usage/joined), KPI cards (total users, active subscriptions, MRR estimate, signups,
   AI usage) and charts driven by a lightweight internal `AnalyticsEvent` table (signup,
   import, AI message, export, upgrade — no third-party trackers).
+- **Integrations** (Business plan) — an `/integrations` page connecting banks (Plaid via
+  Link, Tink via OAuth, GoCardless Bank Account Data via requisitions — transactions flow
+  through the same dedupe/categorization pipeline as CSV imports), accounting software
+  (QuickBooks, Xero, Exact Online — bills and invoices upserted into the invoice module),
+  mailboxes (Gmail, Outlook — PDF invoice attachments ingested into the extraction/review
+  pipeline), chat (Slack, Teams — finance alerts and digests as extra notification
+  channels) and Google Calendar (opt-in events for upcoming bills). OAuth tokens are
+  encrypted at rest (AES-256-GCM), refreshed automatically, and every connection shows its
+  status, last sync and last error with connect/disconnect/sync-now controls. An hourly
+  cron runs due syncs with per-connection error isolation and failure backoff; providers
+  without credentials simply show as "Not configured" with the env vars they need.
 - **Profile & Settings** — display name, preferred currency, AI provider choice, theme
   (light/dark/system) and password change
 - **UI** — responsive layout, dark mode, toast notifications, loading skeletons, error
@@ -315,6 +326,46 @@ card-backed trial applied only if the user's local trial is still running.
 UPDATE profiles SET is_admin = true WHERE email = 'you@yourdomain.com';
 ```
 
+### Optional: integrations (Business plan)
+
+The `/integrations` page connects banks (Plaid, Tink, GoCardless), accounting software
+(QuickBooks, Xero, Exact Online) and productivity tools (Gmail, Outlook, Slack, Teams,
+Google Calendar). Everything is optional: a provider's card shows **Not configured** with
+its required env vars until they are set. Two shared prerequisites:
+
+```bash
+# Encrypts OAuth tokens at rest (AES-256-GCM). Required for all integrations.
+INTEGRATION_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+# Only for Gmail/Outlook invoice ingestion (background storage uploads).
+SUPABASE_SERVICE_ROLE_KEY="..."
+```
+
+For every OAuth provider, register `https://yourapp.vercel.app/api/integrations/<id>/callback`
+as the redirect URI (`<id>` = `tink`, `quickbooks`, `xero`, `exact`, `gmail`, `outlook`,
+`slack`, `google-calendar`). App registration in brief:
+
+| Provider | Where | Notes |
+| --- | --- | --- |
+| Plaid | [dashboard.plaid.com](https://dashboard.plaid.com) | Copy client id + secret; `PLAID_ENV=sandbox` to start. Uses Plaid Link, no redirect URI needed. |
+| Tink | [console.tink.com](https://console.tink.com) | Create an app, add the redirect URI, set `TINK_MARKET`. |
+| GoCardless | [bankaccountdata.gocardless.com](https://bankaccountdata.gocardless.com) | Create *user secrets* (`GOCARDLESS_SECRET_ID`/`_KEY`). Uses requisitions, not OAuth; set `GOCARDLESS_INSTITUTION_ID` or pass `?institution=` when connecting. |
+| QuickBooks | [developer.intuit.com](https://developer.intuit.com) | App with the *Accounting* scope; add the redirect URI. `QUICKBOOKS_ENV=sandbox` for test companies. |
+| Xero | [developer.xero.com](https://developer.xero.com) | Web app; scopes `offline_access accounting.transactions.read accounting.contacts.read`. |
+| Exact Online | [apps.exactonline.com](https://apps.exactonline.com) | Register an app in your region and set `EXACT_REGION` (e.g. `start.exactonline.nl`). |
+| Google (Gmail + Calendar) | [console.cloud.google.com](https://console.cloud.google.com) | One OAuth client for both providers; enable the Gmail and Calendar APIs; scopes `gmail.readonly` and `calendar.events`. |
+| Microsoft (Outlook) | [portal.azure.com](https://portal.azure.com) | Entra app registration, delegated `Mail.Read` + `offline_access`; web redirect URI. |
+| Slack | [api.slack.com/apps](https://api.slack.com/apps) | App with the `incoming-webhook` scope; the user picks a channel during install. |
+| Teams | — | No app needed: paste a channel *incoming webhook* URL on the integrations page. |
+
+How syncing works: Vercel Cron hits `GET /api/cron/sync` hourly (same `CRON_SECRET` bearer
+token as notifications). Each connection syncs when its interval has elapsed (6 h for
+banks/accounting/email, 24 h for calendar), with per-connection error isolation and
+exponential backoff after failures. Bank transactions run through the same dedupe +
+auto-categorization pipeline as CSV imports (one undoable import batch per sync); accounting
+invoices upsert by `external_ref`; Gmail/Outlook PDF attachments flow through the invoice
+extraction pipeline into the review queue; Slack/Teams act as additional notification
+channels; Google Calendar events for upcoming bills are opt-in via a toggle on the card.
+
 ## Scripts
 
 | Script               | Purpose                                  |
@@ -434,3 +485,19 @@ UPDATE profiles SET is_admin = true WHERE email = 'you@yourdomain.com';
   `GET /api/admin/users`) shows KPIs, a signups-per-day chart, top events and the user list
   with per-user plan and monthly usage. MRR is estimated from plan list prices of active
   paid subscriptions.
+- **Integrations framework**: `src/lib/integrations/registry.ts` declares every provider
+  (category, capabilities, flow, required env vars, OAuth endpoints); the connect, callback,
+  disconnect, sync, options and webhook API routes are fully generic and dispatch to
+  per-provider hooks (`src/lib/integrations/providers/*`) for the non-uniform parts
+  (QuickBooks realmId, Xero tenant discovery, Slack's incoming-webhook payload, GoCardless
+  requisitions, Plaid Link). Tokens are AES-256-GCM encrypted at rest
+  (`INTEGRATION_ENCRYPTION_KEY`); refresh happens transparently before each sync and a
+  failed refresh flips the connection to EXPIRED with a reconnect prompt in the UI. Every
+  sync attempt is recorded as a `SyncRun` (stats JSON or error); the hourly
+  `GET /api/cron/sync` runs due connections with per-connection isolation and doubles the
+  retry interval per consecutive failure (capped at 16×). Bank pulls reuse the CSV import
+  pipeline with provider transaction ids as dedupe fingerprints; accounting invoices upsert
+  on `invoices.external_ref`; mailbox PDFs are stored via the Supabase service-role client
+  and flow through the standard extraction/review pipeline; Slack/Teams are extra fan-out
+  channels in the notification dispatcher (being connected is the opt-in). The whole
+  feature is gated to Business+ plans via entitlements.
