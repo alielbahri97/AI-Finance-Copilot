@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { AiError, getAiClient, type AiChatMessage } from "@/lib/ai";
+import { AiError, getAiClient, providerFromProfile, type AiChatMessage } from "@/lib/ai";
 import { buildFinancialSnapshot } from "@/lib/ai/context";
 import { buildSystemPrompt } from "@/lib/ai/prompts";
 import { trackEvent } from "@/lib/analytics";
@@ -115,7 +115,7 @@ export async function POST(request: Request) {
       { role: "user", content: message },
     ];
 
-    const ai = getAiClient(profile.aiProvider === "ANTHROPIC" ? "anthropic" : "openai");
+    const ai = getAiClient(providerFromProfile(profile.aiProvider));
     const encoder = new TextEncoder();
 
     const stream = new ReadableStream<Uint8Array>({

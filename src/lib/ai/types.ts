@@ -25,12 +25,14 @@ export interface AiChatOptions {
   signal?: AbortSignal;
 }
 
+export type AiProviderId = "openai" | "anthropic" | "groq";
+
 /**
- * Provider-agnostic chat interface. Implemented by the OpenAI and Anthropic
+ * Provider-agnostic chat interface. Implemented by the OpenAI, Groq and Anthropic
  * adapters so the rest of the app never talks to a vendor SDK directly.
  */
 export interface AiClient {
-  readonly provider: "openai" | "anthropic";
+  readonly provider: AiProviderId;
   chat(messages: AiChatMessage[], options?: AiChatOptions): Promise<string>;
   /** Streams the assistant reply as text deltas. */
   chatStream(messages: AiChatMessage[], options?: AiChatOptions): AsyncGenerator<string>;

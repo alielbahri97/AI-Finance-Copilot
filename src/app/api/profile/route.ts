@@ -11,7 +11,7 @@ const updateSchema = z
   .object({
     fullName: z.string().min(2).max(80).optional(),
     currency: z.enum(SUPPORTED_CURRENCIES).optional(),
-    aiProvider: z.enum(["OPENAI", "ANTHROPIC"]).optional(),
+    aiProvider: z.enum(["OPENAI", "ANTHROPIC", "GROQ"]).optional(),
   })
   .refine((data) => Object.keys(data).length > 0, { message: "Nothing to update" });
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { AiError, getAiClient, type AiChatMessage } from "@/lib/ai";
+import { AiError, getAiClient, providerFromProfile, type AiChatMessage } from "@/lib/ai";
 import { getOrCreateProfile } from "@/lib/data";
 import { buildForecast, mapAssumptionRow } from "@/lib/finance/data";
 import { renderForecastText } from "@/lib/finance/render";
@@ -53,7 +53,7 @@ ${renderForecastText(forecast, assumptions)}`,
       { role: "user", content: "Explain this forecast." },
     ];
 
-    const ai = getAiClient(profile.aiProvider === "ANTHROPIC" ? "anthropic" : "openai");
+    const ai = getAiClient(providerFromProfile(profile.aiProvider));
     const encoder = new TextEncoder();
 
     const stream = new ReadableStream<Uint8Array>({

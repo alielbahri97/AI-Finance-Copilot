@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { getAiClient } from "@/lib/ai";
+import { getAiClient, providerFromProfile } from "@/lib/ai";
 import {
   extractFromImage,
   extractFromText,
@@ -29,7 +29,7 @@ import { prisma } from "@/lib/prisma";
 export interface IngestInvoiceInput {
   userId: string;
   currency: string;
-  aiProvider: "OPENAI" | "ANTHROPIC";
+  aiProvider: "OPENAI" | "ANTHROPIC" | "GROQ";
   buffer: ArrayBuffer;
   mimeType: string;
   fileName: string;
@@ -73,7 +73,7 @@ export async function ingestInvoiceDocument(
   let extracted: ExtractedInvoice | null = null;
   if (input.attemptExtraction) {
     try {
-      const ai = getAiClient(input.aiProvider === "ANTHROPIC" ? "anthropic" : "openai");
+      const ai = getAiClient(providerFromProfile(input.aiProvider));
       if (input.mimeType === "application/pdf") {
         const text = await getPdfText(input.buffer);
         if (!hasNoTextLayer(text)) {

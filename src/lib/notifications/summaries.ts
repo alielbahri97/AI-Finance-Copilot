@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { AiProvider, NotificationType } from "@/generated/prisma/client";
-import { getAiClient } from "@/lib/ai";
+import { getAiClient, providerFromProfile } from "@/lib/ai";
 import { buildFinancialSnapshot, renderSnapshot } from "@/lib/ai/context";
 import { buildForecast } from "@/lib/finance/data";
 import { logger } from "@/lib/logger";
@@ -150,7 +150,7 @@ async function generateAiBody(
 ): Promise<string | null> {
   try {
     const snapshot = await buildFinancialSnapshot(userId, profile.currency);
-    const client = getAiClient(profile.aiProvider === "ANTHROPIC" ? "anthropic" : "openai");
+    const client = getAiClient(providerFromProfile(profile.aiProvider));
 
     const activity = [
       `Window: ${windowLabel}`,

@@ -8,7 +8,7 @@ export const profileSchema = z.object({
 });
 
 export const settingsSchema = z.object({
-  aiProvider: z.enum(["OPENAI", "ANTHROPIC"]),
+  aiProvider: z.enum(["OPENAI", "ANTHROPIC", "GROQ"]),
 });
 
 export const changePasswordSchema = z

@@ -16,7 +16,7 @@ export interface SyncContext {
   connection: IntegrationConnection;
   userId: string;
   currency: string;
-  aiProvider: "OPENAI" | "ANTHROPIC";
+  aiProvider: "OPENAI" | "ANTHROPIC" | "GROQ";
   /** Fresh decrypted access token; null for providers that mint their own. */
   accessToken: string | null;
   metadata: Record<string, unknown>;

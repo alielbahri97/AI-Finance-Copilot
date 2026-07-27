@@ -13,17 +13,25 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+type Provider = "OPENAI" | "ANTHROPIC" | "GROQ";
+
+const LABELS: Record<Provider, string> = {
+  GROQ: "Groq (free Llama)",
+  OPENAI: "OpenAI (GPT)",
+  ANTHROPIC: "Anthropic (Claude)",
+};
+
 interface AiProviderFormProps {
-  defaultProvider: "OPENAI" | "ANTHROPIC";
+  defaultProvider: Provider;
 }
 
 export function AiProviderForm({ defaultProvider }: AiProviderFormProps) {
   const router = useRouter();
-  const [provider, setProvider] = useState<"OPENAI" | "ANTHROPIC">(defaultProvider);
+  const [provider, setProvider] = useState<Provider>(defaultProvider);
   const [isSaving, setIsSaving] = useState(false);
 
   async function handleChange(value: string) {
-    const next = value as "OPENAI" | "ANTHROPIC";
+    const next = value as Provider;
     const previous = provider;
     setProvider(next);
     setIsSaving(true);
@@ -38,7 +46,7 @@ export function AiProviderForm({ defaultProvider }: AiProviderFormProps) {
         toast.error("Could not update AI provider");
         return;
       }
-      toast.success(`Copilot now uses ${next === "OPENAI" ? "OpenAI" : "Anthropic"}`);
+      toast.success(`Copilot now uses ${LABELS[next]}`);
       router.refresh();
     } catch {
       setProvider(previous);
@@ -56,13 +64,14 @@ export function AiProviderForm({ defaultProvider }: AiProviderFormProps) {
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="OPENAI">OpenAI (GPT)</SelectItem>
-          <SelectItem value="ANTHROPIC">Anthropic (Claude)</SelectItem>
+          <SelectItem value="GROQ">{LABELS.GROQ}</SelectItem>
+          <SelectItem value="OPENAI">{LABELS.OPENAI}</SelectItem>
+          <SelectItem value="ANTHROPIC">{LABELS.ANTHROPIC}</SelectItem>
         </SelectContent>
       </Select>
       <p className="text-muted-foreground text-sm">
-        The copilot falls back to the other provider if the preferred one has no API key
-        configured.
+        Groq is free for personal use. The copilot falls back to another provider if the
+        preferred one has no API key configured.
       </p>
     </div>
   );
