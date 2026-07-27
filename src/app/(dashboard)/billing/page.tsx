@@ -27,6 +27,7 @@ import { getEntitlements } from "@/lib/billing/entitlements";
 import { PLAN_ORDER, PLANS } from "@/lib/billing/plans";
 import { getReferralStats, REFERRAL_REWARD_DAYS } from "@/lib/billing/referrals";
 import { getStripe, isBillingConfigured } from "@/lib/billing/stripe";
+import { logger, serializeError } from "@/lib/logger";
 import { getOrCreateProfile } from "@/lib/data";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
@@ -66,7 +67,7 @@ async function getInvoiceHistory(userId: string): Promise<StripeInvoiceRow[]> {
       url: invoice.hosted_invoice_url ?? null,
     }));
   } catch (error) {
-    console.error("[billing] failed to list Stripe invoices:", error);
+    logger.error("failed to list Stripe invoices", { error: serializeError(error) });
     return [];
   }
 }

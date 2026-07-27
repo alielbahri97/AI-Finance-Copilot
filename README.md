@@ -120,9 +120,10 @@ Supabase, Prisma and OpenAI/Anthropic.
 │   ├── migrations/            # SQL migrations (apply with npm run db:deploy)
 │   └── seed.ts                # Demo data seeder
 ├── prisma.config.ts           # Prisma 7 CLI config (datasource, migrations, seed)
-├── scripts/
-│   ├── csv-smoke-test.ts      # Assertions for the CSV parsing pipeline
-│   └── forecast-smoke-test.ts # Assertions for the forecast engine
+├── tests/                     # Vitest suite for the pure lib logic
+├── .github/workflows/ci.yml   # Lint + typecheck + test + build pipeline
+├── Dockerfile                 # Multi-stage image (Next.js standalone)
+├── docker-compose.yml         # App + Postgres for self-hosting
 ├── src/
 │   ├── app/
 │   │   ├── (auth)/            # login, signup, forgot-password, reset-password
@@ -374,11 +375,165 @@ channels; Google Calendar events for upcoming bills are opt-in via a toggle on t
 | `npm run build`      | Production build                         |
 | `npm run start`      | Serve the production build               |
 | `npm run lint`       | Run ESLint                               |
+| `npm run typecheck`  | TypeScript `tsc --noEmit`                |
+| `npm test`           | Run the Vitest suite once                |
+| `npm run test:watch` | Run Vitest in watch mode                 |
 | `npm run db:push`    | Push the Prisma schema to the database   |
 | `npm run db:migrate` | Create/apply a development migration     |
 | `npm run db:deploy`  | Apply migrations in production           |
 | `npm run db:seed`    | Seed demo transactions for a user        |
 | `npm run db:studio`  | Open Prisma Studio                       |
+
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph Browser
+    UI["Next.js App Router UI<br/>(React 19, shadcn/ui, Recharts)"]
+    SW["Service worker<br/>(Web Push)"]
+  end
+
+  subgraph "Next.js server (Vercel or Docker)"
+    MW["Middleware<br/>session refresh + route guard"]
+    Pages["Server components<br/>dashboard / reports / forecast ..."]
+    API["API routes<br/>Zod validation, rate limiting,<br/>entitlements, structured logs"]
+    Cron["Cron endpoints<br/>/api/cron/notifications<br/>/api/cron/sync"]
+    Lib["lib/: csv · finance · invoices ·<br/>billing · notifications · integrations"]
+  end
+
+  subgraph Data
+    SB["Supabase<br/>Auth + Storage (invoices)"]
+    PG[("PostgreSQL<br/>via Prisma 7")]
+  end
+
+  subgraph External
+    AI["OpenAI / Anthropic"]
+    Stripe["Stripe"]
+    Resend["Resend (email)"]
+    Prov["Plaid · Tink · GoCardless ·<br/>QuickBooks · Xero · Exact ·<br/>Gmail · Outlook · Slack ·<br/>Teams · Google Calendar"]
+  end
+
+  UI --> MW --> Pages
+  UI --> API
+  API --> Lib
+  Pages --> Lib
+  Cron --> Lib
+  Lib --> PG
+  Lib --> SB
+  Lib --> AI
+  Lib --> Resend
+  Lib --> Prov
+  API <--> Stripe
+  Stripe -- webhook --> API
+  Lib --> SW
+```
+
+## Environment variables
+
+Every variable is optional unless marked required — features degrade gracefully when their
+keys are missing. Full commented reference in [.env.example](.env.example).
+
+| Variable | Required | Used for |
+| --- | --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | ✅ | Supabase project URL (auth + storage) |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ✅ | Supabase anon key (safe for the client) |
+| `DATABASE_URL` | ✅ | Pooled Postgres connection (runtime) |
+| `DIRECT_URL` | ✅ | Direct Postgres connection (migrations) |
+| `NEXT_PUBLIC_APP_URL` | ✅ in prod | Absolute app URL (emails, OAuth redirects, SEO) |
+| `AI_PROVIDER`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | — | AI copilot, forecast explanations, invoice extraction, digests |
+| `RESEND_API_KEY`, `EMAIL_FROM` | — | Email notification channel |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | — | Web Push channel |
+| `CRON_SECRET` | ✅ in prod | Bearer token for both cron endpoints |
+| `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | — | Shared rate limiting for multi-instance deployments |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_BUSINESS` | — | Paid plans, webhook sync, billing portal |
+| `INTEGRATION_ENCRYPTION_KEY` | for integrations | AES-256-GCM token encryption (`openssl rand -hex 32`) |
+| `SUPABASE_SERVICE_ROLE_KEY` | for mail ingestion | Background storage uploads (Gmail/Outlook) — server-only, never expose |
+| `PLAID_*`, `TINK_*`, `GOCARDLESS_*`, `QUICKBOOKS_*`, `XERO_*`, `EXACT_*`, `GOOGLE_*`, `MICROSOFT_*`, `SLACK_*` | per provider | Integration credentials (see the integrations section) |
+
+Only `NEXT_PUBLIC_*` values reach the browser bundle: the Supabase URL + anon key (designed
+to be public), the app URL and the VAPID *public* key. Everything else is server-only.
+
+## Security
+
+- **Auth & ownership** — `src/middleware.ts` guards all app routes; every API route
+  re-checks `supabase.auth.getUser()` and scopes each query/mutation by the authenticated
+  user id (deletes/updates use `deleteMany`/ownership pre-checks so a foreign id yields 404).
+- **Security headers** — set globally in `next.config.ts`: a CSP restricted to self plus
+  Supabase/Plaid origins, HSTS (2 years, preload-ready), `X-Frame-Options: DENY`,
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`
+  and a restrictive `Permissions-Policy`.
+- **Rate limiting** — `src/lib/rate-limit.ts` applies a token bucket per user to the
+  expensive endpoints (AI chat/explanations, CSV parse/commit, invoice upload, report
+  exports, billing sessions, manual syncs) returning 429 + `Retry-After`. In-memory by
+  default (single instance); set the Upstash env vars to share limits across instances.
+  Login/signup attempts hit Supabase Auth directly, which applies its own rate limits.
+- **Upload limits** — CSV imports are capped at 8 MB / 20k rows, invoice documents at
+  10 MB, with plan-based row caps on top.
+- **Webhooks** — Stripe events are verified with `constructEventAsync` against
+  `STRIPE_WEBHOOK_SECRET`; cron endpoints require the `CRON_SECRET` bearer token.
+- **Secrets at rest** — integration OAuth tokens are AES-256-GCM encrypted with
+  `INTEGRATION_ENCRYPTION_KEY`; documents live in a private bucket behind signed URLs.
+- **Row Level Security** — the app's own Postgres access goes through Prisma's *direct*
+  connection, which uses the `postgres` role and therefore **bypasses RLS**; isolation is
+  enforced in the API layer as described above. RLS still matters for everything that
+  talks to Supabase with the anon key: keep RLS **enabled** on all tables in the `public`
+  schema (Supabase's default) with no anon policies, so the Data API cannot read app
+  tables, and keep the storage policies from the setup section so users can only touch
+  their own invoice files. If you add Supabase client-side database access later, write
+  policies per table (`user_id = auth.uid()`).
+
+## Monitoring & logging
+
+- `src/lib/logger.ts` emits one JSON line per event (`level`, `time`, `msg`, plus fields
+  like `route`, `userId`, `durationMs`, serialized `error`) from every API route, cron job
+  and background lib — parseable by Vercel Log Drains, Datadog, Loki, CloudWatch, etc.
+- `GET /api/health` checks database connectivity and returns `200 {status:"ok"}` or a 503 —
+  point your uptime monitor or container healthcheck at it.
+- Error boundaries: `src/app/error.tsx` (route errors) and `src/app/global-error.tsx`
+  (root-layout errors) log the error digest, which correlates with the server-side log line.
+- **Sentry (optional)** — `@sentry/nextjs` is not bundled (keeps the corporate-registry
+  install lean). To wire it: `npm install @sentry/nextjs`, run `npx @sentry/wizard@latest -i nextjs`
+  (creates `sentry.*.config.ts` + `instrumentation.ts`), and set `SENTRY_DSN` /
+  `NEXT_PUBLIC_SENTRY_DSN` in the env. The error boundaries and structured logs work with
+  or without it.
+
+## Testing
+
+```bash
+npm test          # run everything once
+npm run test:watch
+```
+
+The Vitest suite (`tests/`, 69 tests) covers the pure logic: CSV parsing/encoding/column
+detection, import dedupe fingerprints, the forecast engine (recurrence detection, trend +
+scheduling, assumptions, runway), entitlements and plan-gating math, report period
+resolution, CSV/Excel/PDF export generation, notification scheduling idempotency, the
+AES-256-GCM round-trip and the rate limiter. `server-only` is aliased out in
+`vitest.config.ts` so lib modules import cleanly under Node.
+
+## CI
+
+`.github/workflows/ci.yml` runs install → lint → typecheck → test → build on pushes and
+PRs. The build uses dummy `DATABASE_URL`/`NEXT_PUBLIC_APP_URL` values (no live services
+needed). No repository secrets are required for CI itself; runners behind a corporate
+proxy need an `.npmrc` pointing at the internal npm mirror.
+
+## Docker
+
+```bash
+cp .env.example .env        # fill in Supabase + app values
+docker compose up -d --build
+docker compose exec app npx prisma migrate deploy   # once, applies migrations
+```
+
+`Dockerfile` is a multi-stage build on Next.js standalone output (small runtime image, no
+dev dependencies, non-root user); `docker-compose.yml` bundles a Postgres 16 instance and
+points `DATABASE_URL` at it. Auth and invoice storage still come from your Supabase
+project. Building the image outside a corporate network works against the public npm
+registry; inside one, copy your `.npmrc` + CA into the build stage.
+
+See **[DEPLOYMENT.md](DEPLOYMENT.md)** for the step-by-step Vercel and self-hosted guides,
+and **[PRODUCTION_CHECKLIST.md](PRODUCTION_CHECKLIST.md)** before going live.
 
 ## Deploying to Vercel
 
@@ -418,8 +573,7 @@ channels; Google Calendar events for upcoming bills are opt-in via a toggle on t
   30/90-day charts and month-end sampling the 12-month chart; runway is the first projected
   zero-crossing (extrapolated past the simulation if still trending down, `null` = infinite).
   Everything is recomputed from current data on each request — assumption or transaction
-  changes are reflected immediately. Run `npx tsx scripts/forecast-smoke-test.ts` to
-  exercise the engine.
+  changes are reflected immediately. The engine is covered by `tests/forecast.test.ts`.
 - **Data isolation**: every query and mutation is scoped to the authenticated user id in the
   API routes; the AI copilot only ever sees the requesting user's aggregated data.
 - **CSV import**: `/api/import/parse` analyzes the upload (delimiter, encoding, number/date
@@ -429,7 +583,8 @@ channels; Google Calendar events for upcoming bills are opt-in via a toggle on t
   Each imported row gets a SHA-256 fingerprint (date, type, amount, description,
   counterparty, in-file occurrence index) that is unique per user, so re-importing the same
   statement skips duplicates. Deleting an `ImportBatch` cascades to its transactions, which
-  is how undo works. Run `npx tsx scripts/csv-smoke-test.ts` to exercise the parser.
+  is how undo works. The parser and fingerprints are covered by `tests/csv.test.ts` and
+  `tests/fingerprint.test.ts`.
 - **Categorization**: categories are per-user rows (seeded defaults on first login);
   `CategoryRule` patterns are matched case-insensitively against description + counterparty
   at import time, longest pattern first. Deleting a category sets its transactions to
