@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+.github
+.env
+.env.*
+!.env.example
+*.md
+tests
+coverage
+Dockerfile
+docker-compose.yml
+.dockerignore
+.prisma-stub-engine.exe

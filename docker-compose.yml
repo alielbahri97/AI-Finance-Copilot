@@ -1,0 +1,42 @@
+# Self-hosted stack: the app plus a local Postgres. Auth and file storage
+# still require a Supabase project (see README); the database can live here.
+#
+# 1. cp .env.example .env and fill in at least the Supabase + app values.
+# 2. docker compose up -d --build
+# 3. Apply migrations once: docker compose exec app npx prisma migrate deploy
+#    (or run `npx prisma migrate deploy` from your machine against port 5432)
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: finpilot
+      POSTGRES_PASSWORD: finpilot
+      POSTGRES_DB: finpilot
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finpilot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      # Overrides the .env value to point at the bundled Postgres.
+      DATABASE_URL: postgresql://finpilot:finpilot@db:5432/finpilot
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db-data:
