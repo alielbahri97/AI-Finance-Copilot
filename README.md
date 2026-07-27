@@ -21,6 +21,17 @@ Supabase, Prisma and OpenAI/Anthropic.
 - **Categories** — per-user category set seeded on first login, user-defined categories with
   colors, and auto-categorization rules (description/counterparty pattern matching) applied
   during import
+- **Invoice management** — drag & drop upload of PDF invoices, receipts and photos
+  (JPG/PNG/WebP) stored in a private Supabase Storage bucket under a per-user path and served
+  through short-lived signed URLs. AI extraction pulls vendor, invoice number, dates,
+  currency, VAT, line items and totals (vision for images, text layer via `unpdf` for PDFs;
+  strict-JSON prompt validated with Zod, one retry, graceful "needs review" fallback for
+  scanned PDFs or failures). Every upload lands in an editable review form before saving.
+  The `/invoices` dashboard shows status badges (draft/unpaid/paid/overdue), filters,
+  outstanding/overdue/paid-this-month totals, due-soon reminders, a detail view with inline
+  document preview and line items, quick mark paid/unpaid, and suggested transaction matches
+  (amount + date + vendor similarity) with manual link/unlink — linking marks the invoice
+  paid and the link shows on both sides.
 - **Cash flow forecasting** — a deterministic forecast engine (`/forecast`) that combines
   recurring-payment scheduling, a linear spending trend and user-defined assumptions into
   30-day, 90-day and 12-month projections with an ~80% confidence band. Computes cash
@@ -60,7 +71,7 @@ Supabase, Prisma and OpenAI/Anthropic.
 ├── prisma/
 │   ├── schema.prisma          # Profile, Category, CategoryRule, ImportBatch,
 │   │                          # Transaction, Budget, Conversation, ChatMessage,
-│   │                          # Assumption models
+│   │                          # Assumption, Invoice, InvoiceLineItem models
 │   ├── migrations/            # SQL migrations (apply with npm run db:deploy)
 │   └── seed.ts                # Demo data seeder
 ├── prisma.config.ts           # Prisma 7 CLI config (datasource, migrations, seed)
@@ -71,10 +82,12 @@ Supabase, Prisma and OpenAI/Anthropic.
 │   ├── app/
 │   │   ├── (auth)/            # login, signup, forgot-password, reset-password
 │   │   ├── (dashboard)/       # dashboard, transactions, import, categories,
-│   │   │                      # forecast, copilot, profile, settings
+│   │   │                      # invoices (+detail), forecast, copilot, profile,
+│   │   │                      # settings
 │   │   ├── api/               # transactions (+bulk), categories, rules,
 │   │   │                      # import (parse/commit/batches), profile, copilot,
-│   │   │                      # conversations, forecast (+explain), assumptions
+│   │   │                      # conversations, forecast (+explain), assumptions,
+│   │   │                      # invoices (upload/document/matches/link/reminders)
 │   │   ├── auth/              # Supabase callback + confirm handlers
 │   │   ├── error.tsx          # global error boundary
 │   │   └── not-found.tsx
@@ -85,6 +98,8 @@ Supabase, Prisma and OpenAI/Anthropic.
 │   │   ├── transactions/      # table, toolbar (search/filters), add dialog
 │   │   ├── import/            # dropzone, mapping wizard, import history
 │   │   ├── categories/        # category + auto-categorization rule managers
+│   │   ├── invoices/          # upload dialog, table, review form, document
+│   │   │                      # preview, transaction matching
 │   │   ├── forecast/          # forecast chart, assumptions manager, bills,
 │   │   │                      # recurring tables, AI explanation
 │   │   ├── copilot/           # chat interface
@@ -96,6 +111,8 @@ Supabase, Prisma and OpenAI/Anthropic.
 │   │   ├── csv/               # CSV decoding, delimiter/format/column detection,
 │   │   │                      # row normalization (shared server + client)
 │   │   ├── finance/           # shared recurrence detection + forecast engine
+│   │   ├── invoices/          # AI extraction, PDF text, storage, matching,
+│   │   │                      # reminders, serialization
 │   │   ├── supabase/          # browser/server/middleware clients
 │   │   ├── validations/       # Zod schemas
 │   │   ├── categories.ts      # default category seeding + rule matching
@@ -140,7 +157,34 @@ Fill in the Supabase values and at least one AI provider key (`OPENAI_API_KEY` o
 npm run db:deploy      # applies prisma/migrations (or: npm run db:push)
 ```
 
-### 5. Run the app
+### 5. Create the invoice storage bucket
+
+Invoice documents live in a **private** Supabase Storage bucket named `invoices`, with
+files under a per-user prefix (`<userId>/<invoiceId>/<filename>`). In the Supabase
+dashboard:
+
+1. **Storage → New bucket** — name it `invoices`, keep **Public bucket** off, and
+   (optionally) set a 10 MB file size limit with allowed MIME types `application/pdf`,
+   `image/jpeg`, `image/png`, `image/webp`.
+2. Add RLS policies so each user can only touch their own folder. In **SQL Editor** run:
+
+```sql
+create policy "Users manage own invoice files"
+on storage.objects for all to authenticated
+using (
+  bucket_id = 'invoices'
+  and (storage.foldername(name))[1] = auth.uid()::text
+)
+with check (
+  bucket_id = 'invoices'
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
+```
+
+The app uploads with the user's own session (no service key needed) and views/downloads
+go through short-lived signed URLs from `GET /api/invoices/[id]/document`.
+
+### 6. Run the app
 
 ```bash
 npm run dev
@@ -225,3 +269,19 @@ npm run db:seed -- <supabase-user-id> <email>
   `CategoryRule` patterns are matched case-insensitively against description + counterparty
   at import time, longest pattern first. Deleting a category sets its transactions to
   uncategorized (FK `ON DELETE SET NULL`).
+- **Invoice extraction**: `POST /api/invoices/upload` stores the original document first,
+  then extracts — images go to the provider's vision capability through the shared
+  `AiClient` (multimodal content parts work with both OpenAI and Anthropic), PDFs get
+  their text layer read with `unpdf` and sent as text. The model must answer with strict
+  JSON validated by Zod (`src/lib/invoices/extraction.ts`); one retry on invalid output,
+  and any failure (scanned PDF without a text layer, provider errors, bad JSON) creates
+  the invoice as `NEEDS_REVIEW` with empty fields for manual entry — the document stays
+  attached either way. Saving the review form moves a DRAFT invoice to UNPAID; "overdue"
+  is always derived from due date + unpaid status, never stored.
+- **Invoice ↔ transaction matching**: `src/lib/invoices/match.ts` scores expense
+  transactions by amount closeness (hard gate: within 3% or one currency unit), proximity
+  to the invoice/due date and vendor-vs-counterparty token similarity. Linking is manual
+  (one click on a suggestion) and marks the invoice paid; unlinking reverts it to unpaid.
+  `GET /api/invoices/reminders` returns due-soon (7 days) and overdue invoices — the same
+  data feeds the invoices page cards and the main dashboard banner, and is the groundwork
+  for the notification stage.

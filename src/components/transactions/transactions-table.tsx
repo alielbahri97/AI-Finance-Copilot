@@ -1,8 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ChevronLeftIcon, ChevronRightIcon, Loader2Icon, Trash2Icon } from "lucide-react";
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  Loader2Icon,
+  ReceiptTextIcon,
+  Trash2Icon,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -294,8 +301,22 @@ export function TransactionsTable({
               <TableCell className="text-muted-foreground whitespace-nowrap">
                 {formatDate(tx.date)}
               </TableCell>
-              <TableCell className="max-w-56 truncate font-medium" title={tx.description}>
-                {tx.description}
+              <TableCell className="max-w-56 font-medium">
+                <span className="flex items-center gap-1.5">
+                  <span className="truncate" title={tx.description}>
+                    {tx.description}
+                  </span>
+                  {tx.invoiceId && (
+                    <Link
+                      href={`/invoices/${tx.invoiceId}`}
+                      className="text-success hover:text-success/80 shrink-0"
+                      title={`Linked invoice${tx.invoiceVendor ? `: ${tx.invoiceVendor}` : ""}`}
+                      aria-label={`Open linked invoice${tx.invoiceVendor ? ` from ${tx.invoiceVendor}` : ""}`}
+                    >
+                      <ReceiptTextIcon className="size-3.5" />
+                    </Link>
+                  )}
+                </span>
               </TableCell>
               <TableCell
                 className="text-muted-foreground hidden max-w-40 truncate md:table-cell"

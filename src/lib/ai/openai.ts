@@ -9,6 +9,26 @@ import {
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 const DEFAULT_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
 
+/** Maps provider-agnostic messages to OpenAI's format (incl. vision parts). */
+function toOpenAiMessages(messages: AiChatMessage[]) {
+  return messages.map((message) => {
+    if (typeof message.content === "string") {
+      return { role: message.role, content: message.content };
+    }
+    return {
+      role: message.role,
+      content: message.content.map((part) =>
+        part.type === "text"
+          ? { type: "text" as const, text: part.text }
+          : {
+              type: "image_url" as const,
+              image_url: { url: `data:${part.mediaType};base64,${part.dataBase64}` },
+            }
+      ),
+    };
+  });
+}
+
 async function request(
   apiKey: string,
   messages: AiChatMessage[],
@@ -23,7 +43,7 @@ async function request(
     },
     body: JSON.stringify({
       model: DEFAULT_MODEL,
-      messages,
+      messages: toOpenAiMessages(messages),
       max_tokens: options.maxTokens ?? 1500,
       temperature: options.temperature ?? 0.4,
       stream,

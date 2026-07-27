@@ -101,7 +101,10 @@ export default async function TransactionsPage({
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
     skip: (page - 1) * PAGE_SIZE,
     take: PAGE_SIZE,
-    include: { category: { select: { name: true, color: true } } },
+    include: {
+      category: { select: { name: true, color: true } },
+      invoice: { select: { id: true, vendor: true } },
+    },
   });
 
   const rows: TransactionRow[] = transactions.map((tx) => ({
@@ -115,6 +118,8 @@ export default async function TransactionsPage({
     counterparty: tx.counterparty,
     date: tx.date.toISOString(),
     importBatchId: tx.importBatchId,
+    invoiceId: tx.invoice?.id ?? null,
+    invoiceVendor: tx.invoice?.vendor ?? null,
   }));
 
   const categoryOptions: CategoryOption[] = categories;

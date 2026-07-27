@@ -23,4 +23,7 @@ export interface TransactionRow {
   counterparty: string | null;
   date: string;
   importBatchId: string | null;
+  /** Linked invoice, when this transaction settles one. */
+  invoiceId: string | null;
+  invoiceVendor: string | null;
 }

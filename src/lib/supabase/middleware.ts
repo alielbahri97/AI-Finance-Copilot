@@ -6,6 +6,7 @@ const PROTECTED_PREFIXES = [
   "/transactions",
   "/import",
   "/categories",
+  "/invoices",
   "/forecast",
   "/copilot",
   "/profile",

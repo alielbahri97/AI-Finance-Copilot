@@ -1,8 +1,22 @@
 export type AiChatRole = "system" | "user" | "assistant";
 
+/** A single part of a multimodal message: plain text or an inline image. */
+export type AiContentPart =
+  | { type: "text"; text: string }
+  | { type: "image"; mediaType: string; dataBase64: string };
+
 export interface AiChatMessage {
   role: AiChatRole;
-  content: string;
+  content: string | AiContentPart[];
+}
+
+/** Flattens message content to plain text (image parts are dropped). */
+export function messageText(content: string | AiContentPart[]): string {
+  if (typeof content === "string") return content;
+  return content
+    .filter((part): part is Extract<AiContentPart, { type: "text" }> => part.type === "text")
+    .map((part) => part.text)
+    .join("\n");
 }
 
 export interface AiChatOptions {

@@ -1,5 +1,6 @@
 import {
   AiError,
+  messageText,
   parseSseData,
   type AiChatMessage,
   type AiChatOptions,
@@ -9,15 +10,32 @@ import {
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const DEFAULT_MODEL = process.env.ANTHROPIC_MODEL ?? "claude-3-5-haiku-latest";
 
+/** Maps message content to Anthropic content blocks (incl. vision parts). */
+function toAnthropicContent(content: AiChatMessage["content"]) {
+  if (typeof content === "string") return content;
+  return content.map((part) =>
+    part.type === "text"
+      ? { type: "text" as const, text: part.text }
+      : {
+          type: "image" as const,
+          source: {
+            type: "base64" as const,
+            media_type: part.mediaType,
+            data: part.dataBase64,
+          },
+        }
+  );
+}
+
 function splitMessages(messages: AiChatMessage[]) {
-  // Anthropic takes the system prompt as a top-level field.
+  // Anthropic takes the system prompt as a top-level (text-only) field.
   const system = messages
     .filter((message) => message.role === "system")
-    .map((message) => message.content)
+    .map((message) => messageText(message.content))
     .join("\n\n");
   const conversation = messages
     .filter((message) => message.role !== "system")
-    .map((message) => ({ role: message.role, content: message.content }));
+    .map((message) => ({ role: message.role, content: toAnthropicContent(message.content) }));
   return { system: system || undefined, conversation };
 }
 

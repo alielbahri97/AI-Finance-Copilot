@@ -26,6 +26,22 @@ enum AiProvider {
   ANTHROPIC
 }
 
+enum InvoiceStatus {
+  /// Uploaded but not yet confirmed by the user in the review form.
+  DRAFT
+  UNPAID
+  PAID
+}
+
+enum ExtractionStatus {
+  /// AI extraction succeeded; fields were pre-filled for review.
+  EXTRACTED
+  /// Extraction failed or the document had no readable text; manual entry.
+  NEEDS_REVIEW
+  /// Created without automatic extraction.
+  MANUAL
+}
+
 enum AssumptionKind {
   /// A single future income/expense on a specific date.
   ONE_OFF
@@ -54,8 +70,60 @@ model Profile {
   importBatches ImportBatch[]
   conversations Conversation[]
   assumptions   Assumption[]
+  invoices      Invoice[]
 
   @@map("profiles")
+}
+
+/// An uploaded invoice/receipt document with extracted metadata.
+model Invoice {
+  id               String           @id @default(cuid())
+  userId           String           @map("user_id") @db.Uuid
+  vendor           String           @default("")
+  invoiceNumber    String?          @map("invoice_number")
+  invoiceDate      DateTime?        @map("invoice_date")
+  dueDate          DateTime?        @map("due_date")
+  currency         String           @default("USD")
+  subtotal         Decimal?         @db.Decimal(12, 2)
+  vatAmount        Decimal?         @map("vat_amount") @db.Decimal(12, 2)
+  /// VAT rate in percent (e.g. 21.00).
+  vatRate          Decimal?         @map("vat_rate") @db.Decimal(5, 2)
+  total            Decimal          @default(0) @db.Decimal(12, 2)
+  status           InvoiceStatus    @default(DRAFT)
+  extractionStatus ExtractionStatus @default(NEEDS_REVIEW) @map("extraction_status")
+  /// Object path in the private Supabase Storage bucket (userId/invoiceId/filename).
+  storagePath      String           @map("storage_path")
+  fileName         String           @map("file_name")
+  mimeType         String           @map("mime_type")
+  notes            String?
+  /// Linked bank transaction; linking marks the invoice paid.
+  transactionId    String?          @unique @map("transaction_id")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  profile     Profile           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transaction Transaction?      @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  lineItems   InvoiceLineItem[]
+
+  @@index([userId, status])
+  @@index([userId, dueDate])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("invoices")
+}
+
+model InvoiceLineItem {
+  id          String  @id @default(cuid())
+  invoiceId   String  @map("invoice_id")
+  description String
+  quantity    Decimal @default(1) @db.Decimal(12, 3)
+  unitPrice   Decimal @default(0) @map("unit_price") @db.Decimal(12, 2)
+  total       Decimal @default(0) @db.Decimal(12, 2)
+  sortOrder   Int     @default(0) @map("sort_order")
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("invoice_line_items")
 }
 
 /// A user-defined adjustment applied on top of the data-driven cash forecast.
@@ -155,6 +223,7 @@ model Transaction {
   profile     Profile      @relation(fields: [userId], references: [id], onDelete: Cascade)
   category    Category?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   importBatch ImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
+  invoice     Invoice?
 
   @@unique([userId, hash])
   @@index([userId, date(sort: Desc)])
