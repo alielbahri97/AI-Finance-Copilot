@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { AlertTriangleIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { ReportIssueButton } from "@/components/report-issue/report-issue-button";
 
 export default function RouteError({
   error,
@@ -27,7 +28,14 @@ export default function RouteError({
       <p className="text-muted-foreground max-w-md text-sm">
         {error.message || "An unexpected error occurred. Please try again."}
       </p>
-      <Button onClick={reset}>Try again</Button>
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <Button onClick={reset}>Try again</Button>
+        <ReportIssueButton
+          variant="inline"
+          errorMessage={error.message}
+          errorDigest={error.digest}
+        />
+      </div>
     </div>
   );
 }

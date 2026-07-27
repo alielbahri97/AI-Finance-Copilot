@@ -1,0 +1,50 @@
+Date,Description,Counterparty,Amount,Balance
+2026-04-01,Salary payment,TechFlow BV,3800.00,3800.00
+2026-04-02,Monthly rent,Amsterdam Housing Co,-1200.00,2600.00
+2026-04-03,Grocery shopping,Albert Heijn,-67.45,2532.55
+2026-04-05,Mobile phone plan,KPN,-29.99,2502.56
+2026-04-07,Coffee and lunch,Starbucks,-12.80,2489.76
+2026-04-10,Public transport NS,NS Reizigers,-48.60,2441.16
+2026-04-12,Grocery shopping,Lidl,-54.20,2386.96
+2026-04-14,Cloud storage,Dropbox,-11.99,2374.97
+2026-04-15,Side project payment,Freelance Client NL,450.00,2824.97
+2026-04-18,Restaurant dinner,De Kas,-89.50,2735.47
+2026-04-20,Health insurance,Zilveren Kruis,-135.00,2600.47
+2026-04-22,Amazon order,Amazon EU,-43.99,2556.48
+2026-04-25,Grocery shopping,Albert Heijn,-71.30,2485.18
+2026-04-28,Gym subscription,Basic-Fit,-24.99,2460.19
+2026-05-01,Salary payment,TechFlow BV,3800.00,6260.19
+2026-05-02,Monthly rent,Amsterdam Housing Co,-1200.00,5060.19
+2026-05-04,Electricity bill,Vattenfall,-89.40,4970.79
+2026-05-06,Grocery shopping,Jumbo,-82.15,4888.64
+2026-05-08,Streaming Netflix,Netflix,-13.99,4874.65
+2026-05-11,Uber rides,Uber BV,-34.20,4840.45
+2026-05-14,Spotify premium,Spotify,-10.99,4829.46
+2026-05-16,Pharmacy,Etos,-18.75,4810.71
+2026-05-18,Book purchase,Bol.com,-29.95,4780.76
+2026-05-20,Team dinner reimbursement,TechFlow BV,65.00,4845.76
+2026-05-23,Grocery shopping,Albert Heijn,-59.80,4785.96
+2026-05-27,Dentist visit,Tandarts Praktijk,-75.00,4710.96
+2026-06-01,Salary payment,TechFlow BV,3800.00,8510.96
+2026-06-02,Monthly rent,Amsterdam Housing Co,-1200.00,7310.96
+2026-06-03,Annual bonus,TechFlow BV,500.00,7810.96
+2026-06-05,Grocery shopping,Lidl,-88.40,7722.56
+2026-06-07,Flight booking,Transavia,-245.00,7477.56
+2026-06-10,Hotel deposit,Booking.com,-180.00,7297.56
+2026-06-14,Mobile phone plan,KPN,-29.99,7267.57
+2026-06-16,Grocery shopping,Albert Heijn,-63.25,7204.32
+2026-06-18,Internet Ziggo,Ziggo,-52.50,7151.82
+2026-06-22,Restaurant lunch,Wagamama,-28.90,7122.92
+2026-06-25,Freelance payment,Design Studio XY,600.00,7722.92
+2026-06-28,Gym subscription,Basic-Fit,-24.99,7697.93
+2026-07-01,Salary payment,TechFlow BV,3800.00,11497.93
+2026-07-02,Monthly rent,Amsterdam Housing Co,-1200.00,10297.93
+2026-07-04,Grocery shopping,Jumbo,-94.60,10203.33
+2026-07-06,Electricity bill,Vattenfall,-92.10,10111.23
+2026-07-08,Netflix subscription,Netflix,-13.99,10097.24
+2026-07-11,Fuel station,Shell,-62.40,10034.84
+2026-07-14,Spotify premium,Spotify,-10.99,10023.85
+2026-07-17,Online course,Udemy,-49.99,9973.86
+2026-07-20,Grocery shopping,Albert Heijn,-77.85,9896.01
+2026-07-23,Car maintenance,AutoService NL,-320.00,9576.01
+2026-07-25,Cinema tickets,Pathé,-24.00,9552.01

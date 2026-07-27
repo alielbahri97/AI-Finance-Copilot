@@ -2,8 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LogOutIcon, SettingsIcon, UserIcon } from "lucide-react";
+import { useState } from "react";
+import { BugIcon, LogOutIcon, SettingsIcon, UserIcon } from "lucide-react";
 import { toast } from "sonner";
+
+import { ReportIssueButton } from "@/components/report-issue/report-issue-button";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -27,6 +30,7 @@ interface UserNavProps {
 
 export function UserNav({ email, fullName, avatarUrl }: UserNavProps) {
   const router = useRouter();
+  const [reportOpen, setReportOpen] = useState(false);
 
   async function handleSignOut() {
     const supabase = createClient();
@@ -71,6 +75,15 @@ export function UserNav({ email, fullName, avatarUrl }: UserNavProps) {
               Settings
             </Link>
           </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={(event) => {
+              event.preventDefault();
+              setReportOpen(true);
+            }}
+          >
+            <BugIcon />
+            Report issue
+          </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onClick={handleSignOut}>
@@ -78,6 +91,7 @@ export function UserNav({ email, fullName, avatarUrl }: UserNavProps) {
           Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>
+      <ReportIssueButton open={reportOpen} onOpenChange={setReportOpen} showTrigger={false} />
     </DropdownMenu>
   );
 }

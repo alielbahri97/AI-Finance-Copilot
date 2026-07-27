@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { ThemeProvider } from "@/components/theme-provider";
+import { ReportIssueButton } from "@/components/report-issue/report-issue-button";
 import { Toaster } from "@/components/ui/sonner";
 
 import "./globals.css";
@@ -41,6 +42,7 @@ export default function RootLayout({
         </a>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           {children}
+          <ReportIssueButton />
           <Toaster />
         </ThemeProvider>
       </body>

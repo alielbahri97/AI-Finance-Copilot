@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { WalletIcon } from "lucide-react";
 
 import { ADMIN_NAV_ITEM, NAV_ITEMS } from "@/components/dashboard/nav-items";
+import { ReportIssueButton } from "@/components/report-issue/report-issue-button";
 import { cn } from "@/lib/utils";
 
 export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
@@ -40,7 +41,11 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
         })}
       </nav>
       <div className="text-muted-foreground border-t p-4 text-xs">
-        AI Finance Copilot
+        <p>AI Finance Copilot</p>
+        <ReportIssueButton
+          variant="inline"
+          className="mt-2 h-8 w-full justify-start px-2 text-xs"
+        />
       </div>
     </aside>
   );

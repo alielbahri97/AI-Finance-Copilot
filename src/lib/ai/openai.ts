@@ -53,9 +53,37 @@ async function request(
 
   if (!response.ok) {
     const body = await response.text();
-    throw new AiError(`OpenAI request failed (${response.status}): ${body}`, response.status);
+    throw new AiError(formatOpenAiError(response.status, body), response.status);
   }
   return response;
+}
+
+function formatOpenAiError(status: number, body: string): string {
+  let code: string | undefined;
+  let message: string | undefined;
+  try {
+    const parsed = JSON.parse(body) as {
+      error?: { code?: string; type?: string; message?: string };
+    };
+    code = parsed.error?.code ?? parsed.error?.type;
+    message = parsed.error?.message;
+  } catch {
+    // Non-JSON error body — fall through to generic messaging.
+  }
+
+  if (status === 401) {
+    return "OpenAI rejected the API key. Check OPENAI_API_KEY in your environment.";
+  }
+  if (status === 429 || code === "insufficient_quota" || code === "rate_limit_exceeded") {
+    if (code === "insufficient_quota") {
+      return "OpenAI quota exceeded. Add billing or credits at platform.openai.com, then try again.";
+    }
+    return "OpenAI is rate-limiting requests. Wait a moment and try again.";
+  }
+  if (status >= 500) {
+    return "OpenAI is temporarily unavailable. Please try again shortly.";
+  }
+  return message ? `OpenAI error: ${message}` : `OpenAI request failed (${status})`;
 }
 
 export function createOpenAiClient(apiKey: string): AiClient {

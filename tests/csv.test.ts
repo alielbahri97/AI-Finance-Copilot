@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { suggestMapping } from "@/lib/csv/detect";
 import { normalizeRows } from "@/lib/csv/normalize";
@@ -90,5 +92,18 @@ describe("CSV parsing and column detection", () => {
     expect(mapping.dateFormat).toBe("compact");
     expect(normalized.ok).toHaveLength(2);
     expect(normalized.ok[1]).toMatchObject({ type: "EXPENSE", amount: 42.99 });
+  });
+
+  it("parses the bundled dummy-transactions sample", () => {
+    const csvText = readFileSync(join(process.cwd(), "sample-data", "dummy-transactions.csv"), "utf8");
+    const { csv, mapping, normalized } = analyze(csvText);
+
+    expect(csv.rows.length).toBeGreaterThan(40);
+    expect(mapping.date).toBe(0);
+    expect(mapping.description).toBe(1);
+    expect(mapping.counterparty).toBe(2);
+    expect(mapping.amount).toBe(3);
+    expect(normalized.ok.length).toBeGreaterThan(40);
+    expect(normalized.errors).toHaveLength(0);
   });
 });

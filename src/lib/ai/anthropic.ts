@@ -66,9 +66,30 @@ async function request(
 
   if (!response.ok) {
     const body = await response.text();
-    throw new AiError(`Anthropic request failed (${response.status}): ${body}`, response.status);
+    throw new AiError(formatAnthropicError(response.status, body), response.status);
   }
   return response;
+}
+
+function formatAnthropicError(status: number, body: string): string {
+  let message: string | undefined;
+  try {
+    const parsed = JSON.parse(body) as { error?: { type?: string; message?: string } };
+    message = parsed.error?.message;
+  } catch {
+    // Non-JSON error body — fall through.
+  }
+
+  if (status === 401) {
+    return "Anthropic rejected the API key. Check ANTHROPIC_API_KEY in your environment.";
+  }
+  if (status === 429) {
+    return "Anthropic is rate-limiting requests or your quota is exhausted. Check console.anthropic.com and try again.";
+  }
+  if (status >= 500) {
+    return "Anthropic is temporarily unavailable. Please try again shortly.";
+  }
+  return message ? `Anthropic error: ${message}` : `Anthropic request failed (${status})`;
 }
 
 export function createAnthropicClient(apiKey: string): AiClient {

@@ -47,6 +47,22 @@ export default function GlobalError({
           >
             Try again
           </button>
+          <a
+            href={`mailto:support@finpilot.app?subject=${encodeURIComponent("FinPilot issue report")}&body=${encodeURIComponent(
+              `Page: ${typeof window !== "undefined" ? window.location.href : "unknown"}\nError: ${error.message}\nReference: ${error.digest ?? "n/a"}`
+            )}`}
+            style={{
+              display: "inline-block",
+              marginTop: "0.75rem",
+              padding: "0.5rem 1.25rem",
+              borderRadius: "0.5rem",
+              border: "1px solid #ccc",
+              color: "#111",
+              textDecoration: "none",
+            }}
+          >
+            Report issue
+          </a>
         </div>
       </body>
     </html>
