@@ -47,6 +47,16 @@ Supabase, Prisma and OpenAI/Anthropic.
   norms). Multiple conversations with auto-generated titles, rename/delete, markdown answers
   (tables, lists), data-driven suggested questions, and a stop-generation button. Works with
   both OpenAI and Anthropic through a shared streaming provider abstraction.
+- **Executive reports** — a `/reports` area with a period selector (this month, last month,
+  quarter, YTD, last 12 months, custom range) driving every figure: revenue, expenses, net
+  profit and margin KPIs with period-over-period deltas, cash at period end, accounts
+  receivable/payable, monthly trend combo chart, year-over-year comparison, income and
+  expense category breakdowns, top vendors and customers, and AR/AP aging (current / 1–30 /
+  31–60 / 60+ days). Invoices carry a payable/receivable direction toggle: AR is the sum of
+  unpaid invoices you issued, AP the unpaid bills you owe. One-click exports: a professional
+  PDF report (server-rendered with `pdf-lib` — no headless browser needed), a multi-sheet
+  Excel workbook via `exceljs` (KPIs, monthly trends, transactions, categories, top
+  vendors/customers) and CSV (transactions or monthly summary).
 - **Profile & Settings** — display name, preferred currency, AI provider choice, theme
   (light/dark/system) and password change
 - **UI** — responsive layout, dark mode, toast notifications, loading skeletons, error

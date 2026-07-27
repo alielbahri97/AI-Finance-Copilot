@@ -13,6 +13,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 const ACCEPTED_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
@@ -28,6 +30,7 @@ export function UploadInvoice() {
   const [open, setOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [direction, setDirection] = useState<"PAYABLE" | "RECEIVABLE">("PAYABLE");
 
   async function handleFile(file: File | undefined) {
     if (!file || isUploading) return;
@@ -44,6 +47,7 @@ export function UploadInvoice() {
     try {
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("direction", direction);
       const response = await fetch("/api/invoices/upload", { method: "POST", body: formData });
       const body = await response.json().catch(() => null);
       if (!response.ok) {
@@ -83,6 +87,19 @@ export function UploadInvoice() {
               and let you review them before saving.
             </DialogDescription>
           </DialogHeader>
+
+          <div className="grid gap-1.5">
+            <Label>Type</Label>
+            <Tabs
+              value={direction}
+              onValueChange={(value) => setDirection(value as "PAYABLE" | "RECEIVABLE")}
+            >
+              <TabsList className="w-full">
+                <TabsTrigger value="PAYABLE">Bill to pay</TabsTrigger>
+                <TabsTrigger value="RECEIVABLE">Invoice I issued</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
 
           <button
             type="button"

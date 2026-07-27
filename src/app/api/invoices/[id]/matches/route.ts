@@ -19,7 +19,7 @@ export async function GET(_request: Request, context: RouteContext) {
     const { id } = await context.params;
     const invoice = await prisma.invoice.findFirst({
       where: { id, userId: user.id },
-      select: { vendor: true, total: true, invoiceDate: true, dueDate: true },
+      select: { vendor: true, total: true, invoiceDate: true, dueDate: true, direction: true },
     });
     if (!invoice) {
       return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
@@ -42,7 +42,8 @@ export async function GET(_request: Request, context: RouteContext) {
     const candidates = await prisma.transaction.findMany({
       where: {
         userId: user.id,
-        type: "EXPENSE",
+        // A payable is settled by an expense, a receivable by incoming money.
+        type: invoice.direction === "RECEIVABLE" ? "INCOME" : "EXPENSE",
         date: { gte: earliest, lte: latest },
         invoice: null, // not already linked to another invoice
       },

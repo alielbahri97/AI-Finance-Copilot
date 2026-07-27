@@ -33,6 +33,13 @@ enum InvoiceStatus {
   PAID
 }
 
+enum InvoiceDirection {
+  /// Money the user owes (a bill from a vendor). Unpaid payables = AP.
+  PAYABLE
+  /// Money owed to the user (an invoice they issued). Unpaid receivables = AR.
+  RECEIVABLE
+}
+
 enum ExtractionStatus {
   /// AI extraction succeeded; fields were pre-filled for review.
   EXTRACTED
@@ -89,6 +96,7 @@ model Invoice {
   /// VAT rate in percent (e.g. 21.00).
   vatRate          Decimal?         @map("vat_rate") @db.Decimal(5, 2)
   total            Decimal          @default(0) @db.Decimal(12, 2)
+  direction        InvoiceDirection @default(PAYABLE)
   status           InvoiceStatus    @default(DRAFT)
   extractionStatus ExtractionStatus @default(NEEDS_REVIEW) @map("extraction_status")
   /// Object path in the private Supabase Storage bucket (userId/invoiceId/filename).

@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import type { InvoiceDto } from "@/lib/invoices/serialize";
 
@@ -38,6 +39,7 @@ function toLineState(invoice: InvoiceDto): LineItemState[] {
 export function InvoiceForm({ invoice }: InvoiceFormProps) {
   const router = useRouter();
   const [vendor, setVendor] = useState(invoice.vendor);
+  const [direction, setDirection] = useState<"PAYABLE" | "RECEIVABLE">(invoice.direction);
   const [invoiceNumber, setInvoiceNumber] = useState(invoice.invoiceNumber ?? "");
   const [invoiceDate, setInvoiceDate] = useState(invoice.invoiceDate ?? "");
   const [dueDate, setDueDate] = useState(invoice.dueDate ?? "");
@@ -94,6 +96,7 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           vendor: vendor.trim(),
+          direction,
           invoiceNumber: invoiceNumber.trim() || null,
           invoiceDate: invoiceDate || null,
           dueDate: dueDate || null,
@@ -129,6 +132,19 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
 
   return (
     <div className="flex flex-col gap-4">
+      <div className="grid gap-1.5">
+        <Label>Type</Label>
+        <Tabs
+          value={direction}
+          onValueChange={(value) => setDirection(value as "PAYABLE" | "RECEIVABLE")}
+        >
+          <TabsList className="w-full">
+            <TabsTrigger value="PAYABLE">Bill to pay (payable)</TabsTrigger>
+            <TabsTrigger value="RECEIVABLE">Invoice I issued (receivable)</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-1.5">
           <Label htmlFor="inv-vendor">Vendor</Label>

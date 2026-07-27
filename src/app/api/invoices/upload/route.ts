@@ -41,6 +41,7 @@ export async function POST(request: Request) {
 
     const formData = await request.formData().catch(() => null);
     const file = formData?.get("file");
+    const direction = formData?.get("direction") === "RECEIVABLE" ? "RECEIVABLE" : "PAYABLE";
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Attach a file to upload" }, { status: 400 });
     }
@@ -124,6 +125,7 @@ export async function POST(request: Request) {
         vatAmount: extracted?.vatAmount ?? null,
         vatRate: extracted?.vatRate ?? null,
         total: extracted?.total ?? lineItems.reduce((sum, item) => sum + item.total, 0),
+        direction,
         status: "DRAFT",
         extractionStatus: extracted ? "EXTRACTED" : "NEEDS_REVIEW",
         storagePath,

@@ -29,6 +29,7 @@ export const invoiceUpdateSchema = z
     vatAmount: money.nullable(),
     vatRate: z.coerce.number().min(0).max(100).nullable(),
     total: money,
+    direction: z.enum(["PAYABLE", "RECEIVABLE"]),
     status: z.enum(["DRAFT", "UNPAID", "PAID"]),
     notes: z.string().trim().max(2000).nullable(),
     lineItems: z.array(invoiceLineItemSchema).max(100),

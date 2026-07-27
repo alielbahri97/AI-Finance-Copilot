@@ -34,6 +34,7 @@ export interface InvoiceDto {
   vatAmount: number | null;
   vatRate: number | null;
   total: number;
+  direction: "PAYABLE" | "RECEIVABLE";
   status: "DRAFT" | "UNPAID" | "PAID";
   derivedStatus: DerivedInvoiceStatus;
   extractionStatus: "EXTRACTED" | "NEEDS_REVIEW" | "MANUAL";
@@ -74,6 +75,7 @@ export function serializeInvoice(
     vatAmount: invoice.vatAmount === null ? null : Number(invoice.vatAmount),
     vatRate: invoice.vatRate === null ? null : Number(invoice.vatRate),
     total: Number(invoice.total),
+    direction: invoice.direction,
     status: invoice.status,
     derivedStatus: deriveStatus(invoice.status, invoice.dueDate),
     extractionStatus: invoice.extractionStatus,

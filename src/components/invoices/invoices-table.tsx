@@ -6,6 +6,7 @@ import { CheckIcon, FileTextIcon, Link2Icon, Loader2Icon, UndoIcon } from "lucid
 import { toast } from "sonner";
 
 import { InvoiceStatusBadge } from "@/components/invoices/status-badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -85,6 +86,11 @@ export function InvoicesTable({ invoices, hasFilters }: InvoicesTableProps) {
                   <p className="truncate font-medium">{invoice.vendor || "Unknown vendor"}</p>
                   <p className="text-muted-foreground truncate text-xs">{invoice.fileName}</p>
                 </div>
+                {invoice.direction === "RECEIVABLE" && (
+                  <Badge variant="outline" className="hidden shrink-0 text-xs lg:inline-flex">
+                    Receivable
+                  </Badge>
+                )}
                 {invoice.transaction && (
                   <Link2Icon
                     className="text-success size-3.5 shrink-0"
