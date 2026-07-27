@@ -5,6 +5,17 @@ Everything on the machine is already prepared: dependencies are installed, a
 Prisma's blocked schema engine. You only need a Supabase project and an AI
 API key.
 
+## Running at home vs corporate network
+
+- **At home (recommended for the first run):** everything works against the
+  public internet out of the box. `.npmrc` ships with the Artifactory
+  registry line commented out, so `npm install` uses the public npm
+  registry — no changes needed.
+- **On the Optiver corporate network:** uncomment the `registry=` line in
+  `.npmrc` (or set `$env:NPM_CONFIG_REGISTRY` to the Artifactory URL per
+  shell) before running `npm install`. Note the runtime blockers below —
+  installing works on-corp, but running the app against Supabase does not.
+
 > **Corporate network caveat (read first):** from the corporate network the
 > Supabase dashboard (`supabase.com`) is blocked by the proxy, direct
 > outbound HTTPS (443) is proxy-only (Node.js does not use the system proxy,
