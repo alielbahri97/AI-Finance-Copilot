@@ -7,12 +7,13 @@ interface HeaderProps {
   email: string;
   fullName: string | null;
   avatarUrl: string | null;
+  isAdmin?: boolean;
 }
 
-export function Header({ email, fullName, avatarUrl }: HeaderProps) {
+export function Header({ email, fullName, avatarUrl, isAdmin }: HeaderProps) {
   return (
     <header className="bg-background/80 sticky top-0 z-40 flex h-16 items-center justify-between gap-2 border-b px-4 backdrop-blur sm:px-6">
-      <MobileNav />
+      <MobileNav isAdmin={isAdmin} />
       <div className="ml-auto flex items-center gap-1.5">
         <NotificationBell />
         <ThemeToggle />

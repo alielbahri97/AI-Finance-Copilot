@@ -6,6 +6,7 @@ import type { ConversationItem } from "@/components/copilot/conversation-sidebar
 import { CopilotShell } from "@/components/copilot/copilot-shell";
 import { buildFinancialSnapshot } from "@/lib/ai/context";
 import { buildSuggestedQuestions } from "@/lib/ai/suggestions";
+import { checkLimit, getEntitlements } from "@/lib/billing/entitlements";
 import { getOrCreateProfile } from "@/lib/data";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
@@ -26,7 +27,7 @@ export default async function CopilotPage({
 
   const profile = await getOrCreateProfile(user);
 
-  const [conversations, snapshot] = await Promise.all([
+  const [conversations, snapshot, entitlements] = await Promise.all([
     prisma.conversation.findMany({
       where: { userId: user.id },
       orderBy: { updatedAt: "desc" },
@@ -34,7 +35,13 @@ export default async function CopilotPage({
       select: { id: true, title: true, updatedAt: true },
     }),
     buildFinancialSnapshot(user.id, profile.currency),
+    getEntitlements(user.id),
   ]);
+  const aiQuota = checkLimit(
+    entitlements,
+    "aiMessages",
+    entitlements.plan.limits.aiMessagesPerMonth
+  );
 
   const activeId = requestedId && conversations.some((c) => c.id === requestedId)
     ? requestedId
@@ -74,6 +81,7 @@ export default async function CopilotPage({
         activeId={activeId}
         initialMessages={initialMessages}
         suggestions={buildSuggestedQuestions(snapshot)}
+        quotaExhausted={!aiQuota.allowed}
       />
     </div>
   );

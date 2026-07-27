@@ -24,6 +24,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { getEntitlements } from "@/lib/billing/entitlements";
 import { getOrCreateProfile } from "@/lib/data";
 import { buildReport } from "@/lib/reports/data";
 import { resolvePeriod } from "@/lib/reports/period";
@@ -44,7 +45,10 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
   const params = await searchParams;
   const profile = await getOrCreateProfile(user);
   const period = resolvePeriod(params.period, params.from, params.to);
-  const report = await buildReport(user.id, profile.currency, period);
+  const [report, entitlements] = await Promise.all([
+    buildReport(user.id, profile.currency, period),
+    getEntitlements(user.id),
+  ]);
   const { kpis } = report;
   const currency = profile.currency;
 
@@ -64,7 +68,7 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
         </div>
         <div className="flex flex-wrap items-end gap-4">
           <PeriodSelector />
-          <ExportButtons />
+          <ExportButtons locked={!entitlements.plan.limits.exportsEnabled} />
         </div>
       </div>
 

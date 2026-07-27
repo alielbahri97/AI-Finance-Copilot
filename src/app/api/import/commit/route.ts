@@ -2,6 +2,13 @@ import { createHash } from "node:crypto";
 
 import { NextResponse } from "next/server";
 
+import { trackEvent } from "@/lib/analytics";
+import {
+  checkLimit,
+  getEntitlements,
+  incrementUsage,
+  limitError,
+} from "@/lib/billing/entitlements";
 import { loadRuleMatchers, matchCategory } from "@/lib/categories";
 import { normalizeRows } from "@/lib/csv/normalize";
 import { parseCsv } from "@/lib/csv/parse";
@@ -58,6 +65,13 @@ export async function POST(request: Request) {
     }
     const mapping = mappingParsed.data;
 
+    // Plan gating: monthly import quota and per-import row cap.
+    const entitlements = await getEntitlements(user.id);
+    const quota = checkLimit(entitlements, "csvImports", entitlements.plan.limits.csvImportsPerMonth);
+    if (!quota.allowed) {
+      return NextResponse.json(limitError("CSV import", entitlements.planId), { status: 402 });
+    }
+
     const csv = parseCsv(await file.arrayBuffer());
     if (csv.rows.length === 0) {
       return NextResponse.json({ error: "No data rows found" }, { status: 422 });
@@ -66,6 +80,18 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: `Too many rows (max ${MAX_IMPORT_ROWS.toLocaleString()})` },
         { status: 413 }
+      );
+    }
+    const rowCap = entitlements.plan.limits.rowsPerImport;
+    if (rowCap !== null && csv.rows.length > rowCap) {
+      return NextResponse.json(
+        {
+          error: `This file has ${csv.rows.length.toLocaleString()} rows, but the ${entitlements.plan.name} plan allows ${rowCap.toLocaleString()} per import. Upgrade on the Billing page for larger imports.`,
+          code: "LIMIT_REACHED",
+          feature: "rows per import",
+          plan: entitlements.planId,
+        },
+        { status: 402 }
       );
     }
     const columnIndexes = [
@@ -154,6 +180,9 @@ export async function POST(request: Request) {
       });
       return created;
     });
+
+    await incrementUsage(user.id, "csvImports");
+    await trackEvent(user.id, "import", { rows: fresh.length, batchId: batch.id });
 
     // Immediate large-transaction alerts for the imported rows (aggregated
     // into one notification when several qualify); never fails the import.

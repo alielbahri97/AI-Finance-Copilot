@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2Icon, MailCheckIcon } from "lucide-react";
 import { useForm } from "react-hook-form";
@@ -23,6 +24,8 @@ import { signupSchema, type SignupValues } from "@/lib/validations/auth";
 export function SignupForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
+  // Referral attribution: /signup?ref=CODE travels via signup metadata.
+  const referralCode = useSearchParams().get("ref");
 
   const form = useForm<SignupValues>({
     resolver: zodResolver(signupSchema),
@@ -37,7 +40,10 @@ export function SignupForm() {
         email: values.email,
         password: values.password,
         options: {
-          data: { full_name: values.fullName },
+          data: {
+            full_name: values.fullName,
+            ...(referralCode ? { referral_code: referralCode } : {}),
+          },
           emailRedirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
         },
       });

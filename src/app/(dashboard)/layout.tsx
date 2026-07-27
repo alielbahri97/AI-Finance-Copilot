@@ -15,12 +15,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="flex min-h-svh">
-      <Sidebar />
+      <Sidebar isAdmin={profile.isAdmin} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header
           email={profile.email}
           fullName={profile.fullName}
           avatarUrl={profile.avatarUrl}
+          isAdmin={profile.isAdmin}
         />
         <main className="flex-1 p-4 sm:p-6">{children}</main>
       </div>

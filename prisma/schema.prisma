@@ -49,6 +49,28 @@ enum ExtractionStatus {
   MANUAL
 }
 
+enum PlanId {
+  FREE
+  PRO
+  BUSINESS
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+}
+
+enum ReferralStatus {
+  /// The referred user signed up but has not upgraded to a paid plan yet.
+  PENDING
+  /// The referred user upgraded; the referrer received their reward.
+  CONVERTED
+}
+
 enum NotificationType {
   DAILY_SUMMARY
   WEEKLY_SUMMARY
@@ -75,6 +97,13 @@ model Profile {
   avatarUrl  String?    @map("avatar_url")
   currency   String     @default("USD")
   aiProvider AiProvider @default(OPENAI) @map("ai_provider")
+  /// Grants access to /admin. Set manually in the database:
+  /// UPDATE profiles SET is_admin = true WHERE email = '...';
+  isAdmin      Boolean @default(false) @map("is_admin")
+  /// This user's shareable referral code (generated on first billing access).
+  referralCode String? @unique @map("referral_code")
+  /// The user who referred this account, captured from /signup?ref=CODE.
+  referredById String? @map("referred_by_id") @db.Uuid
   createdAt  DateTime   @default(now()) @map("created_at")
   updatedAt  DateTime   @updatedAt @map("updated_at")
 
@@ -90,8 +119,86 @@ model Profile {
   notifications          Notification[]
   notificationPreference NotificationPreference?
   pushSubscriptions      PushSubscription[]
+  subscription           Subscription?
+  usageRecords           UsageRecord[]
+  referralsMade          Referral[]              @relation("Referrer")
+  referralReceived       Referral?               @relation("Referred")
+  analyticsEvents        AnalyticsEvent[]
 
   @@map("profiles")
+}
+
+/// The user's billing state. Free/trial users have a row with no Stripe ids;
+/// paid users are kept in sync by the Stripe webhook.
+model Subscription {
+  id                   String             @id @default(cuid())
+  userId               String             @unique @map("user_id") @db.Uuid
+  plan                 PlanId             @default(FREE)
+  status               SubscriptionStatus @default(ACTIVE)
+  stripeCustomerId     String?            @unique @map("stripe_customer_id")
+  stripeSubscriptionId String?            @unique @map("stripe_subscription_id")
+  stripePriceId        String?            @map("stripe_price_id")
+  currentPeriodEnd     DateTime?          @map("current_period_end")
+  cancelAtPeriodEnd    Boolean            @default(false) @map("cancel_at_period_end")
+  /// Local card-free Pro trial: 14 days on signup, extended by referral rewards.
+  trialEndsAt          DateTime?          @map("trial_ends_at")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+
+  profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+/// Metered usage per user per calendar month (period = "YYYY-MM").
+model UsageRecord {
+  id                 String   @id @default(cuid())
+  userId             String   @map("user_id") @db.Uuid
+  period             String
+  aiMessages         Int      @default(0) @map("ai_messages")
+  csvImports         Int      @default(0) @map("csv_imports")
+  invoiceExtractions Int      @default(0) @map("invoice_extractions")
+  exports            Int      @default(0)
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, period])
+  @@map("usage_records")
+}
+
+/// One row per referred signup. Converted referrals grant the referrer
+/// +1 month of Pro credit (applied as a trial extension).
+model Referral {
+  id             String         @id @default(cuid())
+  referrerId     String         @map("referrer_id") @db.Uuid
+  referredUserId String         @unique @map("referred_user_id") @db.Uuid
+  code           String
+  status         ReferralStatus @default(PENDING)
+  createdAt      DateTime       @default(now()) @map("created_at")
+  convertedAt    DateTime?      @map("converted_at")
+
+  referrer Profile @relation("Referrer", fields: [referrerId], references: [id], onDelete: Cascade)
+  referred Profile @relation("Referred", fields: [referredUserId], references: [id], onDelete: Cascade)
+
+  @@index([referrerId])
+  @@map("referrals")
+}
+
+/// Lightweight internal analytics; no third-party trackers.
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  userId    String?  @map("user_id") @db.Uuid
+  name      String
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  profile Profile? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([name, createdAt])
+  @@index([createdAt])
+  @@map("analytics_events")
 }
 
 /// An in-app notification; the always-available channel. Email and push are

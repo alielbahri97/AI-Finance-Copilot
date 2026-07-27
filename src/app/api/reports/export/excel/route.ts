@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { trackEvent } from "@/lib/analytics";
+import { incrementUsage } from "@/lib/billing/entitlements";
 import { buildReport, getReportTransactions } from "@/lib/reports/data";
 import { buildExcelReport } from "@/lib/reports/export-excel";
 import { periodSlug, resolveReportRequest } from "@/lib/reports/query";
@@ -19,6 +21,8 @@ export async function GET(request: Request) {
       getReportTransactions(userId, period),
     ]);
     const bytes = await buildExcelReport(report, transactions);
+    await incrementUsage(userId, "exports");
+    await trackEvent(userId, "export", { format: "excel" });
 
     return new NextResponse(Buffer.from(bytes), {
       headers: {

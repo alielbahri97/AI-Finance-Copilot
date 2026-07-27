@@ -1,0 +1,157 @@
+import { NextResponse } from "next/server";
+import type Stripe from "stripe";
+
+import { trackEvent } from "@/lib/analytics";
+import { planFromPriceId } from "@/lib/billing/plans";
+import { convertReferral } from "@/lib/billing/referrals";
+import { getStripe, mapStripeStatus, subscriptionPeriodEnd } from "@/lib/billing/stripe";
+import { prisma } from "@/lib/prisma";
+
+export const maxDuration = 60;
+
+/**
+ * Stripe webhook: keeps the local Subscription row in sync. Configure the
+ * endpoint in the Stripe dashboard with the events listed below and put the
+ * signing secret in STRIPE_WEBHOOK_SECRET.
+ */
+export async function POST(request: Request) {
+  const stripe = getStripe();
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!stripe || !webhookSecret) {
+    return NextResponse.json({ error: "Billing is not configured" }, { status: 503 });
+  }
+
+  const signature = request.headers.get("stripe-signature");
+  if (!signature) {
+    return NextResponse.json({ error: "Missing signature" }, { status: 400 });
+  }
+
+  let event: Stripe.Event;
+  try {
+    const payload = await request.text();
+    event = await stripe.webhooks.constructEventAsync(payload, signature, webhookSecret);
+  } catch (error) {
+    console.error("[billing] webhook signature verification failed:", error);
+    return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+  }
+
+  try {
+    switch (event.type) {
+      case "checkout.session.completed": {
+        const session = event.data.object;
+        const userId = session.metadata?.userId;
+        if (userId && session.subscription) {
+          const subscription = await stripe.subscriptions.retrieve(
+            typeof session.subscription === "string"
+              ? session.subscription
+              : session.subscription.id
+          );
+          await syncSubscription(subscription, userId);
+          await convertReferral(userId);
+          await trackEvent(userId, "upgrade", {
+            plan: session.metadata?.plan ?? null,
+            source: "checkout",
+          });
+        }
+        break;
+      }
+
+      case "customer.subscription.created":
+      case "customer.subscription.updated": {
+        await syncSubscription(event.data.object);
+        break;
+      }
+
+      case "customer.subscription.deleted": {
+        const subscription = event.data.object;
+        await prisma.subscription.updateMany({
+          where: { stripeSubscriptionId: subscription.id },
+          data: {
+            plan: "FREE",
+            status: "CANCELED",
+            stripeSubscriptionId: null,
+            stripePriceId: null,
+            currentPeriodEnd: null,
+            cancelAtPeriodEnd: false,
+          },
+        });
+        break;
+      }
+
+      case "invoice.paid": {
+        const invoice = event.data.object;
+        const customerId = typeof invoice.customer === "string" ? invoice.customer : null;
+        if (customerId) {
+          await prisma.subscription.updateMany({
+            where: { stripeCustomerId: customerId, status: "PAST_DUE" },
+            data: { status: "ACTIVE" },
+          });
+        }
+        break;
+      }
+
+      case "invoice.payment_failed": {
+        const invoice = event.data.object;
+        const customerId = typeof invoice.customer === "string" ? invoice.customer : null;
+        if (customerId) {
+          await prisma.subscription.updateMany({
+            where: { stripeCustomerId: customerId, stripeSubscriptionId: { not: null } },
+            data: { status: "PAST_DUE" },
+          });
+        }
+        break;
+      }
+
+      default:
+        // Unhandled event types are acknowledged so Stripe stops retrying.
+        break;
+    }
+
+    return NextResponse.json({ received: true });
+  } catch (error) {
+    console.error(`[billing] webhook handling failed for ${event.type}:`, error);
+    return NextResponse.json({ error: "Webhook handling failed" }, { status: 500 });
+  }
+}
+
+/** Writes a Stripe subscription's plan/status/period onto the local row. */
+async function syncSubscription(
+  subscription: Stripe.Subscription,
+  knownUserId?: string
+): Promise<void> {
+  const customerId =
+    typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
+  const priceId = subscription.items.data[0]?.price.id ?? null;
+  const plan = (priceId && planFromPriceId(priceId)) || null;
+
+  const data = {
+    stripeCustomerId: customerId,
+    stripeSubscriptionId: subscription.id,
+    stripePriceId: priceId,
+    status: mapStripeStatus(subscription.status),
+    currentPeriodEnd: subscriptionPeriodEnd(subscription),
+    cancelAtPeriodEnd: subscription.cancel_at_period_end,
+    ...(plan ? { plan } : {}),
+  };
+
+  const userId = knownUserId ?? subscription.metadata?.userId;
+  if (userId) {
+    await prisma.subscription.upsert({
+      where: { userId },
+      update: data,
+      create: { userId, ...data },
+    });
+    return;
+  }
+
+  // Fall back to matching by Stripe ids when metadata is missing.
+  const updated = await prisma.subscription.updateMany({
+    where: { OR: [{ stripeSubscriptionId: subscription.id }, { stripeCustomerId: customerId }] },
+    data,
+  });
+  if (updated.count === 0) {
+    console.error(
+      `[billing] webhook could not match subscription ${subscription.id} to a local user`
+    );
+  }
+}

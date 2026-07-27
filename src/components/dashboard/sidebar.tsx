@@ -4,11 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { WalletIcon } from "lucide-react";
 
-import { NAV_ITEMS } from "@/components/dashboard/nav-items";
+import { ADMIN_NAV_ITEM, NAV_ITEMS } from "@/components/dashboard/nav-items";
 import { cn } from "@/lib/utils";
 
-export function Sidebar() {
+export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
   const pathname = usePathname();
+  const items = isAdmin ? [...NAV_ITEMS, ADMIN_NAV_ITEM] : NAV_ITEMS;
 
   return (
     <aside className="bg-sidebar text-sidebar-foreground border-sidebar-border hidden w-60 shrink-0 flex-col border-r lg:flex">
@@ -19,7 +20,7 @@ export function Sidebar() {
         FinPilot
       </div>
       <nav className="flex flex-1 flex-col gap-1 p-3">
-        {NAV_ITEMS.map((item) => {
+        {items.map((item) => {
           const isActive = pathname.startsWith(item.href);
           return (
             <Link

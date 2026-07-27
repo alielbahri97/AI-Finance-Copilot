@@ -5,14 +5,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { MenuIcon, WalletIcon } from "lucide-react";
 
-import { NAV_ITEMS } from "@/components/dashboard/nav-items";
+import { ADMIN_NAV_ITEM, NAV_ITEMS } from "@/components/dashboard/nav-items";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
-export function MobileNav() {
+export function MobileNav({ isAdmin = false }: { isAdmin?: boolean }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const items = isAdmin ? [...NAV_ITEMS, ADMIN_NAV_ITEM] : NAV_ITEMS;
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -31,7 +32,7 @@ export function MobileNav() {
           </SheetTitle>
         </SheetHeader>
         <nav className="flex flex-col gap-1 p-3">
-          {NAV_ITEMS.map((item) => {
+          {items.map((item) => {
             const isActive = pathname.startsWith(item.href);
             return (
               <Link

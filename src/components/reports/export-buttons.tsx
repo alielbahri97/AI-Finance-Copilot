@@ -15,9 +15,15 @@ import {
 
 type ExportKind = "pdf" | "excel" | "csv";
 
-export function ExportButtons() {
+interface ExportButtonsProps {
+  /** Plan gating: exports are a paid feature. */
+  locked?: boolean;
+}
+
+export function ExportButtons({ locked = false }: ExportButtonsProps) {
   const searchParams = useSearchParams();
   const [pending, setPending] = useState<ExportKind | null>(null);
+  const lockTitle = locked ? "Exports require the Pro plan — upgrade on the Billing page" : undefined;
 
   async function download(kind: ExportKind, dataset?: "transactions" | "monthly") {
     setPending(kind);
@@ -59,7 +65,8 @@ export function ExportButtons() {
       <Button
         variant="outline"
         size="sm"
-        disabled={pending !== null}
+        disabled={locked || pending !== null}
+        title={lockTitle}
         onClick={() => download("pdf")}
       >
         {pending === "pdf" ? (
@@ -72,7 +79,8 @@ export function ExportButtons() {
       <Button
         variant="outline"
         size="sm"
-        disabled={pending !== null}
+        disabled={locked || pending !== null}
+        title={lockTitle}
         onClick={() => download("excel")}
       >
         {pending === "excel" ? (
@@ -84,7 +92,7 @@ export function ExportButtons() {
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" disabled={pending !== null}>
+          <Button variant="outline" size="sm" disabled={locked || pending !== null} title={lockTitle}>
             {pending === "csv" ? (
               <Loader2Icon className="size-4 animate-spin" />
             ) : (

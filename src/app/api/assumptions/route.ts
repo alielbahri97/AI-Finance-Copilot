@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { getEntitlements, upgradeError } from "@/lib/billing/entitlements";
 import { getOrCreateProfile } from "@/lib/data";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
@@ -49,6 +50,14 @@ export async function POST(request: Request) {
     }
 
     await getOrCreateProfile(user);
+
+    // Plan gating: what-if assumptions are a paid feature.
+    const entitlements = await getEntitlements(user.id);
+    if (!entitlements.plan.limits.assumptionsEnabled) {
+      return NextResponse.json(upgradeError("Forecast assumptions", entitlements.planId), {
+        status: 402,
+      });
+    }
 
     const assumption = await prisma.assumption.create({
       data: { userId: user.id, ...toAssumptionData(parsed.data) },

@@ -20,6 +20,8 @@ interface CopilotChatProps {
   conversationId: string | null;
   initialMessages: ChatMessageItem[];
   suggestions: string[];
+  /** Plan gating: monthly AI message quota is used up. */
+  quotaExhausted?: boolean;
   onOpenHistory?: () => void;
 }
 
@@ -33,6 +35,7 @@ export function CopilotChat({
   conversationId,
   initialMessages,
   suggestions,
+  quotaExhausted = false,
   onOpenHistory,
 }: CopilotChatProps) {
   const router = useRouter();
@@ -74,7 +77,7 @@ export function CopilotChat({
 
   async function sendMessage(text: string) {
     const trimmed = text.trim();
-    if (!trimmed || isStreaming) return;
+    if (!trimmed || isStreaming || quotaExhausted) return;
 
     setInput("");
     setIsStreaming(true);
@@ -298,6 +301,16 @@ export function CopilotChat({
         </div>
       )}
 
+      {quotaExhausted && (
+        <div className="bg-muted/60 mx-3 mb-1 flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm">
+          <span className="text-muted-foreground">
+            You have used this month&apos;s AI messages on your current plan.
+          </span>
+          <Button asChild size="sm" variant="outline">
+            <a href="/billing">Upgrade</a>
+          </Button>
+        </div>
+      )}
       <form
         className="flex items-end gap-2 border-t p-3"
         onSubmit={(event) => {
@@ -314,10 +327,14 @@ export function CopilotChat({
               sendMessage(input);
             }
           }}
-          placeholder="Ask about your cash, suppliers, forecasts…"
+          placeholder={
+            quotaExhausted
+              ? "Monthly AI message limit reached"
+              : "Ask about your cash, suppliers, forecasts…"
+          }
           className="max-h-32 min-h-10 resize-none"
           rows={1}
-          disabled={isStreaming}
+          disabled={isStreaming || quotaExhausted}
         />
         {isStreaming ? (
           <Button type="button" size="icon" variant="outline" onClick={stopStreaming}>
@@ -325,7 +342,11 @@ export function CopilotChat({
             <span className="sr-only">Stop generating</span>
           </Button>
         ) : (
-          <Button type="submit" size="icon" disabled={input.trim().length === 0}>
+          <Button
+            type="submit"
+            size="icon"
+            disabled={input.trim().length === 0 || quotaExhausted}
+          >
             <SendIcon />
             <span className="sr-only">Send</span>
           </Button>

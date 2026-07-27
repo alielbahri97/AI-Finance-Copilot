@@ -3,6 +3,8 @@ import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 
 import { getAiClient } from "@/lib/ai";
+import { trackEvent } from "@/lib/analytics";
+import { checkLimit, getEntitlements, incrementUsage } from "@/lib/billing/entitlements";
 import { getOrCreateProfile } from "@/lib/data";
 import {
   extractFromImage,
@@ -83,21 +85,33 @@ export async function POST(request: Request) {
       );
     }
 
+    // Plan gating: AI extraction has a monthly quota. Over-quota uploads
+    // still work — they just skip extraction and go to manual review.
+    const entitlements = await getEntitlements(user.id);
+    const extractionQuota = checkLimit(
+      entitlements,
+      "invoiceExtractions",
+      entitlements.plan.limits.invoiceExtractionsPerMonth
+    );
+
     // Extraction: vision for images, text layer for PDFs. Any failure — no
     // text layer, invalid AI output, provider errors — falls back to review.
     let extracted: ExtractedInvoice | null = null;
-    try {
-      const ai = getAiClient(profile.aiProvider === "ANTHROPIC" ? "anthropic" : "openai");
-      if (file.type === "application/pdf") {
-        const text = await getPdfText(buffer);
-        if (!hasNoTextLayer(text)) {
-          extracted = await extractFromText(ai, text as string);
+    if (extractionQuota.allowed) {
+      await incrementUsage(user.id, "invoiceExtractions");
+      try {
+        const ai = getAiClient(profile.aiProvider === "ANTHROPIC" ? "anthropic" : "openai");
+        if (file.type === "application/pdf") {
+          const text = await getPdfText(buffer);
+          if (!hasNoTextLayer(text)) {
+            extracted = await extractFromText(ai, text as string);
+          }
+        } else {
+          extracted = await extractFromImage(ai, file.type, Buffer.from(buffer).toString("base64"));
         }
-      } else {
-        extracted = await extractFromImage(ai, file.type, Buffer.from(buffer).toString("base64"));
+      } catch (error) {
+        console.error("Invoice extraction failed:", error);
       }
-    } catch (error) {
-      console.error("Invoice extraction failed:", error);
     }
 
     const lineItems = (extracted?.lineItems ?? []).map((item, index) => {
@@ -136,8 +150,17 @@ export async function POST(request: Request) {
       select: { id: true, extractionStatus: true },
     });
 
+    await trackEvent(user.id, "invoice_upload", {
+      extracted: Boolean(extracted),
+      extractionSkipped: !extractionQuota.allowed,
+    });
+
     return NextResponse.json(
-      { invoiceId: invoice.id, extractionStatus: invoice.extractionStatus },
+      {
+        invoiceId: invoice.id,
+        extractionStatus: invoice.extractionStatus,
+        extractionSkipped: !extractionQuota.allowed,
+      },
       { status: 201 }
     );
   } catch (error) {

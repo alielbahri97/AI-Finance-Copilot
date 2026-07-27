@@ -67,6 +67,20 @@ Supabase, Prisma and OpenAI/Anthropic.
   the forecast engine), and daily invoice reminders. Per-type and per-channel toggles live in
   Settings. An hourly Vercel Cron hits a CRON_SECRET-protected endpoint that evaluates all
   users idempotently via last-sent timestamps.
+- **SaaS billing** — four plans (Free, Pro, Business, Enterprise) defined in a single source
+  of truth (`src/lib/billing/plans.ts`) with per-plan limits (CSV imports and rows per
+  import, AI messages, invoice extractions, exports, forecast assumptions). Stripe Checkout
+  for upgrades, a webhook keeping the local subscription in sync, the Stripe Billing Portal
+  for payment methods/cancellation, and a `/billing` page with the current plan, usage
+  meters, plan matrix, invoice history and a referral program (share a link, earn +30 days
+  of Pro per converted referral). Every new account gets a card-free 14-day Pro trial.
+  Limits are enforced server-side in the API routes (friendly 402 responses with upgrade
+  hints) and reflected in the UI (disabled export buttons, locked assumptions card, copilot
+  quota banner). Without Stripe keys everything still works on Free/trial.
+- **Admin & analytics** — an `isAdmin`-guarded `/admin` dashboard with user list
+  (plan/usage/joined), KPI cards (total users, active subscriptions, MRR estimate, signups,
+  AI usage) and charts driven by a lightweight internal `AnalyticsEvent` table (signup,
+  import, AI message, export, upgrade — no third-party trackers).
 - **Profile & Settings** — display name, preferred currency, AI provider choice, theme
   (light/dark/system) and password change
 - **UI** — responsive layout, dark mode, toast notifications, loading skeletons, error
@@ -265,6 +279,42 @@ with:
 curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/notifications
 ```
 
+### Optional: billing (Stripe)
+
+Without Stripe keys the app runs fully on the Free plan (every new account still gets the
+local 14-day Pro trial) and `/billing` shows a "billing not configured" notice. To enable
+paid plans:
+
+1. **Create the products/prices** — in the [Stripe dashboard](https://dashboard.stripe.com)
+   create two products, *FinPilot Pro* and *FinPilot Business*, each with a monthly
+   recurring price ($19 and $49 to match `src/lib/billing/plans.ts`, or adjust the file).
+   Copy the two `price_...` ids.
+2. **Configure the webhook** — add an endpoint pointing at
+   `https://yourapp.vercel.app/api/webhooks/stripe` subscribed to:
+   `checkout.session.completed`, `customer.subscription.created`,
+   `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`,
+   `invoice.payment_failed`. Copy its signing secret. (Locally, use
+   `stripe listen --forward-to localhost:3000/api/webhooks/stripe`.)
+3. **Enable the Billing Portal** — in **Settings → Billing → Customer portal**, activate the
+   portal and allow plan switching/cancellation. The app's *Manage billing* button opens it.
+4. **Set the env vars**:
+
+```bash
+STRIPE_SECRET_KEY="sk_live_..."        # or sk_test_...
+STRIPE_WEBHOOK_SECRET="whsec_..."
+STRIPE_PRICE_PRO="price_..."
+STRIPE_PRICE_BUSINESS="price_..."
+```
+
+Enterprise is contact-sales only (no checkout). Upgrades run through Stripe Checkout with a
+card-backed trial applied only if the user's local trial is still running.
+
+**Admin access** — the `/admin` dashboard is enabled per user by a manual database flag:
+
+```sql
+UPDATE profiles SET is_admin = true WHERE email = 'you@yourdomain.com';
+```
+
 ## Scripts
 
 | Script               | Purpose                                  |
@@ -362,3 +412,25 @@ curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/noti
   days; multiple hits in one import are aggregated into a single notification). Digests are
   written by the user's AI provider from the copilot snapshot + forecast, with a
   deterministic text fallback so summaries still send without an AI key.
+- **Billing & entitlements**: `src/lib/billing/plans.ts` is the single source of truth for
+  plans/limits; `getEntitlements(userId)` (in `entitlements.ts`) resolves the effective plan
+  (paid Stripe plan → local trial → Free) and returns it with this month's `UsageRecord`
+  counters. Gated routes call `checkLimit`/`upgradeError` and return 402 JSON with an
+  upgrade hint; usage counters are per calendar month (`YYYY-MM`) and increment atomically
+  via upsert. The Stripe integration uses the official `stripe` package: Checkout Sessions
+  carry the `userId` in metadata, and `/api/webhooks/stripe` verifies signatures and syncs
+  plan, status, period end and cancel-at-period-end onto the local `Subscription` row
+  (price id → plan via the env-configured price ids). The 14-day Pro trial is purely local
+  (`trialEndsAt` set when the subscription row is first created) so it needs no card and no
+  Stripe account.
+- **Referrals**: each profile gets a collision-safe 8-character code on first billing-page
+  visit. `/signup?ref=CODE` stores the code in Supabase signup metadata; the first
+  authenticated visit creates the `Referral` row (self-referrals ignored). When the referred
+  user completes a paid checkout, the webhook marks the referral converted exactly once and
+  extends the referrer's `trialEndsAt` by 30 days.
+- **Admin & analytics**: `trackEvent()` writes fire-and-forget rows to `analytics_events`
+  (signup, import, ai_message, export, upgrade, invoice_upload, referral events). `/admin`
+  (server-guarded by `profiles.is_admin`, plus admin-only `GET /api/admin/stats` and
+  `GET /api/admin/users`) shows KPIs, a signups-per-day chart, top events and the user list
+  with per-user plan and monthly usage. MRR is estimated from plan list prices of active
+  paid subscriptions.

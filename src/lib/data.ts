@@ -1,15 +1,21 @@
 import "server-only";
 import type { User } from "@supabase/supabase-js";
 
+import { trackEvent } from "@/lib/analytics";
+import { attributeReferral } from "@/lib/billing/referrals";
 import { ensureDefaultCategories } from "@/lib/categories";
 import { prisma } from "@/lib/prisma";
 
 /**
  * Ensures a Profile row (and the default category set) exists for the
  * authenticated Supabase user. Called from the dashboard layout so every
- * signed-in user has one.
+ * signed-in user has one. First creation also records the signup event and
+ * attributes the referral code carried in the signup metadata, if any.
  */
 export async function getOrCreateProfile(user: User) {
+  const existing = await prisma.profile.findUnique({ where: { id: user.id } });
+  if (existing) return existing;
+
   const profile = await prisma.profile.upsert({
     where: { id: user.id },
     update: {},
@@ -21,6 +27,13 @@ export async function getOrCreateProfile(user: User) {
     },
   });
   await ensureDefaultCategories(user.id);
+
+  await trackEvent(user.id, "signup");
+  const referralCode = user.user_metadata?.referral_code as string | undefined;
+  if (referralCode) {
+    await attributeReferral(user.id, referralCode);
+  }
+
   return profile;
 }
 

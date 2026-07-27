@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -21,7 +22,10 @@ export default function SignupPage() {
         <CardDescription>Start tracking your finances in minutes</CardDescription>
       </CardHeader>
       <CardContent>
-        <SignupForm />
+        {/* Suspense: SignupForm reads the ?ref= search param on the client. */}
+        <Suspense>
+          <SignupForm />
+        </Suspense>
       </CardContent>
       <CardFooter className="justify-center text-sm">
         <span className="text-muted-foreground">

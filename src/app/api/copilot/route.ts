@@ -4,6 +4,8 @@ import { z } from "zod";
 import { AiError, getAiClient, type AiChatMessage } from "@/lib/ai";
 import { buildFinancialSnapshot } from "@/lib/ai/context";
 import { buildSystemPrompt } from "@/lib/ai/prompts";
+import { trackEvent } from "@/lib/analytics";
+import { checkLimit, getEntitlements, incrementUsage, limitError } from "@/lib/billing/entitlements";
 import { getOrCreateProfile } from "@/lib/data";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
@@ -46,6 +48,15 @@ export async function POST(request: Request) {
     const { message, conversationId } = parsed.data;
 
     const profile = await getOrCreateProfile(user);
+
+    // Plan gating: monthly AI message quota.
+    const entitlements = await getEntitlements(user.id);
+    const quota = checkLimit(entitlements, "aiMessages", entitlements.plan.limits.aiMessagesPerMonth);
+    if (!quota.allowed) {
+      return NextResponse.json(limitError("AI message", entitlements.planId), { status: 402 });
+    }
+    await incrementUsage(user.id, "aiMessages");
+    await trackEvent(user.id, "ai_message", { conversationId: conversationId ?? null });
 
     // Resolve or create the conversation.
     let conversation: { id: string; title: string };

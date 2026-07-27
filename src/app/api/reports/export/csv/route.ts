@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { trackEvent } from "@/lib/analytics";
+import { incrementUsage } from "@/lib/billing/entitlements";
 import { buildReport, getReportTransactions } from "@/lib/reports/data";
 import { buildMonthlySummaryCsv, buildTransactionsCsv } from "@/lib/reports/export-csv";
 import { periodSlug, resolveReportRequest } from "@/lib/reports/query";
@@ -18,6 +20,9 @@ export async function GET(request: Request) {
       dataset === "monthly"
         ? buildMonthlySummaryCsv(await buildReport(userId, currency, period))
         : buildTransactionsCsv(await getReportTransactions(userId, period));
+
+    await incrementUsage(userId, "exports");
+    await trackEvent(userId, "export", { format: "csv", dataset });
 
     const suffix = dataset === "monthly" ? "monthly-summary" : "transactions";
     return new NextResponse(`\uFEFF${csv}`, {

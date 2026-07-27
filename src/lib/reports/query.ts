@@ -1,5 +1,6 @@
 import "server-only";
 
+import { getEntitlements, upgradeError } from "@/lib/billing/entitlements";
 import { getOrCreateProfile } from "@/lib/data";
 import { getUser } from "@/lib/supabase/server";
 import { reportQuerySchema } from "@/lib/validations/report";
@@ -22,6 +23,12 @@ export async function resolveReportRequest(
 ): Promise<{ context: ReportRequestContext } | { error: string; status: number }> {
   const user = await getUser();
   if (!user) return { error: "Unauthorized", status: 401 };
+
+  // Plan gating: exports are a paid feature.
+  const entitlements = await getEntitlements(user.id);
+  if (!entitlements.plan.limits.exportsEnabled) {
+    return { error: upgradeError("Report exports", entitlements.planId).error, status: 402 };
+  }
 
   const url = new URL(request.url);
   const parsed = reportQuerySchema.safeParse(Object.fromEntries(url.searchParams.entries()));

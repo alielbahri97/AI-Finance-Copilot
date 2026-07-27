@@ -14,6 +14,7 @@ interface CopilotShellProps {
   activeId: string | null;
   initialMessages: ChatMessageItem[];
   suggestions: string[];
+  quotaExhausted?: boolean;
 }
 
 export function CopilotShell({
@@ -21,6 +22,7 @@ export function CopilotShell({
   activeId,
   initialMessages,
   suggestions,
+  quotaExhausted,
 }: CopilotShellProps) {
   const [historyOpen, setHistoryOpen] = useState(false);
 
@@ -48,6 +50,7 @@ export function CopilotShell({
         conversationId={activeId}
         initialMessages={initialMessages}
         suggestions={suggestions}
+        quotaExhausted={quotaExhausted}
         onOpenHistory={() => setHistoryOpen(true)}
       />
     </div>

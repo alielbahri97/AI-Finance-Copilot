@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   CalendarClockIcon,
   FlameIcon,
   HourglassIcon,
+  LockIcon,
   RepeatIcon,
   WalletIcon,
 } from "lucide-react";
@@ -24,6 +26,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { getEntitlements } from "@/lib/billing/entitlements";
 import { getOrCreateProfile } from "@/lib/data";
 import { buildForecast } from "@/lib/finance/data";
 import { prisma } from "@/lib/prisma";
@@ -51,10 +55,12 @@ export default async function ForecastPage() {
   if (!user) redirect("/login");
 
   const profile = await getOrCreateProfile(user);
-  const [forecast, assumptionRows] = await Promise.all([
+  const [forecast, assumptionRows, entitlements] = await Promise.all([
     buildForecast(user.id, profile.currency),
     prisma.assumption.findMany({ where: { userId: user.id }, orderBy: { createdAt: "asc" } }),
+    getEntitlements(user.id),
   ]);
+  const assumptionsUnlocked = entitlements.plan.limits.assumptionsEnabled;
 
   const assumptions: AssumptionItem[] = assumptionRows.map((row) => ({
     id: row.id,
@@ -143,7 +149,22 @@ export default async function ForecastPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <AssumptionsManager assumptions={assumptions} currency={profile.currency} />
+            {assumptionsUnlocked ? (
+              <AssumptionsManager assumptions={assumptions} currency={profile.currency} />
+            ) : (
+              <div className="flex flex-col items-center gap-3 py-8 text-center">
+                <div className="bg-muted flex size-10 items-center justify-center rounded-full">
+                  <LockIcon className="text-muted-foreground size-5" />
+                </div>
+                <p className="text-sm font-medium">What-if assumptions are a Pro feature</p>
+                <p className="text-muted-foreground max-w-sm text-sm">
+                  Model new hires, expected payments and growth scenarios on top of your forecast.
+                </p>
+                <Button asChild size="sm">
+                  <Link href="/billing">Upgrade plan</Link>
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
         <Card className="lg:col-span-2">
