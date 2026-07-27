@@ -63,7 +63,7 @@ export default async function LandingPage() {
         </div>
       </header>
 
-      <main className="flex-1">
+      <main id="main-content" tabIndex={-1} className="flex-1 outline-none">
         <section className="mx-auto flex w-full max-w-6xl flex-col items-center gap-6 px-4 py-24 text-center sm:px-6">
           <span className="bg-accent text-accent-foreground rounded-full px-3 py-1 text-xs font-medium">
             Your AI Finance Copilot

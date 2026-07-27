@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { BotIcon, HistoryIcon, SendIcon, SquareIcon, UserIcon } from "lucide-react";
 import { toast } from "sonner";
 
-import { Markdown } from "@/components/copilot/markdown";
+import { Markdown } from "@/components/copilot/markdown-lazy";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";

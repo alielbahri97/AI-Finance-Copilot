@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { Loader2Icon, SparklesIcon, SquareIcon } from "lucide-react";
 import { toast } from "sonner";
 
-import { Markdown } from "@/components/copilot/markdown";
+import { Markdown } from "@/components/copilot/markdown-lazy";
 import { Button } from "@/components/ui/button";
 
 /**

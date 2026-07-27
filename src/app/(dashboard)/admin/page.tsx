@@ -8,7 +8,7 @@ import {
   UsersIcon,
 } from "lucide-react";
 
-import { EventsChart, SignupsChart } from "@/components/admin/admin-charts";
+import { EventsChart, SignupsChart } from "@/components/admin/admin-charts-lazy";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { Badge } from "@/components/ui/badge";
 import {

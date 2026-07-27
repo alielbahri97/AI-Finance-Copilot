@@ -12,7 +12,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-export const metadata: Metadata = { title: "Create account" };
+export const metadata: Metadata = {
+  title: "Create account",
+  description:
+    "Create a free FinPilot account: import bank statements, forecast cash flow, and get AI insights.",
+};
 
 export default function SignupPage() {
   return (

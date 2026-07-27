@@ -15,7 +15,9 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         </div>
         FinPilot
       </Link>
-      <div className="w-full max-w-sm">{children}</div>
+      <main id="main-content" tabIndex={-1} className="w-full max-w-sm outline-none">
+        {children}
+      </main>
     </div>
   );
 }

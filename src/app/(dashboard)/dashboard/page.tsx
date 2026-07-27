@@ -11,10 +11,12 @@ import {
   WalletIcon,
 } from "lucide-react";
 
-import { BalanceChart } from "@/components/dashboard/balance-chart";
-import { CategoryChart } from "@/components/dashboard/category-chart";
+import {
+  BalanceChart,
+  CategoryChart,
+  OverviewChart,
+} from "@/components/dashboard/charts-lazy";
 import { LargestExpenses } from "@/components/dashboard/largest-expenses";
-import { OverviewChart } from "@/components/dashboard/overview-chart";
 import { RecentTransactions } from "@/components/dashboard/recent-transactions";
 import { StatCard } from "@/components/dashboard/stat-card";
 import {

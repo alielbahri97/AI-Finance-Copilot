@@ -13,7 +13,10 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
-export const metadata: Metadata = { title: "Sign in" };
+export const metadata: Metadata = {
+  title: "Sign in",
+  description: "Sign in to your FinPilot account to manage your finances.",
+};
 
 export default function LoginPage() {
   return (

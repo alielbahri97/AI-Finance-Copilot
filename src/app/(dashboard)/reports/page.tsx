@@ -10,12 +10,14 @@ import {
 } from "lucide-react";
 
 import { AgingTable } from "@/components/reports/aging-table";
-import { CategoryBreakdown } from "@/components/reports/category-breakdown";
+import {
+  CategoryBreakdown,
+  MonthlyTrendChart,
+  YearlyChart,
+} from "@/components/reports/charts-lazy";
 import { ExportButtons } from "@/components/reports/export-buttons";
-import { MonthlyTrendChart } from "@/components/reports/monthly-trend-chart";
 import { PartyTable } from "@/components/reports/party-table";
 import { PeriodSelector } from "@/components/reports/period-selector";
-import { YearlyChart } from "@/components/reports/yearly-chart";
 import { StatCard } from "@/components/dashboard/stat-card";
 import {
   Card,

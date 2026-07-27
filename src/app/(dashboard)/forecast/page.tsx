@@ -16,7 +16,7 @@ import {
   type AssumptionItem,
 } from "@/components/forecast/assumptions-manager";
 import { ExplainForecast } from "@/components/forecast/explain-forecast";
-import { ForecastChart } from "@/components/forecast/forecast-chart";
+import { ForecastChart } from "@/components/forecast/forecast-chart-lazy";
 import { RecurringTable } from "@/components/forecast/recurring-table";
 import { UpcomingBills } from "@/components/forecast/upcoming-bills";
 import {

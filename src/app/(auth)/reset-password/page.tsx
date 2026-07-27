@@ -9,7 +9,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-export const metadata: Metadata = { title: "Set new password" };
+export const metadata: Metadata = {
+  title: "Set new password",
+  robots: { index: false },
+};
 
 export default function ResetPasswordPage() {
   return (
