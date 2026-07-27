@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getOrCreateProfile } from "@/lib/data";
+import { evaluateLargeTransactions } from "@/lib/notifications/alerts";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 import { transactionSchema } from "@/lib/validations/transaction";
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
       );
     }
 
-    await getOrCreateProfile(user);
+    const profile = await getOrCreateProfile(user);
 
     const categoryId = parsed.data.categoryId ?? null;
     if (categoryId) {
@@ -45,6 +46,17 @@ export async function POST(request: Request) {
         date: parsed.data.date,
       },
     });
+
+    // Immediate large-transaction alert; never blocks or fails the create.
+    await evaluateLargeTransactions(user.id, profile.currency, [
+      {
+        type: parsed.data.type,
+        amount: parsed.data.amount,
+        description: parsed.data.description,
+        counterparty: parsed.data.counterparty ?? null,
+        date: parsed.data.date,
+      },
+    ]);
 
     return NextResponse.json(
       { transaction: { ...transaction, amount: Number(transaction.amount), balance: null } },

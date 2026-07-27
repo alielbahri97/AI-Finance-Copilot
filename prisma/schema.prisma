@@ -49,6 +49,15 @@ enum ExtractionStatus {
   MANUAL
 }
 
+enum NotificationType {
+  DAILY_SUMMARY
+  WEEKLY_SUMMARY
+  MONTHLY_SUMMARY
+  LARGE_TRANSACTION
+  LOW_CASH
+  INVOICE_REMINDER
+}
+
 enum AssumptionKind {
   /// A single future income/expense on a specific date.
   ONE_OFF
@@ -69,17 +78,93 @@ model Profile {
   createdAt  DateTime   @default(now()) @map("created_at")
   updatedAt  DateTime   @updatedAt @map("updated_at")
 
-  transactions  Transaction[]
-  budgets       Budget[]
-  chatMessages  ChatMessage[]
-  categories    Category[]
-  categoryRules CategoryRule[]
-  importBatches ImportBatch[]
-  conversations Conversation[]
-  assumptions   Assumption[]
-  invoices      Invoice[]
+  transactions           Transaction[]
+  budgets                Budget[]
+  chatMessages           ChatMessage[]
+  categories             Category[]
+  categoryRules          CategoryRule[]
+  importBatches          ImportBatch[]
+  conversations          Conversation[]
+  assumptions            Assumption[]
+  invoices               Invoice[]
+  notifications          Notification[]
+  notificationPreference NotificationPreference?
+  pushSubscriptions      PushSubscription[]
 
   @@map("profiles")
+}
+
+/// An in-app notification; the always-available channel. Email and push are
+/// fan-out copies of the same event.
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String           @map("user_id") @db.Uuid
+  type      NotificationType
+  title     String
+  body      String
+  /// Optional deep link into the app (e.g. /invoices or /forecast).
+  link      String?
+  readAt    DateTime?        @map("read_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+/// One row per user: per-type and per-channel toggles plus the last-sent
+/// timestamps that make the cron endpoint idempotent.
+model NotificationPreference {
+  id     String @id @default(cuid())
+  userId String @unique @map("user_id") @db.Uuid
+
+  dailySummary   Boolean @default(false) @map("daily_summary")
+  weeklySummary  Boolean @default(true) @map("weekly_summary")
+  monthlySummary Boolean @default(true) @map("monthly_summary")
+
+  largeTransaction          Boolean @default(true) @map("large_transaction")
+  largeTransactionThreshold Decimal @default(1000) @map("large_transaction_threshold") @db.Decimal(12, 2)
+
+  lowCash            Boolean @default(true) @map("low_cash")
+  lowCashFloor       Decimal @default(0) @map("low_cash_floor") @db.Decimal(14, 2)
+  lowCashHorizonDays Int     @default(30) @map("low_cash_horizon_days")
+
+  invoiceReminders Boolean @default(true) @map("invoice_reminders")
+
+  channelInApp Boolean @default(true) @map("channel_in_app")
+  channelEmail Boolean @default(true) @map("channel_email")
+  channelPush  Boolean @default(false) @map("channel_push")
+
+  lastDailySentAt     DateTime? @map("last_daily_sent_at")
+  lastWeeklySentAt    DateTime? @map("last_weekly_sent_at")
+  lastMonthlySentAt   DateTime? @map("last_monthly_sent_at")
+  lastLowCashAt       DateTime? @map("last_low_cash_at")
+  lastInvoiceRemindAt DateTime? @map("last_invoice_remind_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+/// A browser Web Push subscription (VAPID). A user can have several
+/// (one per browser/device); dead endpoints are pruned on send.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id") @db.Uuid
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }
 
 /// An uploaded invoice/receipt document with extracted metadata.

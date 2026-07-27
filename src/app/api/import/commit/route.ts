@@ -6,6 +6,7 @@ import { loadRuleMatchers, matchCategory } from "@/lib/categories";
 import { normalizeRows } from "@/lib/csv/normalize";
 import { parseCsv } from "@/lib/csv/parse";
 import { getOrCreateProfile } from "@/lib/data";
+import { evaluateLargeTransactions } from "@/lib/notifications/alerts";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 import {
@@ -83,7 +84,7 @@ export async function POST(request: Request) {
       );
     }
 
-    await getOrCreateProfile(user);
+    const profile = await getOrCreateProfile(user);
 
     const { ok: rows, errors } = normalizeRows(csv.rows, mapping);
     if (rows.length === 0) {
@@ -153,6 +154,20 @@ export async function POST(request: Request) {
       });
       return created;
     });
+
+    // Immediate large-transaction alerts for the imported rows (aggregated
+    // into one notification when several qualify); never fails the import.
+    await evaluateLargeTransactions(
+      user.id,
+      profile.currency,
+      fresh.map((row) => ({
+        type: row.type,
+        amount: row.amount,
+        description: row.description,
+        counterparty: row.counterparty,
+        date: new Date(`${row.date}T00:00:00.000Z`),
+      }))
+    );
 
     return NextResponse.json({
       imported: fresh.length,

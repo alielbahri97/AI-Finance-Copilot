@@ -57,6 +57,16 @@ Supabase, Prisma and OpenAI/Anthropic.
   PDF report (server-rendered with `pdf-lib` — no headless browser needed), a multi-sheet
   Excel workbook via `exceljs` (KPIs, monthly trends, transactions, categories, top
   vendors/customers) and CSV (transactions or monthly summary).
+- **Notifications** — an in-app notification center (bell in the header with unread badge,
+  mark read / mark all read) as the always-available channel, plus optional email (Resend)
+  and Web Push (VAPID service worker) channels. AI-generated daily/weekly/monthly digests
+  (what happened, notable changes, upcoming bills, forecast outlook — with a deterministic
+  fallback when no AI key is set), large-transaction alerts (configurable threshold or
+  statistically unusual expenses, evaluated immediately on create/import), low-cash warnings
+  (balance below a configurable floor now, or projected to drop below it within N days using
+  the forecast engine), and daily invoice reminders. Per-type and per-channel toggles live in
+  Settings. An hourly Vercel Cron hits a CRON_SECRET-protected endpoint that evaluates all
+  users idempotently via last-sent timestamps.
 - **Profile & Settings** — display name, preferred currency, AI provider choice, theme
   (light/dark/system) and password change
 - **UI** — responsive layout, dark mode, toast notifications, loading skeletons, error
@@ -211,6 +221,50 @@ After signing up, grab your user id (Supabase dashboard → Authentication → U
 npm run db:seed -- <supabase-user-id> <email>
 ```
 
+### Optional: notification channels
+
+In-app notifications (the bell in the header) work out of the box. Email and push are
+enabled by env vars — when they are missing, those sends are logged and skipped.
+
+**Email (Resend)** — create an API key at [resend.com](https://resend.com), verify your
+sending domain, and set:
+
+```bash
+RESEND_API_KEY="re_..."
+EMAIL_FROM="FinPilot <notifications@yourdomain.com>"
+NEXT_PUBLIC_APP_URL="https://yourapp.vercel.app"   # used for links in emails
+```
+
+**Web Push (VAPID)** — generate a key pair once and put it in the env:
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+```bash
+NEXT_PUBLIC_VAPID_PUBLIC_KEY="<publicKey>"
+VAPID_PRIVATE_KEY="<privateKey>"
+VAPID_SUBJECT="mailto:you@yourdomain.com"
+```
+
+Then enable the push channel in **Settings → Notifications** and click
+*Enable on this device* (registers `public/sw.js` and stores the browser's subscription).
+
+**Scheduling** — summaries and recurring alerts are evaluated by
+`GET /api/cron/notifications`, protected by a bearer token:
+
+```bash
+CRON_SECRET="<any long random string>"
+```
+
+In production, Vercel Cron drives it hourly via `vercel.json` (Vercel automatically sends
+`Authorization: Bearer $CRON_SECRET` for cron invocations). Locally you can trigger a run
+with:
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/notifications
+```
+
 ## Scripts
 
 | Script               | Purpose                                  |
@@ -293,5 +347,18 @@ npm run db:seed -- <supabase-user-id> <email>
   to the invoice/due date and vendor-vs-counterparty token similarity. Linking is manual
   (one click on a suggestion) and marks the invoice paid; unlinking reverts it to unpaid.
   `GET /api/invoices/reminders` returns due-soon (7 days) and overdue invoices — the same
-  data feeds the invoices page cards and the main dashboard banner, and is the groundwork
-  for the notification stage.
+  data feeds the invoices page cards, the main dashboard banner and the invoice-reminder
+  notifications.
+- **Notifications**: one event fans out through `src/lib/notifications/dispatch.ts` to the
+  channels the user enabled — an in-app `Notification` row (the always-works channel behind
+  the header bell), an HTML email via Resend's REST API (plain `fetch`, digest and alert
+  templates in `src/lib/notifications/email.ts`), and Web Push via `web-push` with dead
+  subscriptions pruned on 404/410. `GET /api/cron/notifications` (hourly Vercel Cron,
+  CRON_SECRET bearer) walks all users and sends due daily/weekly (Mondays)/monthly (the
+  1st) AI digests plus low-cash and invoice-reminder alerts; last-sent timestamps on
+  `NotificationPreference` are claimed *before* dispatch, making re-runs idempotent.
+  Large-transaction alerts don't wait for cron: they are evaluated inline on manual create
+  and CSV import (threshold from preferences, or expenses above mean + 3σ of the last 90
+  days; multiple hits in one import are aggregated into a single notification). Digests are
+  written by the user's AI provider from the copilot snapshot + forecast, with a
+  deterministic text fallback so summaries still send without an AI key.
