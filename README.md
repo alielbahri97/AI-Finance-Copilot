@@ -96,6 +96,10 @@ Supabase, Prisma and OpenAI/Anthropic.
   (light/dark/system) and password change
 - **UI** — responsive layout, dark mode, toast notifications, loading skeletons, error
   boundaries, shadcn/ui component library on Tailwind CSS v4
+- **Installable app (PWA)** — web manifest, icons, service worker, and install prompt so
+  FinPilot can be added to phone home screens and the Windows Start menu. Optional MSIX /
+  WebView2 packaging notes in **[WINDOWS_APP.md](WINDOWS_APP.md)** (closest practical path
+  to a UWP-style mobile/desktop app without a C# rewrite)
 
 ## Tech stack
 
@@ -534,6 +538,12 @@ registry; inside one, copy your `.npmrc` + CA into the build stage.
 
 See **[DEPLOYMENT.md](DEPLOYMENT.md)** for the step-by-step Vercel and self-hosted guides,
 and **[PRODUCTION_CHECKLIST.md](PRODUCTION_CHECKLIST.md)** before going live.
+
+## Install as an app (phone / Windows)
+
+FinPilot is a Progressive Web App. Users can install it from the browser (Android Chrome,
+iOS Safari “Add to Home Screen”, Windows Edge “Install app”). For MSIX / Store packaging
+via PWABuilder or an optional WebView2 host, see **[WINDOWS_APP.md](WINDOWS_APP.md)**.
 
 ## Deploying to Vercel
 

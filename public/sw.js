@@ -1,8 +1,80 @@
 /**
- * FinPilot service worker: receives Web Push messages and shows them as
- * system notifications. Clicking a notification focuses (or opens) the app
- * at the deep link carried in the payload.
+ * FinPilot service worker
+ * - Enables PWA installability (fetch handler + precache of shell assets)
+ * - Receives Web Push and shows system notifications
+ * - Network-first for navigations; cache-first for same-origin static assets
  */
+
+const CACHE_NAME = "finpilot-shell-v1";
+const PRECACHE_URLS = ["/", "/dashboard", "/icons/icon-192.png", "/icons/icon-512.png"];
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches
+      .open(CACHE_NAME)
+      .then((cache) => cache.addAll(PRECACHE_URLS).catch(() => undefined))
+      .then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))
+      )
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener("fetch", (event) => {
+  const { request } = event;
+  if (request.method !== "GET") return;
+
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return;
+
+  // Never cache API or auth flows.
+  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/")) return;
+
+  // Navigations: network-first, fall back to cached shell.
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          const copy = response.clone();
+          void caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          return response;
+        })
+        .catch(() =>
+          caches.match(request).then((cached) => cached || caches.match("/dashboard") || caches.match("/"))
+        )
+    );
+    return;
+  }
+
+  // Static icons / public assets: cache-first.
+  if (
+    url.pathname.startsWith("/icons/") ||
+    url.pathname.endsWith(".png") ||
+    url.pathname.endsWith(".svg") ||
+    url.pathname.endsWith(".ico") ||
+    url.pathname.endsWith(".webmanifest")
+  ) {
+    event.respondWith(
+      caches.match(request).then(
+        (cached) =>
+          cached ||
+          fetch(request).then((response) => {
+            const copy = response.clone();
+            void caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+            return response;
+          })
+      )
+    );
+  }
+});
 
 self.addEventListener("push", (event) => {
   if (!event.data) return;
@@ -17,8 +89,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(payload.title, {
       body: payload.body,
-      icon: "/favicon.ico",
-      badge: "/favicon.ico",
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
       data: { link: payload.link },
     })
   );
