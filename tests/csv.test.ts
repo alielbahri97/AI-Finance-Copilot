@@ -2,16 +2,24 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { suggestMapping } from "@/lib/csv/detect";
+import { detectStatementCurrency, parseLocalizedNumber, suggestMapping } from "@/lib/csv/detect";
 import { normalizeRows } from "@/lib/csv/normalize";
 import { parseCsv } from "@/lib/csv/parse";
 
-function analyze(csvText: string) {
+function analyze(csvText: string, expectedCurrency?: string | null) {
   const buffer = new TextEncoder().encode(csvText).buffer as ArrayBuffer;
   const csv = parseCsv(buffer);
   const mapping = suggestMapping(csv);
-  const normalized = normalizeRows(csv.rows, mapping);
-  return { csv, mapping, normalized };
+  const statementCurrency = detectStatementCurrency(csv, mapping);
+  const normalized = normalizeRows(csv.rows, mapping, {
+    expectedCurrency:
+      expectedCurrency !== undefined
+        ? expectedCurrency
+        : mapping.currency !== null
+          ? statementCurrency.code
+          : null,
+  });
+  return { csv, mapping, normalized, statementCurrency };
 }
 
 describe("CSV parsing and column detection", () => {
@@ -105,5 +113,67 @@ describe("CSV parsing and column detection", () => {
     expect(mapping.amount).toBe(3);
     expect(normalized.ok.length).toBeGreaterThan(40);
     expect(normalized.errors).toHaveLength(0);
+  });
+
+  it("preserves expense sign when currency symbol precedes the minus", () => {
+    expect(parseLocalizedNumber("€-12,95", "eu")).toBe(-12.95);
+    expect(parseLocalizedNumber("$-4.50", "us")).toBe(-4.5);
+    expect(parseLocalizedNumber("£-19.99", "us")).toBe(-19.99);
+    expect(parseLocalizedNumber("EUR -12,95", "eu")).toBe(-12.95);
+    expect(parseLocalizedNumber("-€12,95", "eu")).toBe(-12.95);
+    expect(parseLocalizedNumber("-$4.50", "us")).toBe(-4.5);
+    expect(parseLocalizedNumber("€12,95−", "eu")).toBe(-12.95); // Unicode minus
+    expect(parseLocalizedNumber("(€12,95)", "eu")).toBe(-12.95);
+  });
+
+  it("detects Currency column and imports EUR amounts with correct signs", () => {
+    const { mapping, normalized, statementCurrency } = analyze(
+      [
+        "Date,Description,Amount,Currency",
+        '2026-07-01,Coffee,"€-4,50",EUR',
+        '2026-07-02,Salary,"€2.500,00",EUR',
+      ].join("\n")
+    );
+
+    expect(mapping.currency).toBe(3);
+    expect(mapping.amount).toBe(2);
+    expect(statementCurrency).toMatchObject({ code: "EUR", mixed: false, codes: ["EUR"] });
+    expect(normalized.ok).toHaveLength(2);
+    expect(normalized.ok[0]).toMatchObject({ type: "EXPENSE", amount: 4.5 });
+    expect(normalized.ok[1]).toMatchObject({ type: "INCOME", amount: 2500 });
+  });
+
+  it("skips foreign-currency rows when a Currency column is present", () => {
+    const { normalized, statementCurrency } = analyze(
+      [
+        "Date,Description,Amount,Currency",
+        "2026-07-01,Coffee,-4.50,EUR",
+        "2026-07-02,Hotel,-120.00,USD",
+        "2026-07-03,Salary,2500.00,EUR",
+      ].join("\n"),
+      "EUR"
+    );
+
+    expect(statementCurrency.mixed).toBe(true);
+    expect(statementCurrency.codes.sort()).toEqual(["EUR", "USD"]);
+    expect(normalized.ok).toHaveLength(2);
+    expect(normalized.ok.map((row) => row.description)).toEqual(["Coffee", "Salary"]);
+    expect(normalized.errors).toHaveLength(1);
+    expect(normalized.errors[0]?.message).toContain("Skipped USD");
+  });
+
+  it("detects currency from amount symbols when no Currency column exists", () => {
+    const { statementCurrency, normalized } = analyze(
+      [
+        "Date,Description,Amount",
+        '2026-07-01,Coffee,"€-12,95"',
+        '2026-07-02,Lunch,"€-8,50"',
+      ].join("\n")
+    );
+
+    expect(statementCurrency.code).toBe("EUR");
+    expect(statementCurrency.columnIndex).toBeNull();
+    expect(normalized.ok).toHaveLength(2);
+    expect(normalized.ok[0]).toMatchObject({ type: "EXPENSE", amount: 12.95 });
   });
 });

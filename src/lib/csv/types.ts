@@ -6,6 +6,7 @@ export type ColumnRole =
   | "credit"
   | "balance"
   | "counterparty"
+  | "currency"
   | "ignore";
 
 /** How numbers are written: US `1,234.56` vs European `1.234,56`. */
@@ -35,8 +36,22 @@ export interface ColumnMapping {
   credit: number | null;
   balance: number | null;
   counterparty: number | null;
+  /** Optional ISO currency column (EUR, USD, …). */
+  currency: number | null;
   numberFormat: NumberFormat;
   dateFormat: DateFormat;
+}
+
+/** Currency detected from a statement's Currency column and/or amount symbols. */
+export interface StatementCurrencyInfo {
+  /** Majority / sole currency code, or null when unknown. */
+  code: string | null;
+  /** True when more than one distinct currency appears in the file. */
+  mixed: boolean;
+  /** Distinct currency codes found (uppercase ISO-ish). */
+  codes: string[];
+  /** Column index used for detection, when a Currency column was mapped. */
+  columnIndex: number | null;
 }
 
 export interface NormalizedRow {

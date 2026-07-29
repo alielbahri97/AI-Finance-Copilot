@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { apiError } from "@/lib/api/response";
+import { currencyFromLocationText } from "@/lib/currency/location";
 import { getOrCreateProfile } from "@/lib/data";
 import {
   getRecommendations,
@@ -148,6 +149,15 @@ export async function POST(request: Request) {
       },
     });
 
+    // Prefer currency that matches the business location when we can infer it.
+    const locationCurrency = currencyFromLocationText(data.location);
+    if (locationCurrency) {
+      await prisma.profile.update({
+        where: { id: user.id },
+        data: { currency: locationCurrency },
+      });
+    }
+
     const recommendations = getRecommendations({
       businessType: data.businessType,
       employeeRange: data.employeeRange,
@@ -159,6 +169,7 @@ export async function POST(request: Request) {
       businessProfile: serializeBusinessProfile(businessProfile),
       recommendations,
       skipped: false,
+      currency: locationCurrency ?? undefined,
     });
   } catch (error) {
     return apiError("POST /api/onboarding", "Failed to save onboarding", error);

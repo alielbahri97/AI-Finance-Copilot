@@ -1,6 +1,17 @@
 import { z } from "zod";
 
-export const SUPPORTED_CURRENCIES = ["USD", "EUR", "GBP", "AUD", "CAD", "CHF", "JPY"] as const;
+export const SUPPORTED_CURRENCIES = [
+  "USD",
+  "EUR",
+  "GBP",
+  "AUD",
+  "CAD",
+  "CHF",
+  "JPY",
+  "NZD",
+] as const;
+
+export type SupportedCurrency = (typeof SUPPORTED_CURRENCIES)[number];
 
 export const profileSchema = z.object({
   fullName: z.string().min(2, "Enter your full name").max(80),

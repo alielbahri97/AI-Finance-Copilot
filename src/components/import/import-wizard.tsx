@@ -16,6 +16,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -33,7 +34,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { normalizeRows } from "@/lib/csv/normalize";
-import type { ColumnMapping, ColumnRole, NormalizedRow, RowError } from "@/lib/csv/types";
+import type { ColumnMapping, ColumnRole, NormalizedRow, RowError, StatementCurrencyInfo } from "@/lib/csv/types";
 import { cn, formatCurrency } from "@/lib/utils";
 
 interface ParseResponse {
@@ -46,6 +47,9 @@ interface ParseResponse {
   mapping: ColumnMapping;
   preview: NormalizedRow[];
   previewErrors: RowError[];
+  profileCurrency: string;
+  statementCurrency: StatementCurrencyInfo;
+  currencyMismatch: boolean;
 }
 
 /** Like ColumnMapping, but date/description may be unassigned while editing. */
@@ -71,6 +75,7 @@ const ROLE_OPTIONS: { value: ColumnRole; label: string }[] = [
   { value: "credit", label: "Credit (money in)" },
   { value: "balance", label: "Balance" },
   { value: "counterparty", label: "Counterparty" },
+  { value: "currency", label: "Currency" },
 ];
 
 const MAPPED_ROLES = [
@@ -81,6 +86,7 @@ const MAPPED_ROLES = [
   "credit",
   "balance",
   "counterparty",
+  "currency",
 ] as const;
 
 function roleOfColumn(mapping: UiMapping, columnIndex: number): ColumnRole {
@@ -103,6 +109,7 @@ export function ImportWizard({ currency }: ImportWizardProps) {
   const [isParsing, setIsParsing] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
   const [result, setResult] = useState<CommitResponse | null>(null);
+  const [applyStatementCurrency, setApplyStatementCurrency] = useState(false);
 
   const mappingValid =
     mapping !== null &&
@@ -110,10 +117,19 @@ export function ImportWizard({ currency }: ImportWizardProps) {
     mapping.description !== null &&
     (mapping.amount !== null || mapping.debit !== null || mapping.credit !== null);
 
+  const displayCurrency =
+    applyStatementCurrency && parseResult?.statementCurrency.code
+      ? parseResult.statementCurrency.code
+      : (parseResult?.profileCurrency ?? currency);
+
   const preview = useMemo(() => {
     if (!parseResult || !mapping || !mappingValid) return null;
-    return normalizeRows(parseResult.sampleRows, mapping as ColumnMapping);
-  }, [parseResult, mapping, mappingValid]);
+    const expectedCurrency =
+      mapping.currency !== null ? displayCurrency : null;
+    return normalizeRows(parseResult.sampleRows, mapping as ColumnMapping, {
+      expectedCurrency,
+    });
+  }, [parseResult, mapping, mappingValid, displayCurrency]);
 
   async function handleFile(selected: File) {
     setIsParsing(true);
@@ -129,7 +145,14 @@ export function ImportWizard({ currency }: ImportWizardProps) {
       const parsed = body as ParseResponse;
       setFile(selected);
       setParseResult(parsed);
-      setMapping(parsed.mapping);
+      setMapping({
+        ...parsed.mapping,
+        currency: parsed.mapping.currency ?? null,
+      });
+      // Default to adopting the statement currency when it differs and is known.
+      setApplyStatementCurrency(
+        Boolean(parsed.currencyMismatch && parsed.statementCurrency.code)
+      );
       setStep("map");
     } catch {
       toast.error("Network error", { description: "Please try again." });
@@ -168,6 +191,9 @@ export function ImportWizard({ currency }: ImportWizardProps) {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("mapping", JSON.stringify(mapping));
+      if (applyStatementCurrency) {
+        formData.append("applyStatementCurrency", "true");
+      }
       const response = await fetch("/api/import/commit", { method: "POST", body: formData });
       const body = await response.json().catch(() => null);
       if (!response.ok) {
@@ -198,6 +224,7 @@ export function ImportWizard({ currency }: ImportWizardProps) {
     setParseResult(null);
     setMapping(null);
     setResult(null);
+    setApplyStatementCurrency(false);
   }
 
   /* ---------------- Step: upload ---------------- */
@@ -278,6 +305,52 @@ export function ImportWizard({ currency }: ImportWizardProps) {
           <AlertDescription>
             Assign a Date column, a Description column, and either a signed Amount column or the
             Debit/Credit pair.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {parseResult.statementCurrency.code && (
+        <Alert>
+          <AlertTitle>
+            Statement currency: {parseResult.statementCurrency.code}
+            {parseResult.statementCurrency.mixed
+              ? ` (mixed: ${parseResult.statementCurrency.codes.join(", ")})`
+              : ""}
+          </AlertTitle>
+          <AlertDescription className="flex flex-col gap-3">
+            {parseResult.currencyMismatch ? (
+              <p>
+                Your profile is set to <strong>{parseResult.profileCurrency}</strong>, but this
+                file looks like <strong>{parseResult.statementCurrency.code}</strong>. FinPilot
+                does not convert FX — amounts are labeled with your profile currency unless you
+                update it.
+              </p>
+            ) : (
+              <p>
+                Amounts will be shown as {parseResult.profileCurrency}.
+                {parseResult.statementCurrency.mixed
+                  ? " Rows in other currencies will be skipped."
+                  : ""}
+              </p>
+            )}
+            {parseResult.currencyMismatch && (
+              <label className="flex items-start gap-2 text-sm">
+                <Checkbox
+                  checked={applyStatementCurrency}
+                  onCheckedChange={(checked) => setApplyStatementCurrency(checked === true)}
+                  className="mt-0.5"
+                />
+                <span>
+                  Update my profile currency to {parseResult.statementCurrency.code} when
+                  importing
+                </span>
+              </label>
+            )}
+            {parseResult.statementCurrency.mixed && mapping.currency !== null && (
+              <p className="text-muted-foreground text-xs">
+                Only rows in {displayCurrency} will be imported; other currencies are skipped.
+              </p>
+            )}
           </AlertDescription>
         </Alert>
       )}
@@ -432,7 +505,7 @@ export function ImportWizard({ currency }: ImportWizardProps) {
                         )}
                       >
                         {row.type === "INCOME" ? "+" : "-"}
-                        {formatCurrency(row.amount, currency)}
+                        {formatCurrency(row.amount, displayCurrency)}
                       </TableCell>
                     </TableRow>
                   ))}

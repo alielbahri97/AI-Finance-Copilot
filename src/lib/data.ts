@@ -1,9 +1,11 @@
 import "server-only";
 import type { User } from "@supabase/supabase-js";
+import { headers } from "next/headers";
 
 import { trackEvent } from "@/lib/analytics";
 import { attributeReferral } from "@/lib/billing/referrals";
 import { ensureDefaultCategories } from "@/lib/categories";
+import { currencyFromRequestHeaders } from "@/lib/currency/location";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -16,6 +18,9 @@ export async function getOrCreateProfile(user: User) {
   const existing = await prisma.profile.findUnique({ where: { id: user.id } });
   if (existing) return existing;
 
+  const headerList = await headers();
+  const currency = currencyFromRequestHeaders(headerList);
+
   const profile = await prisma.profile.upsert({
     where: { id: user.id },
     update: {},
@@ -24,6 +29,7 @@ export async function getOrCreateProfile(user: User) {
       email: user.email ?? `${user.id}@unknown.local`,
       fullName: (user.user_metadata?.full_name as string | undefined) ?? null,
       avatarUrl: (user.user_metadata?.avatar_url as string | undefined) ?? null,
+      currency,
       // Prefer free Groq for new accounts (OpenAI requires billing).
       aiProvider: "GROQ",
     },

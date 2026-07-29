@@ -11,6 +11,7 @@ export const columnMappingSchema = z
     credit: columnIndex.nullable(),
     balance: columnIndex.nullable(),
     counterparty: columnIndex.nullable(),
+    currency: columnIndex.nullable().optional().default(null),
     numberFormat: z.enum(["us", "eu"]),
     dateFormat: z.enum(["ymd", "dmy", "mdy", "compact"]),
   })

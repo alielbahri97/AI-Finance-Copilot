@@ -1,4 +1,45 @@
-import type { ColumnMapping, DateFormat, NumberFormat, ParsedCsv } from "./types";
+import type {
+  ColumnMapping,
+  DateFormat,
+  NumberFormat,
+  ParsedCsv,
+  StatementCurrencyInfo,
+} from "./types";
+
+/** Currencies FinPilot can label amounts with (matches profile settings). */
+const KNOWN_CURRENCY_CODES = new Set([
+  "USD",
+  "EUR",
+  "GBP",
+  "AUD",
+  "CAD",
+  "CHF",
+  "JPY",
+  "SEK",
+  "NOK",
+  "DKK",
+  "PLN",
+  "CZK",
+  "HUF",
+  "RON",
+  "TRY",
+  "INR",
+  "CNY",
+  "HKD",
+  "SGD",
+  "NZD",
+  "MXN",
+  "BRL",
+  "ZAR",
+]);
+
+const CURRENCY_SYMBOL_TO_CODE: Record<string, string> = {
+  "€": "EUR",
+  $: "USD",
+  "£": "GBP",
+  "¥": "JPY",
+  "₣": "CHF",
+};
 
 /* ------------------------------------------------------------------ */
 /* Number parsing                                                      */
@@ -6,7 +47,13 @@ import type { ColumnMapping, DateFormat, NumberFormat, ParsedCsv } from "./types
 
 /**
  * Parses a localized amount string. Handles currency symbols, spaces and
- * apostrophes as grouping, parentheses and trailing minus for negatives.
+ * apostrophes as grouping, parentheses and minus signs for negatives.
+ *
+ * Signs may appear before or after a currency symbol/code (e.g. `€-12,95`,
+ * `$-4.50`, `EUR -12.95`). We capture any ASCII/Unicode minus before stripping
+ * non-numeric characters — otherwise `€-12,95` would lose the sign and import
+ * as income.
+ *
  * Returns null when the value is not a number.
  */
 export function parseLocalizedNumber(raw: string, format: NumberFormat): number | null {
@@ -16,21 +63,15 @@ export function parseLocalizedNumber(raw: string, format: NumberFormat): number 
   let negative = false;
   if (/^\(.*\)$/.test(value)) {
     negative = true;
-    value = value.slice(1, -1);
+    value = value.slice(1, -1).trim();
   }
-  if (/-\s*$/.test(value)) {
+  // ASCII hyphen-minus or Unicode minus (U+2212), anywhere in the token.
+  // Must run before stripping currency symbols so `€-12,95` / `$-4.50` keep sign.
+  if (/[-−]/.test(value)) {
     negative = true;
-    value = value.replace(/-\s*$/, "");
-  }
-  if (value.startsWith("-")) {
-    negative = true;
-    value = value.slice(1);
-  }
-  if (value.startsWith("+")) {
-    value = value.slice(1);
   }
 
-  // Strip currency symbols, letters and whitespace/apostrophe grouping.
+  // Strip currency symbols, letters, signs and whitespace/apostrophe grouping.
   value = value.replace(/[^\d.,]/g, "");
   if (value === "" || !/\d/.test(value)) return null;
 
@@ -181,6 +222,10 @@ const HEADER_KEYWORDS: Record<string, string[]> = {
     "merchant", "beneficiary", "payer", "empfänger", "iban", "account name",
     "naam tegenpartij", "counter account",
   ],
+  currency: [
+    "currency", "valuta", "munteenheid", "währung", "waehrung", "devise",
+    "moneda", "ccy", "curr", "currency code", "iso currency",
+  ],
 };
 
 function headerScore(header: string, role: keyof typeof HEADER_KEYWORDS): number {
@@ -286,6 +331,7 @@ export function suggestMapping(csv: ParsedCsv): ColumnMapping {
   const hasPair = debit !== null && credit !== null;
   const amount = hasPair ? null : pick("amount", 1.5);
   const balance = pick("balance", headers ? 3.5 : 99); // only via header keywords
+  const currency = pick("currency", headers ? 3.5 : 99); // only via header keywords
   const description = pick("description", 0.5);
   const counterparty = pick("counterparty", headers ? 3 : 99);
 
@@ -303,7 +349,78 @@ export function suggestMapping(csv: ParsedCsv): ColumnMapping {
     credit: hasPair ? credit : null,
     balance,
     counterparty,
+    currency,
     numberFormat,
     dateFormat,
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Statement currency                                                  */
+/* ------------------------------------------------------------------ */
+
+/** Extracts an ISO currency code from a cell (code or symbol). */
+export function parseCurrencyCode(raw: string): string | null {
+  const value = raw.trim();
+  if (value === "") return null;
+
+  const upper = value.toUpperCase();
+  if (/^[A-Z]{3}$/.test(upper) && KNOWN_CURRENCY_CODES.has(upper)) {
+    return upper;
+  }
+
+  // "EUR 12,95" / "Amount in USD"
+  for (const code of KNOWN_CURRENCY_CODES) {
+    if (new RegExp(`\\b${code}\\b`).test(upper)) return code;
+  }
+
+  for (const [symbol, code] of Object.entries(CURRENCY_SYMBOL_TO_CODE)) {
+    if (value.includes(symbol)) return code;
+  }
+
+  return null;
+}
+
+/**
+ * Infers the statement currency from a Currency column and/or amount cells.
+ * Mixed multi-currency files set `mixed: true` so the importer can skip
+ * foreign-currency rows instead of silently summing them as one currency.
+ */
+export function detectStatementCurrency(
+  csv: ParsedCsv,
+  mapping: ColumnMapping
+): StatementCurrencyInfo {
+  const counts = new Map<string, number>();
+
+  const tally = (code: string | null) => {
+    if (!code) return;
+    counts.set(code, (counts.get(code) ?? 0) + 1);
+  };
+
+  if (mapping.currency !== null) {
+    for (const value of columnValues(csv.rows, mapping.currency, 200)) {
+      tally(parseCurrencyCode(value));
+    }
+  }
+
+  // Fall back to symbols/codes embedded in amount (and debit/credit) cells.
+  if (counts.size === 0) {
+    const amountIndexes = [mapping.amount, mapping.debit, mapping.credit].filter(
+      (index): index is number => index !== null
+    );
+    for (const index of amountIndexes) {
+      for (const value of columnValues(csv.rows, index, 80)) {
+        tally(parseCurrencyCode(value));
+      }
+    }
+  }
+
+  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  const codes = ranked.map(([code]) => code);
+  return {
+    code: codes[0] ?? null,
+    mixed: codes.length > 1,
+    codes,
+    columnIndex: mapping.currency,
   };
 }

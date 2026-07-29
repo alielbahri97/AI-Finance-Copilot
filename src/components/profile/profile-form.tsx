@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2Icon } from "lucide-react";
@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { currencyFromLocationText } from "@/lib/currency/location";
 import {
   SUPPORTED_CURRENCIES,
   profileSchema,
@@ -34,11 +35,18 @@ import {
 interface ProfileFormProps {
   defaultValues: ProfileValues;
   email: string;
+  /** Business / onboarding location used to suggest currency. */
+  locationHint?: string | null;
 }
 
-export function ProfileForm({ defaultValues, email }: ProfileFormProps) {
+export function ProfileForm({ defaultValues, email, locationHint }: ProfileFormProps) {
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
+
+  const suggestedCurrency = useMemo(
+    () => currencyFromLocationText(locationHint),
+    [locationHint]
+  );
 
   const form = useForm<ProfileValues>({
     resolver: zodResolver(profileSchema),
@@ -106,11 +114,30 @@ export function ProfileForm({ defaultValues, email }: ProfileFormProps) {
                   {SUPPORTED_CURRENCIES.map((currency) => (
                     <SelectItem key={currency} value={currency}>
                       {currency}
+                      {suggestedCurrency === currency ? " (from your location)" : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <FormDescription>Used to format amounts across the app.</FormDescription>
+              <FormDescription>
+                {suggestedCurrency
+                  ? `Suggested ${suggestedCurrency} from your business location${
+                      locationHint ? ` (${locationHint})` : ""
+                    }. New accounts also follow your IP / browser locale.`
+                  : "Defaults from your location (IP / browser locale). Set a business location in onboarding to refine it."}
+                {suggestedCurrency && field.value !== suggestedCurrency ? (
+                  <>
+                    {" "}
+                    <button
+                      type="button"
+                      className="text-primary underline-offset-2 hover:underline"
+                      onClick={() => field.onChange(suggestedCurrency)}
+                    >
+                      Use {suggestedCurrency}
+                    </button>
+                  </>
+                ) : null}
+              </FormDescription>
               <FormMessage />
             </FormItem>
           )}

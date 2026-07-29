@@ -255,7 +255,8 @@ export function OnboardingWizard({
                 <div>
                   <h1 className="text-2xl font-bold tracking-tight">Team and location</h1>
                   <p className="text-muted-foreground mt-1 text-sm">
-                    Rough size is enough — currency stays in your profile ({currency}).
+                    Rough size is enough — we set your preferred currency from this location when we
+                    can (e.g. Netherlands → EUR). You can change it anytime in Settings.
                   </p>
                 </div>
                 <FormField

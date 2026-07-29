@@ -1,7 +1,16 @@
-import { parseDateWithFormat, parseLocalizedNumber } from "./detect";
+import { parseCurrencyCode, parseDateWithFormat, parseLocalizedNumber } from "./detect";
 import type { ColumnMapping, NormalizedRow, RowError } from "./types";
 
 const MAX_AMOUNT = 1_000_000_000;
+
+export interface NormalizeOptions {
+  /**
+   * When a Currency column is mapped, rows whose currency differs from this
+   * code are skipped (FinPilot stores amounts in a single profile currency
+   * without FX conversion).
+   */
+  expectedCurrency?: string | null;
+}
 
 /**
  * Applies a column mapping to raw CSV rows, producing normalized transaction
@@ -9,10 +18,12 @@ const MAX_AMOUNT = 1_000_000_000;
  */
 export function normalizeRows(
   rows: string[][],
-  mapping: ColumnMapping
+  mapping: ColumnMapping,
+  options: NormalizeOptions = {}
 ): { ok: NormalizedRow[]; errors: RowError[] } {
   const ok: NormalizedRow[] = [];
   const errors: RowError[] = [];
+  const expected = options.expectedCurrency?.toUpperCase() ?? null;
 
   rows.forEach((row, index) => {
     const rowNumber = index + 1;
@@ -23,6 +34,17 @@ export function normalizeRows(
     if (!date) {
       errors.push({ rowNumber, message: `Unreadable date "${cell(mapping.date)}"` });
       return;
+    }
+
+    if (mapping.currency !== null && expected) {
+      const rowCurrency = parseCurrencyCode(cell(mapping.currency));
+      if (rowCurrency && rowCurrency !== expected) {
+        errors.push({
+          rowNumber,
+          message: `Skipped ${rowCurrency} row (import currency is ${expected})`,
+        });
+        return;
+      }
     }
 
     let signedAmount: number | null = null;

@@ -59,6 +59,7 @@ export default async function ProfilePage() {
         <CardContent>
           <ProfileForm
             email={profile.email}
+            locationHint={businessProfile?.location}
             defaultValues={{ fullName: profile.fullName ?? "", currency }}
           />
         </CardContent>

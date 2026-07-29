@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 
-import { suggestMapping } from "@/lib/csv/detect";
+import { detectStatementCurrency, suggestMapping } from "@/lib/csv/detect";
 import { normalizeRows } from "@/lib/csv/normalize";
 import { parseCsv } from "@/lib/csv/parse";
+import { getOrCreateProfile } from "@/lib/data";
 import { getUser } from "@/lib/supabase/server";
 import { MAX_IMPORT_FILE_BYTES, MAX_IMPORT_ROWS } from "@/lib/validations/import";
 import { enforceRateLimit } from "@/lib/api/rate-limit-guard";
 import { apiError } from "@/lib/api/response";
+import { SUPPORTED_CURRENCIES } from "@/lib/validations/profile";
 
 export const maxDuration = 60;
 
@@ -52,8 +54,17 @@ export async function POST(request: Request) {
       );
     }
 
+    const profile = await getOrCreateProfile(user);
     const mapping = suggestMapping(csv);
-    const preview = normalizeRows(csv.rows.slice(0, 8), mapping);
+    const statementCurrency = detectStatementCurrency(csv, mapping);
+    const importCurrency =
+      statementCurrency.code &&
+      (SUPPORTED_CURRENCIES as readonly string[]).includes(statementCurrency.code)
+        ? statementCurrency.code
+        : profile.currency;
+    const preview = normalizeRows(csv.rows.slice(0, 8), mapping, {
+      expectedCurrency: statementCurrency.columnIndex !== null ? importCurrency : null,
+    });
 
     return NextResponse.json({
       fileName: file.name,
@@ -65,6 +76,10 @@ export async function POST(request: Request) {
       mapping,
       preview: preview.ok,
       previewErrors: preview.errors,
+      profileCurrency: profile.currency,
+      statementCurrency,
+      currencyMismatch:
+        statementCurrency.code !== null && statementCurrency.code !== profile.currency,
     });
   } catch (error) {
     return apiError("POST /api/import/parse", "Could not parse the file", error);

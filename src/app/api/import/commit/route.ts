@@ -10,6 +10,7 @@ import {
   limitError,
 } from "@/lib/billing/entitlements";
 import { loadRuleMatchers, matchCategory } from "@/lib/categories";
+import { detectStatementCurrency } from "@/lib/csv/detect";
 import { fingerprintRows } from "@/lib/csv/fingerprint";
 import { normalizeRows } from "@/lib/csv/normalize";
 import { parseCsv } from "@/lib/csv/parse";
@@ -22,6 +23,7 @@ import {
   MAX_IMPORT_FILE_BYTES,
   MAX_IMPORT_ROWS,
 } from "@/lib/validations/import";
+import { SUPPORTED_CURRENCIES } from "@/lib/validations/profile";
 
 export const maxDuration = 60;
 
@@ -43,6 +45,7 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const file = formData.get("file");
     const mappingRaw = formData.get("mapping");
+    const applyStatementCurrency = formData.get("applyStatementCurrency") === "true";
     if (!(file instanceof File) || typeof mappingRaw !== "string") {
       return NextResponse.json({ error: "Missing file or mapping" }, { status: 400 });
     }
@@ -102,6 +105,7 @@ export async function POST(request: Request) {
       mapping.credit,
       mapping.balance,
       mapping.counterparty,
+      mapping.currency,
     ].filter((index): index is number => index !== null);
     if (columnIndexes.some((index) => index >= csv.columnCount)) {
       return NextResponse.json(
@@ -111,8 +115,26 @@ export async function POST(request: Request) {
     }
 
     const profile = await getOrCreateProfile(user);
+    const statementCurrency = detectStatementCurrency(csv, mapping);
 
-    const { ok: rows, errors } = normalizeRows(csv.rows, mapping);
+    let workingCurrency = profile.currency;
+    if (
+      applyStatementCurrency &&
+      statementCurrency.code &&
+      (SUPPORTED_CURRENCIES as readonly string[]).includes(statementCurrency.code)
+    ) {
+      workingCurrency = statementCurrency.code;
+      if (workingCurrency !== profile.currency) {
+        await prisma.profile.update({
+          where: { id: user.id },
+          data: { currency: workingCurrency },
+        });
+      }
+    }
+
+    const { ok: rows, errors } = normalizeRows(csv.rows, mapping, {
+      expectedCurrency: mapping.currency !== null ? workingCurrency : null,
+    });
     if (rows.length === 0) {
       return NextResponse.json(
         {
@@ -140,6 +162,7 @@ export async function POST(request: Request) {
         failed: errors.length,
         rowErrors: errors.slice(0, 10),
         batchId: null,
+        currency: workingCurrency,
       });
     }
 
@@ -173,7 +196,7 @@ export async function POST(request: Request) {
     // into one notification when several qualify); never fails the import.
     await evaluateLargeTransactions(
       user.id,
-      profile.currency,
+      workingCurrency,
       fresh.map((row) => ({
         type: row.type,
         amount: row.amount,
@@ -189,6 +212,7 @@ export async function POST(request: Request) {
       failed: errors.length,
       rowErrors: errors.slice(0, 10),
       batchId: batch.id,
+      currency: workingCurrency,
     });
   } catch (error) {
     return apiError("POST /api/import/commit", "Import failed", error);
