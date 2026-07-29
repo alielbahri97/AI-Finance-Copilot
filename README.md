@@ -473,8 +473,8 @@ keys are missing. Full commented reference in [.env.example](.env.example).
 | --- | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | ✅ | Supabase project URL (auth + storage) |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ✅ | Supabase anon key (safe for the client) |
-| `DATABASE_URL` | ✅ | Pooled Postgres connection (runtime) |
-| `DIRECT_URL` | ✅ | Direct Postgres connection (migrations) |
+| `DATABASE_URL` | ✅ | Supabase **transaction pooler** (runtime): port **6543**, host `aws-*-<region>.pooler.supabase.com`, user `postgres.<project-ref>`, query `?pgbouncer=true`. Prefer the IPv4 pooler host on Vercel — avoid the direct `db.<ref>.supabase.co` host (IPv6-only on many projects). |
+| `DIRECT_URL` | ✅ | Session/direct URL for migrations (port **5432**). On IPv4-only networks use the pooler session port, e.g. `…pooler.supabase.com:5432/postgres`. |
 | `NEXT_PUBLIC_APP_URL` | ✅ in prod | Absolute app URL (emails, OAuth redirects, SEO) |
 | `NEXT_PUBLIC_ISSUES_URL` | — | GitHub Issues new-issue URL for “Report issue” (falls back to mailto) |
 | `NEXT_PUBLIC_SUPPORT_EMAIL` | — | Mailto fallback when `NEXT_PUBLIC_ISSUES_URL` is unset |
