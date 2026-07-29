@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { getAiClient, providerFromProfile } from "@/lib/ai";
+import { resolveInvoiceCurrency } from "@/lib/currency/parse";
 import {
   extractFromImage,
   extractFromText,
@@ -71,13 +72,15 @@ export async function ingestInvoiceDocument(
   // Extraction: vision for images, text layer for PDFs. Any failure — no
   // text layer, invalid AI output, provider errors — falls back to review.
   let extracted: ExtractedInvoice | null = null;
+  let documentText: string | null = null;
   if (input.attemptExtraction) {
     try {
       const ai = getAiClient(providerFromProfile(input.aiProvider));
       if (input.mimeType === "application/pdf") {
         const text = await getPdfText(input.buffer);
         if (!hasNoTextLayer(text)) {
-          extracted = await extractFromText(ai, text as string);
+          documentText = text as string;
+          extracted = await extractFromText(ai, documentText);
         }
       } else {
         extracted = await extractFromImage(
@@ -90,6 +93,13 @@ export async function ingestInvoiceDocument(
       logger.error("Invoice extraction", { error: serializeError(error) });
     }
   }
+
+  // Prefer currency printed on the document; fall back to the profile currency.
+  const currency = resolveInvoiceCurrency({
+    extracted: extracted?.currency,
+    documentText: documentText ?? input.fileName,
+    fallback: input.currency,
+  });
 
   const lineItems = (extracted?.lineItems ?? []).map((item, index) => {
     const quantity = item.quantity ?? 1;
@@ -111,7 +121,7 @@ export async function ingestInvoiceDocument(
       invoiceNumber: extracted?.invoiceNumber ?? null,
       invoiceDate: toDate(extracted?.invoiceDate),
       dueDate: toDate(extracted?.dueDate),
-      currency: extracted?.currency ?? input.currency,
+      currency,
       subtotal: extracted?.subtotal ?? null,
       vatAmount: extracted?.vatAmount ?? null,
       vatRate: extracted?.vatRate ?? null,

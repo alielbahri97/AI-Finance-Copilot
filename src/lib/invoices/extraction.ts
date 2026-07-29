@@ -48,7 +48,7 @@ Reply with ONLY a JSON object (no markdown fences, no commentary) with exactly t
   "invoiceNumber": string | null,
   "invoiceDate": "YYYY-MM-DD" | null,
   "dueDate": "YYYY-MM-DD" | null,
-  "currency": string | null,        // 3-letter ISO code, e.g. "EUR"
+  "currency": string | null,        // 3-letter ISO code, e.g. "EUR". Infer from symbols (€→EUR, £→GBP, $→USD unless another currency is named) or explicit codes.
   "subtotal": number | null,        // amount excluding VAT/tax
   "vatAmount": number | null,
   "vatRate": number | null,         // percent, e.g. 21
@@ -61,6 +61,7 @@ Reply with ONLY a JSON object (no markdown fences, no commentary) with exactly t
 Rules:
 - Use null for anything not present in the document. Never guess or invent values.
 - Numbers must be plain JSON numbers (no currency symbols or thousands separators).
+- Always set "currency" when a currency symbol or ISO code appears anywhere on the document (€, £, $, USD, EUR, GBP, CHF, etc.).
 - Interpret ambiguous date formats using context (a due date is never before the invoice date).
 - If the document is not an invoice or receipt, return all fields null with an empty lineItems array.`;
 

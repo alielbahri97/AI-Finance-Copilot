@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { INVOICE_CURRENCY_OPTIONS } from "@/lib/currency/parse";
 import type { InvoiceDto } from "@/lib/invoices/serialize";
 
 interface LineItemState {
@@ -189,13 +190,21 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div className="grid gap-1.5">
           <Label htmlFor="inv-currency">Currency</Label>
-          <Input
+          <select
             id="inv-currency"
             value={currency}
-            onChange={(event) => setCurrency(event.target.value.toUpperCase())}
-            maxLength={3}
-            placeholder="EUR"
-          />
+            onChange={(event) => setCurrency(event.target.value)}
+            className="border-input bg-background ring-offset-background focus-visible:ring-ring flex h-9 w-full rounded-md border px-3 py-1 text-sm shadow-xs focus-visible:ring-2 focus-visible:outline-none"
+          >
+            {INVOICE_CURRENCY_OPTIONS.map((code) => (
+              <option key={code} value={code}>
+                {code}
+              </option>
+            ))}
+            {!INVOICE_CURRENCY_OPTIONS.includes(currency) && currency.length === 3 ? (
+              <option value={currency}>{currency}</option>
+            ) : null}
+          </select>
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="inv-subtotal">Subtotal</Label>

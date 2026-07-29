@@ -3,7 +3,6 @@ import type { Metadata, Viewport } from "next";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 import { PwaRegister } from "@/components/pwa-register";
 import { ThemeProvider } from "@/components/theme-provider";
-import { ReportIssueButton } from "@/components/report-issue/report-issue-button";
 import { Toaster } from "@/components/ui/sonner";
 
 import "./globals.css";
@@ -70,7 +69,6 @@ export default function RootLayout({
         </a>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           {children}
-          <ReportIssueButton />
           <PwaRegister />
           <PwaInstallPrompt />
           <Toaster />

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { WalletIcon } from "lucide-react";
 
 import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard";
+import { ReportIssueButton } from "@/components/report-issue/report-issue-button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { getOrCreateProfile } from "@/lib/data";
 import { isOnboardingDone } from "@/lib/onboarding/benchmarks";
@@ -74,6 +75,7 @@ export default async function OnboardingPage({
           }
         />
       </main>
+      <ReportIssueButton />
     </div>
   );
 }

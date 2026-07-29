@@ -4,7 +4,6 @@ import { ArrowRightIcon, BotIcon, LineChartIcon, ShieldCheckIcon, WalletIcon } f
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ReportIssueButton } from "@/components/report-issue/report-issue-button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { isSupabaseConfigured } from "@/lib/env";
 import { getUser } from "@/lib/supabase/server";
@@ -107,10 +106,7 @@ export default async function LandingPage() {
       <footer className="border-t">
         <div className="text-muted-foreground mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-3 px-4 text-sm sm:px-6">
           <span>FinPilot</span>
-          <div className="flex items-center gap-2">
-            <ReportIssueButton variant="inline" className="h-8" />
-            <span className="hidden sm:inline">Built with Next.js, Supabase &amp; AI</span>
-          </div>
+          <span className="hidden sm:inline">Built with Next.js, Supabase &amp; AI</span>
         </div>
       </footer>
     </div>

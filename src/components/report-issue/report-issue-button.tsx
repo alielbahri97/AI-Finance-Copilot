@@ -67,9 +67,16 @@ export function ReportIssueButton({
 
   const handleSubmit = useCallback(() => {
     openReportIssue(context);
+    setNotes("");
     setOpen(false);
     toast.success("Opening issue report…");
   }, [context, setOpen]);
+
+  function handleOpenChange(next: boolean) {
+    setOpen(next);
+    // Clear leftover notes when closing so the next report starts blank.
+    if (!next) setNotes("");
+  }
 
   const trigger =
     variant === "floating" ? (
@@ -103,7 +110,7 @@ export function ReportIssueButton({
     );
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       {showTrigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>

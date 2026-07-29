@@ -9,8 +9,9 @@ apply if you enable that feature.
       `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `DATABASE_URL` (pooled), `DIRECT_URL` (direct),
       `NEXT_PUBLIC_APP_URL` (the real production URL)
 - [ ] `CRON_SECRET` set to a long random value (`openssl rand -base64 32`)
-- [ ] At least one AI key (`OPENAI_API_KEY` or `ANTHROPIC_API_KEY`) *(optional — copilot,
-      extraction and digests degrade without it)*
+- [ ] At least one AI key (`GROQ_API_KEY` recommended, or `OPENAI_API_KEY` /
+      `ANTHROPIC_API_KEY`); set `AI_PROVIDER="groq"` for the free default *(optional —
+      copilot, extraction and digests degrade without it)*
 - [ ] `INTEGRATION_ENCRYPTION_KEY` set (`openssl rand -hex 32`) *(optional — integrations)*
 - [ ] `SUPABASE_SERVICE_ROLE_KEY` set **server-side only** *(optional — Gmail/Outlook
       ingestion)*; confirm it appears nowhere in client code or `NEXT_PUBLIC_*`
@@ -20,7 +21,10 @@ apply if you enable that feature.
 ## Supabase
 
 - [ ] Production site URL and `https://<domain>/auth/callback` configured under
-      Authentication → URL Configuration
+      Authentication → URL Configuration. For ali-finpilot:
+      Site URL = `https://ali-finpilot.vercel.app`, Redirect URLs include
+      `https://ali-finpilot.vercel.app/auth/callback` (and `/auth/confirm` if used).
+      Remove or demote `http://localhost:3000` as Site URL once production is live.
 - [ ] Email confirmations enabled and email templates reviewed (sender name, links)
 - [ ] Private `invoices` storage bucket created with the per-user RLS policy from the README
 - [ ] RLS enabled on all tables in the `public` schema with no anon-role policies

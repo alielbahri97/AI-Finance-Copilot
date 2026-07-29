@@ -5,41 +5,9 @@ import type {
   ParsedCsv,
   StatementCurrencyInfo,
 } from "./types";
+import { parseCurrencyCode } from "@/lib/currency/parse";
 
-/** Currencies FinPilot can label amounts with (matches profile settings). */
-const KNOWN_CURRENCY_CODES = new Set([
-  "USD",
-  "EUR",
-  "GBP",
-  "AUD",
-  "CAD",
-  "CHF",
-  "JPY",
-  "SEK",
-  "NOK",
-  "DKK",
-  "PLN",
-  "CZK",
-  "HUF",
-  "RON",
-  "TRY",
-  "INR",
-  "CNY",
-  "HKD",
-  "SGD",
-  "NZD",
-  "MXN",
-  "BRL",
-  "ZAR",
-]);
-
-const CURRENCY_SYMBOL_TO_CODE: Record<string, string> = {
-  "€": "EUR",
-  $: "USD",
-  "£": "GBP",
-  "¥": "JPY",
-  "₣": "CHF",
-};
+export { parseCurrencyCode } from "@/lib/currency/parse";
 
 /* ------------------------------------------------------------------ */
 /* Number parsing                                                      */
@@ -358,28 +326,6 @@ export function suggestMapping(csv: ParsedCsv): ColumnMapping {
 /* ------------------------------------------------------------------ */
 /* Statement currency                                                  */
 /* ------------------------------------------------------------------ */
-
-/** Extracts an ISO currency code from a cell (code or symbol). */
-export function parseCurrencyCode(raw: string): string | null {
-  const value = raw.trim();
-  if (value === "") return null;
-
-  const upper = value.toUpperCase();
-  if (/^[A-Z]{3}$/.test(upper) && KNOWN_CURRENCY_CODES.has(upper)) {
-    return upper;
-  }
-
-  // "EUR 12,95" / "Amount in USD"
-  for (const code of KNOWN_CURRENCY_CODES) {
-    if (new RegExp(`\\b${code}\\b`).test(upper)) return code;
-  }
-
-  for (const [symbol, code] of Object.entries(CURRENCY_SYMBOL_TO_CODE)) {
-    if (value.includes(symbol)) return code;
-  }
-
-  return null;
-}
 
 /**
  * Infers the statement currency from a Currency column and/or amount cells.
