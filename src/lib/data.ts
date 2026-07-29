@@ -24,6 +24,8 @@ export async function getOrCreateProfile(user: User) {
       email: user.email ?? `${user.id}@unknown.local`,
       fullName: (user.user_metadata?.full_name as string | undefined) ?? null,
       avatarUrl: (user.user_metadata?.avatar_url as string | undefined) ?? null,
+      // Prefer free Groq for new accounts (OpenAI requires billing).
+      aiProvider: "GROQ",
     },
   });
   await ensureDefaultCategories(user.id);

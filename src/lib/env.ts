@@ -12,7 +12,7 @@ const serverEnvSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   GROQ_API_KEY: z.string().optional(),
-  AI_PROVIDER: z.enum(["openai", "anthropic", "groq"]).default("openai"),
+  AI_PROVIDER: z.enum(["openai", "anthropic", "groq"]).default("groq"),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;

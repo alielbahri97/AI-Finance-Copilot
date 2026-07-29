@@ -129,7 +129,7 @@ model Profile {
   fullName   String?    @map("full_name")
   avatarUrl  String?    @map("avatar_url")
   currency   String     @default("USD")
-  aiProvider AiProvider @default(OPENAI) @map("ai_provider")
+  aiProvider AiProvider @default(GROQ) @map("ai_provider")
   /// Grants access to /admin. Set manually in the database:
   /// UPDATE profiles SET is_admin = true WHERE email = '...';
   isAdmin      Boolean @default(false) @map("is_admin")
