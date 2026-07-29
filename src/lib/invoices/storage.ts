@@ -44,7 +44,17 @@ export async function uploadInvoiceDocument(
     contentType,
     upsert: false,
   });
-  return { error: error ? error.message : null };
+  if (!error) return { error: null };
+  // Surface missing-bucket distinctly so API logs/responses can guide ops.
+  const message = error.message ?? "unknown storage error";
+  const storageCode = (error as { error?: string }).error ?? "";
+  const missingBucket =
+    /bucket not found/i.test(message) || storageCode === "Bucket not found";
+  return {
+    error: missingBucket
+      ? `Bucket '${INVOICE_BUCKET}' not found. Create the private bucket and RLS policy (see README §5).`
+      : message,
+  };
 }
 
 export async function createInvoiceSignedUrl(

@@ -75,11 +75,17 @@ export async function POST(request: Request) {
         attemptExtraction: extractionQuota.allowed,
       });
     } catch (error) {
-      logger.error("Invoice upload to storage", { error: serializeError(error) });
+      const detail = error instanceof Error ? error.message : String(error);
+      const missingBucket = /bucket .* not found|Bucket 'invoices' not found/i.test(detail);
+      logger.error("Invoice upload to storage", {
+        error: serializeError(error),
+        missingBucket,
+      });
       return NextResponse.json(
         {
-          error:
-            "Could not store the document. Make sure the private 'invoices' bucket and its policies exist in Supabase (see README).",
+          error: missingBucket
+            ? "Could not store the document: the private 'invoices' storage bucket is missing in Supabase. Create it and the per-user RLS policy (see README §5)."
+            : "Could not store the document. Make sure the private 'invoices' bucket and its policies exist in Supabase (see README).",
         },
         { status: 502 }
       );
