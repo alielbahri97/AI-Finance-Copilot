@@ -444,6 +444,8 @@ keys are missing. Full commented reference in [.env.example](.env.example).
 | `DATABASE_URL` | ✅ | Pooled Postgres connection (runtime) |
 | `DIRECT_URL` | ✅ | Direct Postgres connection (migrations) |
 | `NEXT_PUBLIC_APP_URL` | ✅ in prod | Absolute app URL (emails, OAuth redirects, SEO) |
+| `NEXT_PUBLIC_ISSUES_URL` | — | GitHub Issues new-issue URL for “Report issue” (falls back to mailto) |
+| `NEXT_PUBLIC_SUPPORT_EMAIL` | — | Mailto fallback when `NEXT_PUBLIC_ISSUES_URL` is unset |
 | `AI_PROVIDER`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | — | AI copilot, forecast explanations, invoice extraction, digests |
 | `RESEND_API_KEY`, `EMAIL_FROM` | — | Email notification channel |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | — | Web Push channel |
