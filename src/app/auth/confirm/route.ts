@@ -1,5 +1,6 @@
 import { type EmailOtpType } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { getAppOrigin } from "@/lib/supabase/redirect";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -7,11 +8,12 @@ import { createClient } from "@/lib/supabase/server";
  * templates) as an alternative to the PKCE `code` flow.
  */
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type") as EmailOtpType | null;
   const next = searchParams.get("next") ?? "/dashboard";
   const safeNext = next.startsWith("/") ? next : "/dashboard";
+  const origin = getAppOrigin();
 
   if (tokenHash && type) {
     const supabase = await createClient();

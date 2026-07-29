@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getAppOrigin } from "@/lib/supabase/redirect";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -6,10 +7,11 @@ import { createClient } from "@/lib/supabase/server";
  * password recovery. Supabase redirects here with a `code` query param.
  */
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/dashboard";
   const safeNext = next.startsWith("/") ? next : "/dashboard";
+  const origin = getAppOrigin();
 
   if (code) {
     const supabase = await createClient();

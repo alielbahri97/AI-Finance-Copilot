@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
+import { authCallbackUrl } from "@/lib/supabase/redirect";
 import { forgotPasswordSchema, type ForgotPasswordValues } from "@/lib/validations/auth";
 
 export function ForgotPasswordForm() {
@@ -34,7 +35,7 @@ export function ForgotPasswordForm() {
     try {
       const supabase = createClient();
       const { error } = await supabase.auth.resetPasswordForEmail(values.email, {
-        redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+        redirectTo: authCallbackUrl("/reset-password"),
       });
 
       if (error) {

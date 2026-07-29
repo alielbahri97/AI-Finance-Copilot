@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
+import { authCallbackUrl } from "@/lib/supabase/redirect";
 import { signupSchema, type SignupValues } from "@/lib/validations/auth";
 
 export function SignupForm() {
@@ -44,7 +45,7 @@ export function SignupForm() {
             full_name: values.fullName,
             ...(referralCode ? { referral_code: referralCode } : {}),
           },
-          emailRedirectTo: `${window.location.origin}/auth/callback?next=/onboarding`,
+          emailRedirectTo: authCallbackUrl("/onboarding"),
         },
       });
 
