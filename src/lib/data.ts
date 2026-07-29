@@ -14,11 +14,20 @@ import { prisma } from "@/lib/prisma";
  * signed-in user has one. First creation also records the signup event and
  * attributes the referral code carried in the signup metadata, if any.
  */
+/** Seeds defaults without failing the dashboard layout on transient DB errors. */
+async function seedDefaultsSafely(userId: string) {
+  try {
+    await ensureDefaultCategories(userId);
+  } catch (error) {
+    console.error("[getOrCreateProfile] default category seed failed", { userId, error });
+  }
+}
+
 export async function getOrCreateProfile(user: User) {
   const existing = await prisma.profile.findUnique({ where: { id: user.id } });
   if (existing) {
     // Backfill any DEFAULT_CATEGORY_RULES patterns added after the account was seeded.
-    await ensureDefaultCategories(existing.id);
+    await seedDefaultsSafely(existing.id);
     return existing;
   }
 
@@ -38,7 +47,7 @@ export async function getOrCreateProfile(user: User) {
       aiProvider: "GROQ",
     },
   });
-  await ensureDefaultCategories(user.id);
+  await seedDefaultsSafely(user.id);
 
   await trackEvent(user.id, "signup");
   const referralCode = user.user_metadata?.referral_code as string | undefined;
