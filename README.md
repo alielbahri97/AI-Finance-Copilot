@@ -210,15 +210,32 @@ npm run db:deploy      # applies prisma/migrations (or: npm run db:push)
 ### 5. Create the invoice storage bucket
 
 Invoice documents live in a **private** Supabase Storage bucket named `invoices`, with
-files under a per-user prefix (`<userId>/<invoiceId>/<filename>`). In the Supabase
-dashboard:
+files under a per-user prefix (`<userId>/<invoiceId>/<filename>`).
 
-1. **Storage → New bucket** — name it `invoices`, keep **Public bucket** off, and
-   (optionally) set a 10 MB file size limit with allowed MIME types `application/pdf`,
-   `image/jpeg`, `image/png`, `image/webp`.
-2. Add RLS policies so each user can only touch their own folder. In **SQL Editor** run:
+**Option A — dashboard**
+
+1. **Storage → New bucket** — name it `invoices`, keep **Public bucket** off, set a
+   **10 MB** file size limit, and allowed MIME types `application/pdf`, `image/jpeg`,
+   `image/png`, `image/webp`.
+2. **SQL Editor** — run the policy SQL in Option B (step 2 only).
+
+**Option B — SQL Editor (idempotent; preferred for reprovisioning)**
 
 ```sql
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'invoices',
+  'invoices',
+  false,
+  10485760,
+  array['application/pdf', 'image/jpeg', 'image/png', 'image/webp']
+)
+on conflict (id) do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "Users manage own invoice files" on storage.objects;
 create policy "Users manage own invoice files"
 on storage.objects for all to authenticated
 using (
@@ -231,8 +248,23 @@ with check (
 );
 ```
 
+Verify with:
+
+```sql
+select id, public, file_size_limit, allowed_mime_types
+from storage.buckets where id = 'invoices';
+
+select policyname, cmd, roles::text, qual::text, with_check::text
+from pg_policies
+where schemaname = 'storage' and tablename = 'objects'
+  and policyname = 'Users manage own invoice files';
+```
+
 The app uploads with the user's own session (no service key needed) and views/downloads
-go through short-lived signed URLs from `GET /api/invoices/[id]/document`.
+go through short-lived signed URLs from `GET /api/invoices/[id]/document`. Upload failures
+that mean the bucket is missing return a distinct 502 message (see
+`src/lib/invoices/storage.ts` and `POST /api/invoices/upload`). `GET /api/health` reports
+`storage: "up"|"down"` for this bucket.
 
 ### 6. Run the app
 
@@ -493,8 +525,9 @@ to be public), the app URL and the VAPID *public* key. Everything else is server
 - `src/lib/logger.ts` emits one JSON line per event (`level`, `time`, `msg`, plus fields
   like `route`, `userId`, `durationMs`, serialized `error`) from every API route, cron job
   and background lib — parseable by Vercel Log Drains, Datadog, Loki, CloudWatch, etc.
-- `GET /api/health` checks database connectivity and returns `200 {status:"ok"}` or a 503 —
-  point your uptime monitor or container healthcheck at it.
+- `GET /api/health` checks database connectivity and the private `invoices` Storage bucket
+  (`storage.buckets`), returning `200 {status:"ok",db:"up",storage:"up"}` or `503` with
+  `db` / `storage` set to `"down"` — point your uptime monitor or container healthcheck at it.
 - Error boundaries: `src/app/error.tsx` (route errors) and `src/app/global-error.tsx`
   (root-layout errors) log the error digest, which correlates with the server-side log line.
 - **Sentry (optional)** — `@sentry/nextjs` is not bundled (keeps the corporate-registry
