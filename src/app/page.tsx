@@ -4,7 +4,6 @@ import { ArrowRightIcon, BotIcon, LineChartIcon, ShieldCheckIcon, WalletIcon } f
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ReportIssueButton } from "@/components/report-issue/report-issue-button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { isSupabaseConfigured } from "@/lib/env";
 import { getUser } from "@/lib/supabase/server";
@@ -110,7 +109,6 @@ export default async function LandingPage() {
           <span className="hidden sm:inline">Built with Next.js, Supabase &amp; AI</span>
         </div>
       </footer>
-      <ReportIssueButton />
     </div>
   );
 }

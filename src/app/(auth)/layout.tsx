@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { WalletIcon } from "lucide-react";
 
-import { ReportIssueButton } from "@/components/report-issue/report-issue-button";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
@@ -19,7 +18,6 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       <main id="main-content" tabIndex={-1} className="w-full max-w-sm outline-none">
         {children}
       </main>
-      <ReportIssueButton />
     </div>
   );
 }
