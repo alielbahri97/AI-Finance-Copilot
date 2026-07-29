@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 
 import { Header } from "@/components/dashboard/header";
 import { Sidebar } from "@/components/dashboard/sidebar";
-import { ReportIssueButton } from "@/components/report-issue/report-issue-button";
 import { getOrCreateProfile } from "@/lib/data";
 import { isOnboardingDone } from "@/lib/onboarding/benchmarks";
 import { prisma } from "@/lib/prisma";
@@ -45,7 +44,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
           {children}
         </main>
       </div>
-      <ReportIssueButton />
     </div>
   );
 }
