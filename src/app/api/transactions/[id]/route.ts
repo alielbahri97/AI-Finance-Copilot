@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { learnCategoryRule } from "@/lib/categories";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 import { transactionUpdateSchema } from "@/lib/validations/transaction";
@@ -26,7 +27,12 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     const existing = await prisma.transaction.findFirst({
       where: { id, userId: user.id },
-      select: { id: true },
+      select: {
+        id: true,
+        description: true,
+        counterparty: true,
+        categoryId: true,
+      },
     });
     if (!existing) {
       return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
@@ -48,12 +54,27 @@ export async function PATCH(request: Request, context: RouteContext) {
       include: { category: { select: { name: true, color: true } } },
     });
 
+    let learnedRule = null;
+    const categoryChanged =
+      parsed.data.categoryId !== undefined && parsed.data.categoryId !== existing.categoryId;
+    if (categoryChanged && parsed.data.categoryId) {
+      learnedRule = await learnCategoryRule(user.id, {
+        description: parsed.data.description ?? existing.description,
+        counterparty:
+          parsed.data.counterparty !== undefined
+            ? parsed.data.counterparty
+            : existing.counterparty,
+        categoryId: parsed.data.categoryId,
+      });
+    }
+
     return NextResponse.json({
       transaction: {
         ...transaction,
         amount: Number(transaction.amount),
         balance: transaction.balance === null ? null : Number(transaction.balance),
       },
+      learnedRule,
     });
   } catch (error) {
     return apiError("PATCH /api/transactions/[id]", "Failed to update transaction", error);

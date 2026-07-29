@@ -58,7 +58,7 @@ export function RulesManager({ rules, categories }: RulesManagerProps) {
         return;
       }
       toast.success("Rule created", {
-        description: "It will be applied to future CSV imports.",
+        description: "It will be applied to imports and new transactions.",
       });
       setPattern("");
       router.refresh();
@@ -154,8 +154,8 @@ export function RulesManager({ rules, categories }: RulesManagerProps) {
         <div className="text-muted-foreground flex flex-col items-center gap-2 py-8 text-center text-sm">
           <WandSparklesIcon className="size-6 opacity-50" />
           <p>
-            No rules yet. Rules automatically categorize imported transactions whose description
-            or counterparty matches a pattern.
+            No rules yet. Rules categorize matching imports and new transactions. Changing a
+            category on a transaction also creates a rule for that merchant.
           </p>
         </div>
       ) : (

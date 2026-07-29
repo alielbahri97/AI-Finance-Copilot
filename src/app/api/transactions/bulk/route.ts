@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { learnCategoryRulesFromTransactions } from "@/lib/categories";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 import { bulkActionSchema } from "@/lib/validations/transaction";
@@ -41,12 +42,29 @@ export async function POST(request: Request) {
       }
     }
 
-    const result = await prisma.transaction.updateMany({
+    const owned = await prisma.transaction.findMany({
       where: { id: { in: ids }, userId: user.id },
+      select: { id: true, description: true, counterparty: true },
+    });
+
+    const result = await prisma.transaction.updateMany({
+      where: { id: { in: owned.map((tx) => tx.id) }, userId: user.id },
       data: { categoryId: parsed.data.categoryId },
     });
 
-    return NextResponse.json({ affected: result.count });
+    let learnedRules = null;
+    if (parsed.data.categoryId && owned.length > 0) {
+      learnedRules = await learnCategoryRulesFromTransactions(
+        user.id,
+        parsed.data.categoryId,
+        owned
+      );
+    }
+
+    return NextResponse.json({
+      affected: result.count,
+      learnedRules,
+    });
   } catch (error) {
     return apiError("POST /api/transactions/bulk", "Bulk action failed", error);
   }

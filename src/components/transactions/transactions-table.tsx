@@ -162,10 +162,14 @@ export function TransactionsTable({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ categoryId: value === UNCATEGORIZED ? null : value }),
       });
+      const body = await response.json().catch(() => null);
       if (!response.ok) {
-        const body = await response.json().catch(() => null);
         toast.error("Could not update category", { description: body?.error ?? "Try again." });
         return;
+      }
+      const learned = body?.learnedRule as { categoryName?: string } | null | undefined;
+      if (learned?.categoryName) {
+        toast.success(`We'll categorize similar transactions as ${learned.categoryName} going forward`);
       }
       router.refresh();
     } catch {
@@ -212,6 +216,13 @@ export function TransactionsTable({
         return;
       }
       toast.success(successMessage(payload?.affected ?? selected.size));
+      const learned = payload?.learnedRules as { categoryName?: string }[] | null | undefined;
+      if (learned && learned.length > 0) {
+        const name = learned[0]?.categoryName;
+        if (name) {
+          toast.success(`We'll categorize similar transactions as ${name} going forward`);
+        }
+      }
       setSelected(new Set());
       router.refresh();
     } catch {

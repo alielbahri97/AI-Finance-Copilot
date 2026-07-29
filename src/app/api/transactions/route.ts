@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { loadRuleMatchers, matchCategory } from "@/lib/categories";
 import { getOrCreateProfile } from "@/lib/data";
 import { evaluateLargeTransactions } from "@/lib/notifications/alerts";
 import { prisma } from "@/lib/prisma";
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
 
     const profile = await getOrCreateProfile(user);
 
-    const categoryId = parsed.data.categoryId ?? null;
+    let categoryId = parsed.data.categoryId ?? null;
     if (categoryId) {
       const category = await prisma.category.findFirst({
         where: { id: categoryId, userId: user.id },
@@ -34,6 +35,13 @@ export async function POST(request: Request) {
       if (!category) {
         return NextResponse.json({ error: "Unknown category" }, { status: 400 });
       }
+    } else {
+      const matchers = await loadRuleMatchers(user.id);
+      categoryId = matchCategory(
+        matchers,
+        parsed.data.description,
+        parsed.data.counterparty ?? null
+      );
     }
 
     const transaction = await prisma.transaction.create({

@@ -87,8 +87,9 @@ export default async function CategoriesPage() {
           <CardHeader>
             <CardTitle>Auto-categorization rules</CardTitle>
             <CardDescription>
-              Applied to every CSV import: when the description or counterparty contains the
-              pattern, the category is assigned automatically.
+              Applied on import and when you add transactions. Matching description or
+              counterparty text gets that category. Manual category changes also teach FinPilot
+              new rules for similar merchants.
             </CardDescription>
           </CardHeader>
           <CardContent>
