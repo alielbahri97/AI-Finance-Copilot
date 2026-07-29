@@ -1,7 +1,27 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const categoryCount = vi.fn();
+const categoryCreateMany = vi.fn();
+const categoryFindMany = vi.fn();
+const categoryRuleCreateMany = vi.fn();
+
+vi.mock("@/lib/prisma", () => ({
+  prisma: {
+    category: {
+      count: (...args: unknown[]) => categoryCount(...args),
+      createMany: (...args: unknown[]) => categoryCreateMany(...args),
+      findMany: (...args: unknown[]) => categoryFindMany(...args),
+    },
+    categoryRule: {
+      createMany: (...args: unknown[]) => categoryRuleCreateMany(...args),
+    },
+  },
+}));
 
 import {
   compactCategoryPattern,
+  DEFAULT_CATEGORY_RULES,
+  ensureDefaultCategories,
   extractCategoryPattern,
   matchCategory,
   normalizeCategoryPattern,
@@ -75,5 +95,67 @@ describe("matchCategory", () => {
 
   it("returns null when nothing matches", () => {
     expect(matchCategory(matchers, "Random coffee", "Local Cafe")).toBeNull();
+  });
+});
+
+describe("ensureDefaultCategories rule backfill", () => {
+  beforeEach(() => {
+    categoryCount.mockReset();
+    categoryCreateMany.mockReset();
+    categoryFindMany.mockReset();
+    categoryRuleCreateMany.mockReset();
+    categoryRuleCreateMany.mockResolvedValue({ count: 0 });
+  });
+
+  it("still seeds missing defaults when the user already has some rules", async () => {
+    const userId = "user-partial";
+    categoryCount.mockResolvedValue(16);
+    categoryFindMany.mockResolvedValue([
+      { id: "cat-subs", name: "Subscriptions" },
+      { id: "cat-groceries", name: "Groceries" },
+      { id: "cat-transport", name: "Transport" },
+      { id: "cat-dining", name: "Dining" },
+      { id: "cat-housing", name: "Housing" },
+      { id: "cat-salary", name: "Salary" },
+      { id: "cat-freelance", name: "Freelance" },
+      { id: "cat-shopping", name: "Shopping" },
+    ]);
+
+    await ensureDefaultCategories(userId);
+
+    expect(categoryCreateMany).not.toHaveBeenCalled();
+    expect(categoryRuleCreateMany).toHaveBeenCalledOnce();
+    const { data, skipDuplicates } = categoryRuleCreateMany.mock.calls[0][0] as {
+      data: { userId: string; pattern: string; categoryId: string }[];
+      skipDuplicates: boolean;
+    };
+    expect(skipDuplicates).toBe(true);
+    expect(data).toHaveLength(DEFAULT_CATEGORY_RULES.length);
+    expect(data.find((row) => row.pattern === "uber")).toEqual({
+      userId,
+      pattern: "uber",
+      categoryId: "cat-transport",
+    });
+    expect(data.find((row) => row.pattern === "amazon")).toEqual({
+      userId,
+      pattern: "amazon",
+      categoryId: "cat-shopping",
+    });
+  });
+
+  it("seeds categories then rules for a brand-new empty account", async () => {
+    const userId = "user-new";
+    categoryCount.mockResolvedValue(0);
+    categoryCreateMany.mockResolvedValue({ count: 16 });
+    categoryFindMany.mockResolvedValue([{ id: "cat-transport", name: "Transport" }]);
+
+    await ensureDefaultCategories(userId);
+
+    expect(categoryCreateMany).toHaveBeenCalledOnce();
+    expect(categoryRuleCreateMany).toHaveBeenCalledOnce();
+    const { data } = categoryRuleCreateMany.mock.calls[0][0] as {
+      data: { pattern: string }[];
+    };
+    expect(data.some((row) => row.pattern === "uber")).toBe(true);
   });
 });

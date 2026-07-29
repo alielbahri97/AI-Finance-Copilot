@@ -130,7 +130,12 @@ const STOPWORDS = new Set([
   "via",
 ]);
 
-/** Seeds the default category set (and starter rules) for users who have none yet. */
+/**
+ * Seeds the default category set for empty accounts, then ensures every
+ * DEFAULT_CATEGORY_RULES pattern exists. Partially seeded users get missing
+ * patterns (e.g. uber) on the next call; existing user patterns are left alone
+ * via skipDuplicates on @@unique([userId, pattern]).
+ */
 export async function ensureDefaultCategories(userId: string) {
   const count = await prisma.category.count({ where: { userId } });
   if (count === 0) {
@@ -142,10 +147,8 @@ export async function ensureDefaultCategories(userId: string) {
   await ensureDefaultCategoryRules(userId);
 }
 
-async function ensureDefaultCategoryRules(userId: string) {
-  const ruleCount = await prisma.categoryRule.count({ where: { userId } });
-  if (ruleCount > 0) return;
-
+/** Creates any missing default rules; never overwrites existing pattern+userId rows. */
+export async function ensureDefaultCategoryRules(userId: string) {
   const categories = await prisma.category.findMany({
     where: { userId },
     select: { id: true, name: true },

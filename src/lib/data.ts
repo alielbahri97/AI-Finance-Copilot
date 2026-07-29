@@ -16,7 +16,11 @@ import { prisma } from "@/lib/prisma";
  */
 export async function getOrCreateProfile(user: User) {
   const existing = await prisma.profile.findUnique({ where: { id: user.id } });
-  if (existing) return existing;
+  if (existing) {
+    // Backfill any DEFAULT_CATEGORY_RULES patterns added after the account was seeded.
+    await ensureDefaultCategories(existing.id);
+    return existing;
+  }
 
   const headerList = await headers();
   const currency = currencyFromRequestHeaders(headerList);
