@@ -4,7 +4,6 @@ import { redirect, unstable_rethrow } from "next/navigation";
 import { DatabaseUnavailable } from "@/components/dashboard/database-unavailable";
 import { Header } from "@/components/dashboard/header";
 import { Sidebar } from "@/components/dashboard/sidebar";
-import { ReportIssueButton } from "@/components/report-issue/report-issue-button";
 import { getOrCreateProfile } from "@/lib/data";
 import { describeDatabaseError, isDatabaseUnavailable } from "@/lib/db-errors";
 import { logger } from "@/lib/logger";
@@ -49,8 +48,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
             {children}
           </main>
         </div>
-        {/* Floating FAB — always available after login (sidebar is desktop-only). */}
-        <ReportIssueButton />
       </div>
     );
   } catch (error) {
@@ -60,12 +57,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       logger.error("dashboard_db_unavailable", {
         error: describeDatabaseError(error),
       });
-      return (
-        <>
-          <DatabaseUnavailable email={user.email} />
-          <ReportIssueButton />
-        </>
-      );
+      return <DatabaseUnavailable email={user.email} />;
     }
 
     throw error;

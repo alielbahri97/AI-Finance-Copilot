@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { WalletIcon } from "lucide-react";
 
+import { ReportIssueButton } from "@/components/report-issue/report-issue-button";
 import { ThemeToggle } from "@/components/theme-toggle";
 
-/** Auth screens (login/signup/reset) — no report-issue FAB before login. */
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="relative flex min-h-svh flex-col items-center justify-center gap-6 px-4 py-10">
@@ -19,6 +19,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       <main id="main-content" tabIndex={-1} className="w-full max-w-sm outline-none">
         {children}
       </main>
+      <ReportIssueButton />
     </div>
   );
 }
