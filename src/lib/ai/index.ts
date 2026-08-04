@@ -1,7 +1,17 @@
+import { logger, serializeError } from "@/lib/logger";
+
 import { createAnthropicClient } from "./anthropic";
 import { createGroqClient } from "./groq";
 import { createOpenAiClient } from "./openai";
-import { AiError, type AiChatMessage, type AiChatOptions, type AiClient, type AiProviderId } from "./types";
+import { getProviderApiKey } from "./registry";
+import {
+  AiError,
+  shouldTryNextProvider,
+  type AiChatMessage,
+  type AiChatOptions,
+  type AiClient,
+  type AiProviderId,
+} from "./types";
 
 export * from "./types";
 
@@ -15,19 +25,22 @@ export function providerFromProfile(
   return undefined;
 }
 
-function isQuotaOrBillingError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const status = "status" in error ? Number((error as { status?: unknown }).status) : undefined;
-  if (status === 429) return true;
-  const msg = (error instanceof Error ? error.message : String(error)).toLowerCase();
-  return msg.includes("quota") || msg.includes("billing") || msg.includes("insufficient");
+function logFallback(from: AiClient, to: AiClient, error: unknown): void {
+  logger.warn("AI provider fallback", {
+    from: from.provider,
+    fromModel: from.model,
+    to: to.provider,
+    toModel: to.model,
+    error: serializeError(error),
+  });
 }
 
 /**
- * Tries providers in order. On quota/billing failures, falls through to the
- * next configured provider so Copilot keeps working when OpenAI is unpaid.
+ * Tries providers in order. On quota/billing or retired-model failures, falls
+ * through to the next configured provider so Copilot keeps working when OpenAI
+ * is unpaid or a hosted model is decommissioned underneath us.
  */
-function withQuotaFallback(clients: AiClient[]): AiClient {
+function withProviderFallback(clients: AiClient[]): AiClient {
   if (clients.length === 1) return clients[0]!;
 
   return {
@@ -49,8 +62,9 @@ function withQuotaFallback(clients: AiClient[]): AiClient {
           return await client.chat(messages, options);
         } catch (error) {
           lastError = error;
-          const canFallback = i < clients.length - 1 && isQuotaOrBillingError(error);
+          const canFallback = i < clients.length - 1 && shouldTryNextProvider(error);
           if (!canFallback) throw error;
+          logFallback(client, clients[i + 1]!, error);
         }
       }
       throw lastError instanceof Error ? lastError : new AiError("All AI providers failed");
@@ -72,8 +86,9 @@ function withQuotaFallback(clients: AiClient[]): AiClient {
         } catch (error) {
           lastError = error;
           const canFallback =
-            !started && i < clients.length - 1 && isQuotaOrBillingError(error);
+            !started && i < clients.length - 1 && shouldTryNextProvider(error);
           if (!canFallback) throw error;
+          logFallback(client, clients[i + 1]!, error);
         }
       }
       throw lastError instanceof Error ? lastError : new AiError("All AI providers failed");
@@ -82,21 +97,13 @@ function withQuotaFallback(clients: AiClient[]): AiClient {
 }
 
 /**
- * Returns the AI client for the requested provider, falling back to whichever
- * provider has an API key configured. Prefer Groq when available — it has a
- * free tier suitable for personal use.
- *
- * When the preferred (or env) provider hits a quota/billing error, automatically
- * retries with the next configured provider.
- */
-/**
  * All configured provider clients, ordered: the preferred provider first,
  * then Groq (free) before the paid providers. Empty when no key is set.
  */
 export function getAiClients(preferred?: AiProviderId): AiClient[] {
-  const groqKey = process.env.GROQ_API_KEY;
-  const openaiKey = process.env.OPENAI_API_KEY;
-  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  const groqKey = getProviderApiKey("groq");
+  const openaiKey = getProviderApiKey("openai");
+  const anthropicKey = getProviderApiKey("anthropic");
   const envProvider = process.env.AI_PROVIDER as AiProviderId | undefined;
   const provider = preferred ?? envProvider ?? (groqKey ? "groq" : "openai");
 
@@ -120,12 +127,20 @@ export function getAiClients(preferred?: AiProviderId): AiClient[] {
   return order.map((id) => factories[id]!());
 }
 
+/**
+ * Returns the AI client for the requested provider, falling back to whichever
+ * provider has an API key configured. Prefer Groq when available — it has a
+ * free tier suitable for personal use. Quota and retired-model failures
+ * automatically retry with the next configured provider.
+ */
 export function getAiClient(preferred?: AiProviderId): AiClient {
   const clients = getAiClients(preferred);
   if (clients.length === 0) {
     throw new AiError(
-      "No AI provider configured. Set GROQ_API_KEY (free), OPENAI_API_KEY, or ANTHROPIC_API_KEY."
+      "No AI provider configured. Set GROQ_API_KEY (free), OPENAI_API_KEY, or ANTHROPIC_API_KEY.",
+      undefined,
+      "auth"
     );
   }
-  return withQuotaFallback(clients);
+  return withProviderFallback(clients);
 }

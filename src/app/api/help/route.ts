@@ -1,22 +1,24 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 
-import { AiError, getAiClient, providerFromProfile, type AiChatMessage } from "@/lib/ai";
+import { AiError, getAiClient, providerFromProfile } from "@/lib/ai";
 import { enforceRateLimit } from "@/lib/api/rate-limit-guard";
 import { getOrCreateProfile } from "@/lib/data";
+import { classifyDatabaseFailure } from "@/lib/db-errors";
 import { buildHelpUserContext } from "@/lib/help/context";
 import { getHelpTopics } from "@/lib/help/knowledge";
-import { buildHelpSystemPrompt } from "@/lib/help/prompt";
 import { selectTopics } from "@/lib/help/retrieval";
+import {
+  buildHelpMessages,
+  helpMessageCreateData,
+  helpRequestSchema,
+  previousQuestion,
+} from "@/lib/help/thread";
 import { logger, serializeError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
+import { getWorkspaceContext } from "@/lib/workspace/context";
 
 export const maxDuration = 60;
-
-const requestSchema = z.object({
-  message: z.string().min(1).max(2000),
-});
 
 const HISTORY_LIMIT = 12;
 
@@ -74,14 +76,26 @@ export async function POST(request: Request) {
     const limited = await enforceRateLimit("help", user.id);
     if (limited) return limited;
 
-    const body = await request.json();
-    const parsed = requestSchema.safeParse(body);
+    const body = await request.json().catch(() => null);
+    const parsed = helpRequestSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json({ error: "Message is required" }, { status: 400 });
     }
     const { message } = parsed.data;
 
     const profile = await getOrCreateProfile(user);
+
+    // Support must reach every authenticated member, so the workspace is
+    // resolved without gating on a permission, and a failure to resolve it only
+    // costs the situational details in the prompt. The thread itself is
+    // personal: help_messages is user-scoped and was deliberately left out of
+    // the 0014 workspace migration.
+    const workspaceId = await getWorkspaceContext()
+      .then((ctx) => ctx?.workspace.id ?? null)
+      .catch((error) => {
+        logger.error("Help could not resolve a workspace", { error: serializeError(error) });
+        return null;
+      });
 
     const [recent, context] = await Promise.all([
       prisma.helpMessage.findMany({
@@ -90,28 +104,19 @@ export async function POST(request: Request) {
         take: HISTORY_LIMIT,
         select: { role: true, content: true },
       }),
-      buildHelpUserContext(user.id),
+      buildHelpUserContext(workspaceId),
     ]);
     const history = recent.reverse();
 
-    await prisma.helpMessage.create({
-      data: { userId: user.id, role: "USER", content: message },
+    const question = await prisma.helpMessage.create({
+      data: helpMessageCreateData(user.id, "USER", message),
+      select: { id: true },
     });
 
     // Retrieval considers the previous user question too, so follow-ups like
     // "and how do I undo it?" keep the right topics in context.
-    const previousQuestion =
-      [...history].reverse().find((entry) => entry.role === "USER")?.content ?? "";
-    const topics = selectTopics(`${previousQuestion} ${message}`, getHelpTopics());
-
-    const messages: AiChatMessage[] = [
-      { role: "system", content: buildHelpSystemPrompt(topics, context) },
-      ...history.map((entry) => ({
-        role: entry.role === "USER" ? ("user" as const) : ("assistant" as const),
-        content: entry.content,
-      })),
-      { role: "user", content: message },
-    ];
+    const topics = selectTopics(`${previousQuestion(history)} ${message}`, getHelpTopics());
+    const messages = buildHelpMessages(topics, context, history, message);
 
     const ai = getAiClient(providerFromProfile(profile.aiProvider));
     const encoder = new TextEncoder();
@@ -146,9 +151,20 @@ export async function POST(request: Request) {
 
         if (reply.trim().length > 0) {
           await prisma.helpMessage
-            .create({ data: { userId: user.id, role: "ASSISTANT", content: reply } })
+            .create({ data: helpMessageCreateData(user.id, "ASSISTANT", reply) })
             .catch((error) =>
               logger.error("Failed to persist help reply", { error: serializeError(error) })
+            );
+        } else if (errorMessage) {
+          // Nothing was answered, so drop the question too — otherwise the
+          // thread reloads with an unanswered message and the next turn feeds
+          // that dead end back to the model as context.
+          await prisma.helpMessage
+            .delete({ where: { id: question.id } })
+            .catch((error) =>
+              logger.error("Failed to roll back the help question", {
+                error: serializeError(error),
+              })
             );
         }
 
@@ -173,6 +189,21 @@ export async function POST(request: Request) {
     if (error instanceof AiError) {
       return NextResponse.json({ error: error.message }, { status: 502 });
     }
-    return NextResponse.json({ error: "Help request failed" }, { status: 500 });
+    return NextResponse.json({ error: describeFailure(error) }, { status: 500 });
+  }
+}
+
+/**
+ * The help agent is where users go when something else is broken, so its
+ * errors name the actual problem instead of a generic failure.
+ */
+function describeFailure(error: unknown): string {
+  switch (classifyDatabaseFailure(error)) {
+    case "schema_outdated":
+      return "The database is missing an update this version of the app needs. An administrator must apply the pending migrations.";
+    case "unavailable":
+      return "The database is not reachable right now. Please try again in a moment.";
+    default:
+      return "The help assistant could not handle that request. The error has been logged.";
   }
 }

@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { LifeBuoyIcon, SendIcon, SquareIcon, UserIcon } from "lucide-react";
-import { toast } from "sonner";
+import { AlertTriangleIcon, LifeBuoyIcon, SendIcon, SquareIcon, UserIcon } from "lucide-react";
 
 import { Markdown } from "@/components/copilot/markdown-lazy";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { isConfigurationError } from "@/lib/help/errors";
 import { cn } from "@/lib/utils";
 
 export interface HelpMessageItem {
@@ -44,6 +44,7 @@ export function HelpChat({ initialMessages, compact = false, className }: HelpCh
   const [messages, setMessages] = useState<HelpMessageItem[]>(initialMessages);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
@@ -57,7 +58,7 @@ export function HelpChat({ initialMessages, compact = false, className }: HelpCh
 
   useEffect(() => {
     scrollToBottom("auto");
-  }, [messages, scrollToBottom]);
+  }, [messages, error, scrollToBottom]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -81,17 +82,23 @@ export function HelpChat({ initialMessages, compact = false, className }: HelpCh
 
     setInput("");
     setIsStreaming(true);
+    setError(null);
     stickToBottomRef.current = true;
 
+    const userId = `local-${Date.now()}-user`;
     const assistantId = `local-${Date.now()}-assistant`;
     setMessages((prev) => [
       ...prev,
-      { id: `local-${Date.now()}-user`, role: "USER", content: trimmed },
+      { id: userId, role: "USER", content: trimmed },
       { id: assistantId, role: "ASSISTANT", content: "" },
     ]);
 
     const controller = new AbortController();
     abortRef.current = controller;
+    // A send that produced no reply is rolled back below, so the thread never
+    // shows a question the server never recorded.
+    let failed = false;
+    let answered = false;
 
     try {
       const response = await fetch("/api/help", {
@@ -102,10 +109,9 @@ export function HelpChat({ initialMessages, compact = false, className }: HelpCh
       });
 
       if (!response.ok || !response.body) {
-        const body = await response.json().catch(() => null);
-        toast.error("Help assistant error", {
-          description: body?.error ?? "Could not answer right now. Try again.",
-        });
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        failed = true;
+        setError(body?.error ?? `The help assistant could not answer (HTTP ${response.status}).`);
         return;
       }
 
@@ -115,10 +121,12 @@ export function HelpChat({ initialMessages, compact = false, className }: HelpCh
 
       const handleEvent = (event: StreamEvent) => {
         if (event.type === "delta") {
+          answered = true;
           updateAssistant(assistantId, (content) => content + event.text);
           scrollToBottom("auto");
         } else if (event.type === "error") {
-          toast.error("Help assistant error", { description: event.message });
+          failed = true;
+          setError(event.message);
         }
       };
 
@@ -138,16 +146,25 @@ export function HelpChat({ initialMessages, compact = false, className }: HelpCh
           }
         }
       }
-    } catch (error) {
-      if (!(error instanceof Error && error.name === "AbortError")) {
-        toast.error("Network error", { description: "Please try again." });
+    } catch (streamError) {
+      if (!(streamError instanceof Error && streamError.name === "AbortError")) {
+        failed = true;
+        setError("Could not reach the help assistant. Check your connection and try again.");
       }
     } finally {
       setIsStreaming(false);
       abortRef.current = null;
-      setMessages((prev) =>
-        prev.filter((message) => !(message.id === assistantId && message.content === ""))
-      );
+      if (failed && !answered) {
+        setMessages((prev) =>
+          prev.filter((message) => message.id !== userId && message.id !== assistantId)
+        );
+        // Put the question back in the composer so retrying is one keypress.
+        setInput(trimmed);
+      } else {
+        setMessages((prev) =>
+          prev.filter((message) => !(message.id === assistantId && message.content === ""))
+        );
+      }
     }
   }
 
@@ -172,7 +189,13 @@ export function HelpChat({ initialMessages, compact = false, className }: HelpCh
         className={cn("flex-1 space-y-4 overflow-y-auto", compact ? "p-3" : "p-4")}
       >
         {isEmpty ? (
-          <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
+          <div
+            className={cn(
+              "flex flex-col items-center justify-center gap-4 text-center",
+              // Leave room for the error card when the first question failed.
+              error ? "py-8" : "h-full"
+            )}
+          >
             <div className="bg-accent text-accent-foreground flex size-12 items-center justify-center rounded-full">
               <LifeBuoyIcon className="size-6" />
             </div>
@@ -246,6 +269,24 @@ export function HelpChat({ initialMessages, compact = false, className }: HelpCh
               </div>
             </div>
           ))
+        )}
+
+        {error && (
+          <div
+            role="alert"
+            className="border-destructive/40 bg-destructive/5 text-foreground flex items-start gap-2.5 rounded-xl border p-3 text-sm"
+          >
+            <AlertTriangleIcon className="text-destructive mt-0.5 size-4 shrink-0" />
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <p className="font-medium">The help assistant couldn&apos;t reply</p>
+              <p className="text-muted-foreground break-words">{error}</p>
+              <p className="text-muted-foreground">
+                {isConfigurationError(error)
+                  ? "This is a server configuration problem, not something you did — an administrator needs to check the app's AI settings."
+                  : "Your question is back in the box below, so you can send it again."}
+              </p>
+            </div>
+          </div>
         )}
       </div>
 

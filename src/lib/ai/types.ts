@@ -57,14 +57,99 @@ export interface AiClient {
   chatStream(messages: AiChatMessage[], options?: AiChatOptions): AsyncGenerator<string>;
 }
 
+/**
+ * Normalized failure kinds, so callers can react to *what* went wrong without
+ * pattern-matching vendor-specific strings:
+ *  - `auth`      the API key is missing/rejected
+ *  - `quota`     out of credit or over a hard billing limit
+ *  - `rate_limit`too many requests, retryable
+ *  - `model`     the requested model id is unknown or decommissioned
+ *  - `upstream`  provider-side outage (5xx)
+ */
+export type AiErrorCode = "auth" | "quota" | "rate_limit" | "model" | "upstream";
+
 export class AiError extends Error {
   constructor(
     message: string,
-    public readonly status?: number
+    public readonly status?: number,
+    public readonly code?: AiErrorCode
   ) {
     super(message);
     this.name = "AiError";
   }
+}
+
+const AI_ERROR_CODES = new Set<string>([
+  "auth",
+  "quota",
+  "rate_limit",
+  "model",
+  "upstream",
+] satisfies AiErrorCode[]);
+
+/**
+ * Reads the normalized fields structurally rather than via `instanceof`, so
+ * classification still works when an error crosses a module boundary that
+ * loaded its own copy of this class.
+ */
+function readAiError(error: unknown): { code?: AiErrorCode; status?: number; message: string } {
+  if (!error || typeof error !== "object") {
+    return { message: String(error ?? "") };
+  }
+  const { code, status, message } = error as {
+    code?: unknown;
+    status?: unknown;
+    message?: unknown;
+  };
+  return {
+    code: typeof code === "string" && AI_ERROR_CODES.has(code) ? (code as AiErrorCode) : undefined,
+    status: typeof status === "number" ? status : undefined,
+    message: typeof message === "string" ? message : "",
+  };
+}
+
+/**
+ * True when the provider rejected the *model id* rather than the request —
+ * the failure mode when a hosted model is retired out from under us. Falls
+ * back to matching the upstream text for providers that do not send a code.
+ */
+export function isModelError(error: unknown): boolean {
+  const { code, status, message } = readAiError(error);
+  if (code) return code === "model";
+  if (status !== 400 && status !== 404) return false;
+
+  const text = message.toLowerCase();
+  if (!text.includes("model")) return false;
+  return [
+    "model_not_found",
+    "model_decommissioned",
+    "decommissioned",
+    "does not exist",
+    "no longer supported",
+    "no longer serves",
+    "has been deprecated",
+    "unknown model",
+    "invalid model",
+  ].some((needle) => text.includes(needle));
+}
+
+/** True when the provider is out of credit, over quota, or throttling. */
+export function isQuotaError(error: unknown): boolean {
+  const { code, status, message } = readAiError(error);
+  if (code) return code === "quota" || code === "rate_limit";
+  if (status === 429) return true;
+
+  const text = message.toLowerCase();
+  return ["quota", "billing", "insufficient"].some((needle) => text.includes(needle));
+}
+
+/**
+ * Whether a failure with the current provider is worth retrying on the next
+ * configured one. Quota/model errors are provider-specific and will not
+ * resolve on retry, so another provider is strictly better than an error.
+ */
+export function shouldTryNextProvider(error: unknown): boolean {
+  return isQuotaError(error) || isModelError(error);
 }
 
 /**

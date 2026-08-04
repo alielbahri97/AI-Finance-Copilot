@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { Client } from "pg";
 
+import { getAiHealth } from "@/lib/ai/health";
 import {
   expectedColumns,
   expectedTables,
@@ -67,13 +68,22 @@ async function checkSchema(client: Client): Promise<SchemaDrift> {
  * Liveness/readiness probe for load balancers and uptime monitors.
  * Uses a short-lived dedicated Client (not the shared Prisma pool) so the
  * check never holds pooled connections open. Verifies DB connectivity, that
- * the schema matches the deployed code, and that the private `invoices`
- * Storage bucket exists. Unauthenticated by design — exposes only up/down
- * status fields and the names of missing tables/columns (no secrets).
+ * the schema matches the deployed code, that the private `invoices` Storage
+ * bucket exists, and which AI providers/models are configured.
+ *
+ * Unauthenticated by design — exposes only up/down status, the names of
+ * missing tables/columns, and AI model ids (all non-secret; API keys are
+ * reported as a boolean only). `?probe=ai` additionally calls each provider's
+ * models endpoint and therefore requires the CRON_SECRET bearer token.
  */
-export async function GET() {
+export async function GET(request: Request) {
   const startedAt = Date.now();
   const connectionString = process.env.DATABASE_URL;
+  const cronSecret = process.env.CRON_SECRET;
+  const probeRequested = new URL(request.url).searchParams.get("probe") === "ai";
+  const probeAuthorized =
+    Boolean(cronSecret) && request.headers.get("authorization") === `Bearer ${cronSecret}`;
+  const ai = await getAiHealth({ probe: probeRequested && probeAuthorized });
 
   if (!connectionString) {
     logger.error("health_check_failed", {
@@ -86,6 +96,7 @@ export async function GET() {
         db: "down",
         storage: "down",
         reason: "misconfigured",
+        ai,
         latencyMs: Date.now() - startedAt,
       },
       { status: 503, headers: { "Cache-Control": "no-store" } }
@@ -166,6 +177,10 @@ export async function GET() {
       db,
       storage,
       schema,
+      ai,
+      ...(probeRequested && !probeAuthorized
+        ? { aiProbe: "unauthorized — send the CRON_SECRET bearer token to run it" }
+        : {}),
       ...(!status.db && reason ? { reason } : {}),
       ...(drift && !schemaOk
         ? {

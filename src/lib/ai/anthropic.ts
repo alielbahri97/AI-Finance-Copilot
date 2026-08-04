@@ -1,3 +1,6 @@
+import { logger } from "@/lib/logger";
+
+import { getProviderConfig, type AiProviderConfig } from "./registry";
 import {
   AiError,
   messagesHaveImages,
@@ -6,12 +9,8 @@ import {
   type AiChatMessage,
   type AiChatOptions,
   type AiClient,
+  type AiErrorCode,
 } from "./types";
-
-const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const DEFAULT_MODEL = process.env.ANTHROPIC_MODEL ?? "claude-3-5-haiku-latest";
-/** Claude models accept images natively; override for a stronger vision model. */
-const DEFAULT_VISION_MODEL = process.env.ANTHROPIC_VISION_MODEL ?? DEFAULT_MODEL;
 
 /** Maps message content to Anthropic content blocks (incl. vision parts). */
 function toAnthropicContent(content: AiChatMessage["content"]) {
@@ -43,6 +42,7 @@ function splitMessages(messages: AiChatMessage[]) {
 }
 
 async function request(
+  config: AiProviderConfig,
   apiKey: string,
   messages: AiChatMessage[],
   options: AiChatOptions,
@@ -50,7 +50,11 @@ async function request(
 ): Promise<Response> {
   const { system, conversation } = splitMessages(messages);
   const hasImages = messagesHaveImages(messages);
-  const response = await fetch(ANTHROPIC_API_URL, {
+  if (hasImages && !config.visionModel) {
+    throw new AiError("Anthropic has no vision-capable model configured, so it cannot read images.", 400);
+  }
+  const model = hasImages ? config.visionModel! : config.model;
+  const response = await fetch(config.chatUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -58,7 +62,7 @@ async function request(
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: hasImages ? DEFAULT_VISION_MODEL : DEFAULT_MODEL,
+      model,
       system,
       messages: conversation,
       max_tokens: options.maxTokens ?? 1500,
@@ -70,40 +74,80 @@ async function request(
 
   if (!response.ok) {
     const body = await response.text();
-    throw new AiError(formatAnthropicError(response.status, body), response.status);
+    const { message, code } = formatAnthropicError(response.status, body, model, hasImages);
+    logger.error("AI provider request failed", {
+      provider: "anthropic",
+      model,
+      status: response.status,
+      code,
+      upstream: body.slice(0, 500),
+    });
+    throw new AiError(message, response.status, code);
   }
   return response;
 }
 
-function formatAnthropicError(status: number, body: string): string {
+export function formatAnthropicError(
+  status: number,
+  body: string,
+  model: string,
+  usedVisionModel = false
+): { message: string; code?: AiErrorCode } {
   let message: string | undefined;
+  let type: string | undefined;
   try {
     const parsed = JSON.parse(body) as { error?: { type?: string; message?: string } };
     message = parsed.error?.message;
+    type = parsed.error?.type;
   } catch {
     // Non-JSON error body — fall through.
   }
 
-  if (status === 401) {
-    return "Anthropic rejected the API key. Check ANTHROPIC_API_KEY in your environment.";
+  if (status === 401 || status === 403) {
+    return {
+      message: "Anthropic rejected the API key. Check ANTHROPIC_API_KEY in your environment.",
+      code: "auth",
+    };
   }
   if (status === 429) {
-    return "Anthropic is rate-limiting requests or your quota is exhausted. Check console.anthropic.com and try again.";
+    return {
+      message:
+        "Anthropic is rate-limiting requests or your quota is exhausted. Check console.anthropic.com and try again.",
+      code: "rate_limit",
+    };
+  }
+  if (
+    (status === 400 || status === 404) &&
+    (type === "not_found_error" || /model/i.test(message ?? ""))
+  ) {
+    const envVar = usedVisionModel ? "ANTHROPIC_VISION_MODEL" : "ANTHROPIC_MODEL";
+    return {
+      message:
+        `Anthropic no longer serves the model "${model}" — it has been retired or renamed. ` +
+        `Set ${envVar} to a current model id.`,
+      code: "model",
+    };
   }
   if (status >= 500) {
-    return "Anthropic is temporarily unavailable. Please try again shortly.";
+    return {
+      message: "Anthropic is temporarily unavailable. Please try again shortly.",
+      code: "upstream",
+    };
   }
-  return message ? `Anthropic error: ${message}` : `Anthropic request failed (${status})`;
+  return {
+    message: message ? `Anthropic error: ${message}` : `Anthropic request failed (${status})`,
+  };
 }
 
 export function createAnthropicClient(apiKey: string): AiClient {
+  const config = getProviderConfig("anthropic");
   return {
     provider: "anthropic",
-    model: DEFAULT_MODEL,
-    visionModel: DEFAULT_VISION_MODEL,
+    model: config.model,
+    visionModel: config.visionModel,
 
     async chat(messages, options = {}) {
-      const response = await request(apiKey, messages, options, false);
+      const response = await request(config, apiKey, messages, options, false);
       const data = (await response.json()) as {
         content: { type: string; text?: string }[];
       };
@@ -115,7 +159,7 @@ export function createAnthropicClient(apiKey: string): AiClient {
     },
 
     async *chatStream(messages, options = {}) {
-      const response = await request(apiKey, messages, options, true);
+      const response = await request(config, apiKey, messages, options, true);
       if (!response.body) {
         throw new AiError("Anthropic returned no stream body");
       }

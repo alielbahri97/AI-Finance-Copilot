@@ -484,7 +484,7 @@ keys are missing. Full commented reference in [.env.example](.env.example).
 | `NEXT_PUBLIC_APP_URL` | ✅ in prod | Absolute app URL (emails, OAuth redirects, SEO) |
 | `NEXT_PUBLIC_ISSUES_URL` | — | GitHub Issues new-issue URL for “Report issue” (falls back to mailto) |
 | `NEXT_PUBLIC_SUPPORT_EMAIL` | — | Mailto fallback when `NEXT_PUBLIC_ISSUES_URL` is unset |
-| `AI_PROVIDER`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | — | AI copilot, forecast explanations, invoice extraction, digests |
+| `AI_PROVIDER`, `GROQ_API_KEY`, `GROQ_MODEL`, `GROQ_VISION_MODEL`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | — | AI copilot, help agent, forecast explanations, invoice extraction, digests. Model ids are read at request time, so retiring a hosted model is fixed by editing the `*_MODEL` variable — see `/api/health` for the ids in use |
 | `RESEND_API_KEY`, `EMAIL_FROM` | — | Email notification channel |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | — | Web Push channel |
 | `CRON_SECRET` | ✅ in prod | Bearer token for both cron endpoints |
@@ -581,6 +581,16 @@ recorded per workspace (`AuditLog`) and visible to owners/admins in *Settings �
   and the private `invoices` Storage bucket (`storage.buckets`). It returns
   `200 {status:"ok",db:"up",schema:"ok",storage:"up"}`, or `503` with `db` / `storage` set to
   `"down"` — point your uptime monitor or container healthcheck at it.
+- **AI configuration** — the same response carries an `ai` section listing, per provider,
+  whether a key is configured and which text/vision model ids requests will use, plus the
+  resolved default provider. API keys are never included, only a boolean. Add
+  `?probe=ai` with the `CRON_SECRET` bearer token to also call each provider's models
+  endpoint (a token-free credential check) and get `reachable` per provider. This is the
+  fastest way to confirm a retired model id or a missing key in production:
+
+  ```bash
+  curl -H "Authorization: Bearer $CRON_SECRET" "https://<app>/api/health?probe=ai"
+  ```
 - **Schema drift** — Vercel deploys on push, but migrations are applied by hand, so new code
   can go live against an older database. `/api/health` then answers `503` with
   `schema:"outdated"` plus `missingTables`, `missingColumns` and `pendingMigrations`; fix it

@@ -1,3 +1,5 @@
+import { logger } from "@/lib/logger";
+
 import {
   AiError,
   messagesHaveImages,
@@ -5,6 +7,7 @@ import {
   type AiChatMessage,
   type AiChatOptions,
   type AiClient,
+  type AiErrorCode,
 } from "./types";
 
 export type OpenAiCompatibleProvider = "openai" | "groq";
@@ -24,6 +27,10 @@ interface CompatibleClientConfig {
   label: string;
   /** Env var name shown when the key is rejected. */
   keyEnvVar: string;
+  /** Env var that overrides `model`, named when the provider retires it. */
+  modelEnvVar: string;
+  /** Env var that overrides `visionModel`. */
+  visionModelEnvVar: string;
   /** Optional docs URL for quota / billing errors. */
   billingHint?: string;
 }
@@ -48,7 +55,33 @@ function toOpenAiMessages(messages: AiChatMessage[]) {
   });
 }
 
-function formatError(config: CompatibleClientConfig, status: number, body: string): string {
+/** Upstream signals that the *model id* — not the request — was rejected. */
+function looksLikeModelError(code: string | undefined, message: string | undefined): boolean {
+  if (code === "model_not_found" || code === "model_decommissioned") return true;
+  const text = (message ?? "").toLowerCase();
+  if (!text.includes("model")) return false;
+  return [
+    "decommissioned",
+    "does not exist",
+    "no longer supported",
+    "has been deprecated",
+    "unknown model",
+    "invalid model",
+  ].some((needle) => text.includes(needle));
+}
+
+/**
+ * Turns an upstream error body into a user-facing message plus a normalized
+ * code. Model errors name the model and the env var that overrides it, because
+ * the fix is a config change rather than anything the user did wrong.
+ */
+export function formatError(
+  config: CompatibleClientConfig,
+  status: number,
+  body: string,
+  model: string,
+  usedVisionModel = false
+): { message: string; code?: AiErrorCode } {
   let code: string | undefined;
   let message: string | undefined;
   try {
@@ -61,19 +94,44 @@ function formatError(config: CompatibleClientConfig, status: number, body: strin
     // Non-JSON error body — fall through to generic messaging.
   }
 
-  if (status === 401) {
-    return `${config.label} rejected the API key. Check ${config.keyEnvVar} in your environment.`;
+  if (status === 401 || status === 403) {
+    return {
+      message: `${config.label} rejected the API key. Check ${config.keyEnvVar} in your environment.`,
+      code: "auth",
+    };
   }
   if (status === 429 || code === "insufficient_quota" || code === "rate_limit_exceeded") {
-    if (code === "insufficient_quota" && config.billingHint) {
-      return `${config.label} quota exceeded. ${config.billingHint}`;
+    if (code === "insufficient_quota") {
+      return {
+        message: `${config.label} quota exceeded.${config.billingHint ? ` ${config.billingHint}` : ""}`,
+        code: "quota",
+      };
     }
-    return `${config.label} is rate-limiting requests. Wait a moment and try again.`;
+    return {
+      message: `${config.label} is rate-limiting requests. Wait a moment and try again.`,
+      code: "rate_limit",
+    };
+  }
+  if ((status === 400 || status === 404) && looksLikeModelError(code, message)) {
+    const envVar = usedVisionModel ? config.visionModelEnvVar : config.modelEnvVar;
+    return {
+      message:
+        `${config.label} no longer serves the model "${model}" — it has been retired or renamed. ` +
+        `Set ${envVar} to a current model id.`,
+      code: "model",
+    };
   }
   if (status >= 500) {
-    return `${config.label} is temporarily unavailable. Please try again shortly.`;
+    return {
+      message: `${config.label} is temporarily unavailable. Please try again shortly.`,
+      code: "upstream",
+    };
   }
-  return message ? `${config.label} error: ${message}` : `${config.label} request failed (${status})`;
+  return {
+    message: message
+      ? `${config.label} error: ${message}`
+      : `${config.label} request failed (${status})`,
+  };
 }
 
 async function request(
@@ -112,7 +170,17 @@ async function request(
 
   if (!response.ok) {
     const body = await response.text();
-    throw new AiError(formatError(config, response.status, body), response.status);
+    const { message, code } = formatError(config, response.status, body, model, hasImages);
+    // The upstream body is the only place that says *why* a model was refused;
+    // keep it in the server log while the client gets the sanitized message.
+    logger.error("AI provider request failed", {
+      provider: config.provider,
+      model,
+      status: response.status,
+      code,
+      upstream: body.slice(0, 500),
+    });
+    throw new AiError(message, response.status, code);
   }
   return response;
 }
