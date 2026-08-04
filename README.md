@@ -432,6 +432,35 @@ Use a dedicated subdomain such as `send.yourdomain.com` (Resend's recommendation
 reputation stays isolated from your main domain's mail, and the DNS records don't collide
 with an existing mailbox provider on the apex.
 
+**4. Verify what the deployment actually sees.** Guessing whether Vercel really has the
+variables is the slowest way to debug this. `GET /api/health` answers it from outside, in an
+`email` section: whether each variable is present (booleans only — the key itself is never
+reported), the from-address **domain**, and a `configured` flag read straight from
+`isEmailConfigured()`, so it cannot disagree with what a real send would do:
+
+```bash
+curl -s https://<app>/api/health | jq .email
+# { "configured": true, "apiKeyPresent": true, "apiKeyEnvVar": "RESEND_API_KEY",
+#   "fromPresent": true, "fromEnvVar": "EMAIL_FROM", "fromValid": true,
+#   "fromDomain": "send.yourdomain.com" }
+```
+
+`configured: false` with `apiKeyPresent: false` means the variable never reached the running
+deployment — check the environment *and* redeploy, since Vercel only applies env changes to
+new builds. To also confirm the domain in `EMAIL_FROM` is the one you verified, run the
+authenticated probe (`CRON_SECRET` bearer), which calls Resend's domains endpoint:
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" "https://<app>/api/health?probe=email" | jq .email
+# adds: "keyAuthenticates": true,
+#       "domains": [{ "name": "send.yourdomain.com", "status": "verified" }],
+#       "fromDomainVerified": true
+```
+
+`keyAuthenticates: false` with `probeError: "HTTP 401"` is a bad or revoked key;
+`fromDomainVerified: false` is the mismatch behind the 403 in step 3. Email is optional, so
+none of this changes the endpoint's HTTP status — it stays informational.
+
 **How failures surface.** Every send goes through `sendEmail()` in
 `src/lib/notifications/email.ts`, which returns `sent`, `not_configured`, or `failed` (with
 the provider message, sanitized, and a `domainRestricted` flag for the case above) and logs
@@ -629,6 +658,13 @@ recorded per workspace (`AuditLog`) and visible to owners/admins in *Settings �
   ```bash
   curl -H "Authorization: Bearer $CRON_SECRET" "https://<app>/api/health?probe=ai"
   ```
+- **Email configuration** — an `email` section reports whether `RESEND_API_KEY` and
+  `EMAIL_FROM` are present (booleans; the key is never included, not even a prefix or its
+  length), the from-address domain, and a `configured` flag taken from the same
+  `isEmailConfigured()` the send path uses. `?probe=email` (same bearer token) additionally
+  lists the account's Resend domains and whether the from-domain is verified — see
+  [Email delivery](#email-delivery-resend). Email is optional, so a missing setup is
+  reported without degrading `status`. Use `?probe=all` for both probes at once.
 - **Schema drift** — Vercel deploys on push, but migrations are applied by hand, so new code
   can go live against an older database. `/api/health` then answers `503` with
   `schema:"outdated"` plus `missingTables`, `missingColumns` and `pendingMigrations`; fix it

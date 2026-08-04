@@ -12,10 +12,13 @@ import {
 import { describeDatabaseError } from "@/lib/db-errors";
 import { INVOICE_BUCKET } from "@/lib/invoices/storage";
 import { logger } from "@/lib/logger";
+import { getEmailHealth } from "@/lib/notifications/email-health";
 
 export const dynamic = "force-dynamic";
 
 const HEALTH_TIMEOUT_MS = 4_000;
+
+const PROBE_UNAUTHORIZED = "unauthorized — send the CRON_SECRET bearer token to run it";
 
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -72,18 +75,31 @@ async function checkSchema(client: Client): Promise<SchemaDrift> {
  * bucket exists, and which AI providers/models are configured.
  *
  * Unauthenticated by design — exposes only up/down status, the names of
- * missing tables/columns, and AI model ids (all non-secret; API keys are
- * reported as a boolean only). `?probe=ai` additionally calls each provider's
- * models endpoint and therefore requires the CRON_SECRET bearer token.
+ * missing tables/columns, AI model ids, and whether the email channel is
+ * configured plus its sending domain (all non-secret; API keys are reported as
+ * a boolean only). `?probe=ai`, `?probe=email` or `?probe=all` additionally
+ * call the provider APIs and therefore require the CRON_SECRET bearer token.
+ *
+ * Email is optional, so its configuration is informational and never changes
+ * the HTTP status.
  */
 export async function GET(request: Request) {
   const startedAt = Date.now();
   const connectionString = process.env.DATABASE_URL;
   const cronSecret = process.env.CRON_SECRET;
-  const probeRequested = new URL(request.url).searchParams.get("probe") === "ai";
+  const probe = new URL(request.url).searchParams.get("probe");
+  const aiProbeRequested = probe === "ai" || probe === "all";
+  const emailProbeRequested = probe === "email" || probe === "all";
   const probeAuthorized =
     Boolean(cronSecret) && request.headers.get("authorization") === `Bearer ${cronSecret}`;
-  const ai = await getAiHealth({ probe: probeRequested && probeAuthorized });
+  const [ai, email] = await Promise.all([
+    getAiHealth({ probe: aiProbeRequested && probeAuthorized }),
+    getEmailHealth({ probe: emailProbeRequested && probeAuthorized }),
+  ]);
+  const probeNotes = {
+    ...(aiProbeRequested && !probeAuthorized ? { aiProbe: PROBE_UNAUTHORIZED } : {}),
+    ...(emailProbeRequested && !probeAuthorized ? { emailProbe: PROBE_UNAUTHORIZED } : {}),
+  };
 
   if (!connectionString) {
     logger.error("health_check_failed", {
@@ -97,6 +113,8 @@ export async function GET(request: Request) {
         storage: "down",
         reason: "misconfigured",
         ai,
+        email,
+        ...probeNotes,
         latencyMs: Date.now() - startedAt,
       },
       { status: 503, headers: { "Cache-Control": "no-store" } }
@@ -178,9 +196,9 @@ export async function GET(request: Request) {
       storage,
       schema,
       ai,
-      ...(probeRequested && !probeAuthorized
-        ? { aiProbe: "unauthorized — send the CRON_SECRET bearer token to run it" }
-        : {}),
+      // Informational: a missing email setup never degrades `status`.
+      email,
+      ...probeNotes,
       ...(!status.db && reason ? { reason } : {}),
       ...(drift && !schemaOk
         ? {
