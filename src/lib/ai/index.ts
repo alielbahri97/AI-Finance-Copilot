@@ -34,6 +34,12 @@ function withQuotaFallback(clients: AiClient[]): AiClient {
     get provider() {
       return clients[0]!.provider;
     },
+    get model() {
+      return clients[0]!.model;
+    },
+    get visionModel() {
+      return clients[0]!.visionModel;
+    },
 
     async chat(messages: AiChatMessage[], options?: AiChatOptions) {
       let lastError: unknown;
@@ -83,7 +89,11 @@ function withQuotaFallback(clients: AiClient[]): AiClient {
  * When the preferred (or env) provider hits a quota/billing error, automatically
  * retries with the next configured provider.
  */
-export function getAiClient(preferred?: AiProviderId): AiClient {
+/**
+ * All configured provider clients, ordered: the preferred provider first,
+ * then Groq (free) before the paid providers. Empty when no key is set.
+ */
+export function getAiClients(preferred?: AiProviderId): AiClient[] {
   const groqKey = process.env.GROQ_API_KEY;
   const openaiKey = process.env.OPENAI_API_KEY;
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
@@ -107,11 +117,15 @@ export function getAiClient(preferred?: AiProviderId): AiClient {
     push(id);
   }
 
-  if (order.length === 0) {
+  return order.map((id) => factories[id]!());
+}
+
+export function getAiClient(preferred?: AiProviderId): AiClient {
+  const clients = getAiClients(preferred);
+  if (clients.length === 0) {
     throw new AiError(
       "No AI provider configured. Set GROQ_API_KEY (free), OPENAI_API_KEY, or ANTHROPIC_API_KEY."
     );
   }
-
-  return withQuotaFallback(order.map((id) => factories[id]!()));
+  return withQuotaFallback(clients);
 }

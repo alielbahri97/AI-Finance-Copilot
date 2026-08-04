@@ -1,5 +1,6 @@
 import {
   AiError,
+  messagesHaveImages,
   messageText,
   parseSseData,
   type AiChatMessage,
@@ -9,6 +10,8 @@ import {
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const DEFAULT_MODEL = process.env.ANTHROPIC_MODEL ?? "claude-3-5-haiku-latest";
+/** Claude models accept images natively; override for a stronger vision model. */
+const DEFAULT_VISION_MODEL = process.env.ANTHROPIC_VISION_MODEL ?? DEFAULT_MODEL;
 
 /** Maps message content to Anthropic content blocks (incl. vision parts). */
 function toAnthropicContent(content: AiChatMessage["content"]) {
@@ -46,6 +49,7 @@ async function request(
   stream: boolean
 ): Promise<Response> {
   const { system, conversation } = splitMessages(messages);
+  const hasImages = messagesHaveImages(messages);
   const response = await fetch(ANTHROPIC_API_URL, {
     method: "POST",
     headers: {
@@ -54,7 +58,7 @@ async function request(
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: DEFAULT_MODEL,
+      model: hasImages ? DEFAULT_VISION_MODEL : DEFAULT_MODEL,
       system,
       messages: conversation,
       max_tokens: options.maxTokens ?? 1500,
@@ -95,6 +99,8 @@ function formatAnthropicError(status: number, body: string): string {
 export function createAnthropicClient(apiKey: string): AiClient {
   return {
     provider: "anthropic",
+    model: DEFAULT_MODEL,
+    visionModel: DEFAULT_VISION_MODEL,
 
     async chat(messages, options = {}) {
       const response = await request(apiKey, messages, options, false);

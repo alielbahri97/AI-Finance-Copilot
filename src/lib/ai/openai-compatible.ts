@@ -1,5 +1,6 @@
 import {
   AiError,
+  messagesHaveImages,
   parseSseData,
   type AiChatMessage,
   type AiChatOptions,
@@ -13,6 +14,12 @@ interface CompatibleClientConfig {
   apiKey: string;
   apiUrl: string;
   model: string;
+  /**
+   * Model used when messages contain images. null = the provider has no
+   * vision-capable model configured; image requests fail with a clear error
+   * instead of a confusing upstream 400.
+   */
+  visionModel: string | null;
   /** Human-readable name used in error messages. */
   label: string;
   /** Env var name shown when the key is rejected. */
@@ -75,6 +82,17 @@ async function request(
   options: AiChatOptions,
   stream: boolean
 ): Promise<Response> {
+  // Route image requests to the vision-capable model (the default text model
+  // may reject multimodal input — e.g. Groq's llama-3.3 is text-only).
+  const hasImages = messagesHaveImages(messages);
+  if (hasImages && !config.visionModel) {
+    throw new AiError(
+      `${config.label} has no vision-capable model configured, so it cannot read images.`,
+      400
+    );
+  }
+  const model = hasImages ? config.visionModel! : config.model;
+
   const response = await fetch(config.apiUrl, {
     method: "POST",
     headers: {
@@ -82,11 +100,12 @@ async function request(
       Authorization: `Bearer ${config.apiKey}`,
     },
     body: JSON.stringify({
-      model: config.model,
+      model,
       messages: toOpenAiMessages(messages),
       max_tokens: options.maxTokens ?? 1500,
       temperature: options.temperature ?? 0.4,
       stream,
+      ...(options.jsonMode ? { response_format: { type: "json_object" } } : {}),
     }),
     signal: options.signal,
   });
@@ -102,6 +121,8 @@ async function request(
 export function createOpenAiCompatibleClient(config: CompatibleClientConfig): AiClient {
   return {
     provider: config.provider,
+    model: config.model,
+    visionModel: config.visionModel,
 
     async chat(messages, options = {}) {
       const response = await request(config, messages, options, false);

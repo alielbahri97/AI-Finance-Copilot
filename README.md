@@ -687,14 +687,26 @@ via PWABuilder or an optional WebView2 host, see **[WINDOWS_APP.md](WINDOWS_APP.
   at import time, longest pattern first. Deleting a category sets its transactions to
   uncategorized (FK `ON DELETE SET NULL`).
 - **Invoice extraction**: `POST /api/invoices/upload` stores the original document first,
-  then extracts — images go to the provider's vision capability through the shared
-  `AiClient` (multimodal content parts work with both OpenAI and Anthropic), PDFs get
-  their text layer read with `unpdf` and sent as text. The model must answer with strict
-  JSON validated by Zod (`src/lib/invoices/extraction.ts`); one retry on invalid output,
-  and any failure (scanned PDF without a text layer, provider errors, bad JSON) creates
-  the invoice as `NEEDS_REVIEW` with empty fields for manual entry — the document stays
-  attached either way. Saving the review form moves a DRAFT invoice to UNPAID; "overdue"
-  is always derived from due date + unpaid status, never stored.
+  then extracts. Every provider adapter declares a *vision model* alongside its text model
+  (Groq: `GROQ_VISION_MODEL`, default `qwen/qwen3.6-27b` — Groq's default text model is
+  text-only and would reject images; OpenAI: `gpt-4o-mini`; Anthropic: Claude). Image
+  extraction is routed to vision-capable providers only, in preference order, falling back
+  across providers on errors; when none can read images the invoice is created
+  `NEEDS_REVIEW` with an actionable reason ("add an OpenAI/Anthropic key or set
+  `GROQ_VISION_MODEL`"). PDF text layers are read with `unpdf` and sent as text to any chat
+  model; scanned PDFs (no text layer) get their largest embedded page image pulled out with
+  `unpdf` and re-encoded as PNG (pure JS, `src/lib/invoices/png.ts`) for the vision path.
+  Model output is parsed tolerantly (`src/lib/invoices/extraction-core.ts`): markdown
+  fences, leading prose and trailing commas are accepted, localized numbers ("1.234,56"),
+  dates ("15.02.2026", "Feb 15, 2026") and currency symbols (€ → EUR) are normalized, and
+  JSON mode (`response_format: json_object`) is requested from OpenAI-compatible providers.
+  One retry shows the model its validation errors. Extracted amounts are cross-checked
+  (qty × price ≈ line total, subtotal + VAT ≈ total, rate consistency) — mismatches flag
+  the invoice `NEEDS_REVIEW` with warnings shown in the review form instead of silently
+  saving wrong numbers, and the model's per-field confidence highlights uncertain fields.
+  Telemetry (provider, model, duration, failure reason) is stored on the invoice row.
+  Saving the review form moves a DRAFT invoice to UNPAID; "overdue" is always derived from
+  due date + unpaid status, never stored.
 - **Invoice ↔ transaction matching**: `src/lib/invoices/match.ts` scores expense
   transactions by amount closeness (hard gate: within 3% or one currency unit), proximity
   to the invoice/due date and vendor-vs-counterparty token similarity. Linking is manual

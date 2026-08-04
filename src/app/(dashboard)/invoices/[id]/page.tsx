@@ -65,11 +65,18 @@ export default async function InvoiceDetailPage({ params }: InvoiceDetailPagePro
       </div>
 
       {dto.status === "DRAFT" && (
-        <div className="border-chart-4/40 bg-chart-4/10 flex items-center gap-2 rounded-lg border px-4 py-3 text-sm">
-          <ScanSearchIcon className="size-4 shrink-0" />
-          {dto.extractionStatus === "EXTRACTED"
-            ? "Review the extracted fields below, correct anything that is off, then confirm."
-            : "We could not extract this document automatically. Fill in the details manually — the original file stays attached."}
+        <div className="border-chart-4/40 bg-chart-4/10 flex items-start gap-2 rounded-lg border px-4 py-3 text-sm">
+          <ScanSearchIcon className="mt-0.5 size-4 shrink-0" />
+          <div className="flex flex-col gap-1">
+            <span>
+              {dto.extractionStatus === "EXTRACTED"
+                ? "Review the extracted fields below, correct anything that is off, then confirm."
+                : "This document needs a manual check — the original file stays attached."}
+            </span>
+            {dto.extractionReason && (
+              <span className="text-muted-foreground">{dto.extractionReason}</span>
+            )}
+          </div>
         </div>
       )}
 

@@ -5,6 +5,8 @@ import { AiError, type AiClient } from "@/lib/ai/types";
 vi.mock("@/lib/ai/groq", () => ({
   createGroqClient: (key: string): AiClient => ({
     provider: "groq",
+    model: "groq-model",
+    visionModel: "groq-vision",
     async chat() {
       return `groq:${key.slice(0, 4)}`;
     },
@@ -17,6 +19,8 @@ vi.mock("@/lib/ai/groq", () => ({
 vi.mock("@/lib/ai/openai", () => ({
   createOpenAiClient: (): AiClient => ({
     provider: "openai",
+    model: "openai-model",
+    visionModel: "openai-vision",
     async chat() {
       throw new AiError("OpenAI quota exceeded. Add billing.", 429);
     },
@@ -29,6 +33,8 @@ vi.mock("@/lib/ai/openai", () => ({
 vi.mock("@/lib/ai/anthropic", () => ({
   createAnthropicClient: (): AiClient => ({
     provider: "anthropic",
+    model: "anthropic-model",
+    visionModel: "anthropic-vision",
     async chat() {
       return "anthropic-ok";
     },

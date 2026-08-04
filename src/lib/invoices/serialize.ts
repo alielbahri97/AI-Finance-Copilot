@@ -38,6 +38,12 @@ export interface InvoiceDto {
   status: "DRAFT" | "UNPAID" | "PAID";
   derivedStatus: DerivedInvoiceStatus;
   extractionStatus: "EXTRACTED" | "NEEDS_REVIEW" | "MANUAL";
+  /** Why the document needs review (extraction failure / arithmetic mismatch). */
+  extractionReason: string | null;
+  /** Arithmetic-mismatch warnings flagged during extraction. */
+  extractionWarnings: string[];
+  /** Per-field confidence 0..1 from the model; empty when not reported. */
+  extractionConfidence: Record<string, number>;
   fileName: string;
   mimeType: string;
   notes: string | null;
@@ -79,6 +85,20 @@ export function serializeInvoice(
     status: invoice.status,
     derivedStatus: deriveStatus(invoice.status, invoice.dueDate),
     extractionStatus: invoice.extractionStatus,
+    extractionReason: invoice.extractionReason ?? null,
+    extractionWarnings: Array.isArray(invoice.extractionWarnings)
+      ? (invoice.extractionWarnings as unknown[]).filter(
+          (entry): entry is string => typeof entry === "string"
+        )
+      : [],
+    extractionConfidence:
+      invoice.extractionConfidence && typeof invoice.extractionConfidence === "object"
+        ? Object.fromEntries(
+            Object.entries(invoice.extractionConfidence as Record<string, unknown>).filter(
+              (entry): entry is [string, number] => typeof entry[1] === "number"
+            )
+          )
+        : {},
     fileName: invoice.fileName,
     mimeType: invoice.mimeType,
     notes: invoice.notes,

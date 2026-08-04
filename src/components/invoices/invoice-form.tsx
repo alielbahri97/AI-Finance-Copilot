@@ -12,6 +12,10 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { INVOICE_CURRENCY_OPTIONS } from "@/lib/currency/parse";
 import type { InvoiceDto } from "@/lib/invoices/serialize";
+import { cn } from "@/lib/utils";
+
+/** Below this model-reported confidence, a field gets a review highlight. */
+const CONFIDENCE_REVIEW_THRESHOLD = 0.6;
 
 interface LineItemState {
   description: string;
@@ -73,6 +77,33 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
     );
   }
 
+  // Review highlighting: on a fresh AI-extracted draft, fields the model was
+  // unsure about (or could not find at all) get an amber outline.
+  const isReviewDraft = invoice.status === "DRAFT" && invoice.extractionStatus !== "MANUAL";
+  function needsAttention(field: string, isEmpty: boolean): boolean {
+    if (!isReviewDraft) return false;
+    const score = invoice.extractionConfidence[field];
+    if (typeof score === "number" && score < CONFIDENCE_REVIEW_THRESHOLD) return true;
+    return isEmpty;
+  }
+  const attention = (field: string, isEmpty: boolean) =>
+    needsAttention(field, isEmpty)
+      ? "border-amber-400 ring-1 ring-amber-400/60 dark:border-amber-500 dark:ring-amber-500/50"
+      : undefined;
+  const anyAttention =
+    isReviewDraft &&
+    (
+      [
+        ["vendor", vendor.trim() === ""],
+        ["invoiceNumber", invoiceNumber.trim() === ""],
+        ["invoiceDate", invoiceDate === ""],
+        ["dueDate", dueDate === ""],
+        ["subtotal", subtotal === ""],
+        ["vatAmount", vatAmount === ""],
+        ["total", total === "" || Number(total) === 0],
+      ] as const
+    ).some(([field, isEmpty]) => needsAttention(field, isEmpty));
+
   const numericOk = (value: string) => value === "" || !Number.isNaN(Number(value));
   const formValid =
     vendor.trim().length > 0 &&
@@ -133,6 +164,23 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
 
   return (
     <div className="flex flex-col gap-4">
+      {invoice.extractionWarnings.length > 0 && invoice.status === "DRAFT" && (
+        <div className="rounded-lg border border-amber-400/60 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-200">
+          <p className="font-medium">The extracted numbers don&apos;t add up:</p>
+          <ul className="mt-1 list-disc pl-5">
+            {invoice.extractionWarnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {anyAttention && (
+        <p className="text-muted-foreground text-sm">
+          <span className="mr-1.5 inline-block size-2.5 rounded-full border border-amber-400 bg-amber-400/40 align-middle" />
+          Highlighted fields were missing or low-confidence — check them against the document.
+        </p>
+      )}
+
       <div className="grid gap-1.5">
         <Label>Type</Label>
         <Tabs
@@ -155,6 +203,7 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
             onChange={(event) => setVendor(event.target.value)}
             placeholder="Acme B.V."
             maxLength={200}
+            className={attention("vendor", vendor.trim() === "")}
           />
         </div>
         <div className="grid gap-1.5">
@@ -165,6 +214,7 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
             onChange={(event) => setInvoiceNumber(event.target.value)}
             placeholder="INV-2026-001"
             maxLength={100}
+            className={attention("invoiceNumber", invoiceNumber.trim() === "")}
           />
         </div>
         <div className="grid gap-1.5">
@@ -174,6 +224,7 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
             type="date"
             value={invoiceDate}
             onChange={(event) => setInvoiceDate(event.target.value)}
+            className={attention("invoiceDate", invoiceDate === "")}
           />
         </div>
         <div className="grid gap-1.5">
@@ -183,6 +234,7 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
             type="date"
             value={dueDate}
             onChange={(event) => setDueDate(event.target.value)}
+            className={attention("dueDate", dueDate === "")}
           />
         </div>
       </div>
@@ -217,6 +269,7 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
             value={subtotal}
             onChange={(event) => setSubtotal(event.target.value)}
             placeholder="0.00"
+            className={attention("subtotal", subtotal === "")}
           />
         </div>
         <div className="grid gap-1.5">
@@ -245,6 +298,7 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
               onChange={(event) => setVatAmount(event.target.value)}
               placeholder="0.00"
               aria-label="VAT amount"
+              className={attention("vatAmount", vatAmount === "")}
             />
           </div>
         </div>
@@ -259,7 +313,10 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
             value={total}
             onChange={(event) => setTotal(event.target.value)}
             placeholder="0.00"
-            className="font-semibold"
+            className={cn(
+              "font-semibold",
+              attention("total", total === "" || Number(total) === 0)
+            )}
           />
         </div>
       </div>

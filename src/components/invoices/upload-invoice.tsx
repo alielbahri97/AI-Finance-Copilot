@@ -35,11 +35,18 @@ export function UploadInvoice() {
   async function handleFile(file: File | undefined) {
     if (!file || isUploading) return;
     if (!ACCEPTED_TYPES.includes(file.type)) {
-      toast.error("Unsupported file", { description: "Upload a PDF, JPG, PNG or WebP document." });
+      const isHeic = /hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name);
+      toast.error("Unsupported file", {
+        description: isHeic
+          ? "HEIC photos aren't supported — convert to JPG or PNG first."
+          : "Upload a PDF, JPG, PNG or WebP document.",
+      });
       return;
     }
     if (file.size > MAX_BYTES) {
-      toast.error("File too large", { description: "The maximum size is 10 MB." });
+      toast.error("File too large", {
+        description: `This file is ${(file.size / 1024 / 1024).toFixed(1)} MB — the maximum is 10 MB.`,
+      });
       return;
     }
 
@@ -58,7 +65,9 @@ export function UploadInvoice() {
         toast.success("Invoice extracted", { description: "Review the fields and confirm." });
       } else {
         toast.info("Needs review", {
-          description: "We could not extract this document automatically — fill in the details.",
+          description:
+            body.reviewReason ??
+            "We could not extract this document automatically — fill in the details.",
         });
       }
       setOpen(false);

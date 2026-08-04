@@ -536,6 +536,16 @@ model Invoice {
   direction        InvoiceDirection @default(PAYABLE)
   status           InvoiceStatus    @default(DRAFT)
   extractionStatus ExtractionStatus @default(NEEDS_REVIEW) @map("extraction_status")
+  /// Telemetry: which provider/model extracted this document and how long it took.
+  extractionProvider   String? @map("extraction_provider")
+  extractionModel      String? @map("extraction_model")
+  extractionDurationMs Int?    @map("extraction_duration_ms")
+  /// Human-readable reason when extraction failed or needs review (shown in the UI).
+  extractionReason     String? @map("extraction_reason")
+  /// Arithmetic-mismatch warnings (string array) flagged during extraction.
+  extractionWarnings   Json?   @map("extraction_warnings")
+  /// Per-field confidence 0..1 reported by the model (highlights review fields).
+  extractionConfidence Json?   @map("extraction_confidence")
   /// Object path in the private Supabase Storage bucket (userId/invoiceId/filename).
   storagePath      String           @map("storage_path")
   fileName         String           @map("file_name")

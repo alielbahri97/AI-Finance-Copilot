@@ -29,20 +29,40 @@ export async function POST(request: Request) {
     if (limited) return limited;
 
     const formData = await request.formData().catch(() => null);
-    const file = formData?.get("file");
-    const direction = formData?.get("direction") === "RECEIVABLE" ? "RECEIVABLE" : "PAYABLE";
+    if (!formData) {
+      return NextResponse.json(
+        { error: "The upload request was malformed. Try again from the upload dialog." },
+        { status: 400 }
+      );
+    }
+    const file = formData.get("file");
+    const direction = formData.get("direction") === "RECEIVABLE" ? "RECEIVABLE" : "PAYABLE";
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Attach a file to upload" }, { status: 400 });
     }
     if (!(file.type in INVOICE_MIME_TYPES)) {
+      const isHeic =
+        /hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name);
       return NextResponse.json(
-        { error: "Unsupported file type. Upload a PDF, JPG, PNG or WebP document." },
+        {
+          error: isHeic
+            ? "HEIC photos (iPhone default) are not supported. In the share sheet choose JPEG, or convert the photo to JPG/PNG, then upload again."
+            : `"${file.type || file.name}" is not a supported format. Upload a PDF, JPG, PNG or WebP document.`,
+        },
         { status: 400 }
       );
     }
-    if (file.size === 0 || file.size > MAX_INVOICE_FILE_BYTES) {
+    if (file.size === 0) {
       return NextResponse.json(
-        { error: "The file must be between 1 byte and 10 MB." },
+        { error: "The file is empty (0 bytes). Re-export or re-scan the document and try again." },
+        { status: 400 }
+      );
+    }
+    if (file.size > MAX_INVOICE_FILE_BYTES) {
+      return NextResponse.json(
+        {
+          error: `The file is ${(file.size / 1024 / 1024).toFixed(1)} MB — the maximum is ${MAX_INVOICE_FILE_BYTES / 1024 / 1024} MB. Compress the PDF or downscale the photo and try again.`,
+        },
         { status: 400 }
       );
     }
@@ -102,6 +122,7 @@ export async function POST(request: Request) {
         invoiceId: result.invoiceId,
         extractionStatus: result.extractionStatus,
         extractionSkipped: !extractionQuota.allowed,
+        reviewReason: result.reviewReason,
       },
       { status: 201 }
     );

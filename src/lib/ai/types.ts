@@ -23,9 +23,24 @@ export interface AiChatOptions {
   maxTokens?: number;
   temperature?: number;
   signal?: AbortSignal;
+  /**
+   * Ask the provider to force valid-JSON output (OpenAI-compatible
+   * `response_format: {type:"json_object"}`). Ignored by providers without
+   * native JSON mode (Anthropic — enforced via prompt there).
+   */
+  jsonMode?: boolean;
 }
 
 export type AiProviderId = "openai" | "anthropic" | "groq";
+
+/** True when any message carries an inline image part. */
+export function messagesHaveImages(messages: AiChatMessage[]): boolean {
+  return messages.some(
+    (message) =>
+      typeof message.content !== "string" &&
+      message.content.some((part) => part.type === "image")
+  );
+}
 
 /**
  * Provider-agnostic chat interface. Implemented by the OpenAI, Groq and Anthropic
@@ -33,6 +48,10 @@ export type AiProviderId = "openai" | "anthropic" | "groq";
  */
 export interface AiClient {
   readonly provider: AiProviderId;
+  /** Default text model id (for telemetry/logging). */
+  readonly model: string;
+  /** Vision-capable model used when messages contain images; null = no vision. */
+  readonly visionModel: string | null;
   chat(messages: AiChatMessage[], options?: AiChatOptions): Promise<string>;
   /** Streams the assistant reply as text deltas. */
   chatStream(messages: AiChatMessage[], options?: AiChatOptions): AsyncGenerator<string>;
