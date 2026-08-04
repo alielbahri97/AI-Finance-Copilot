@@ -1,11 +1,45 @@
 # Ballast — AI-powered clarity on your money
 
-Your AI copilot for business finances: a production-quality finance dashboard built with
-Next.js 15, Supabase, Prisma and Groq/OpenAI/Anthropic. Live at
+A production-quality finance dashboard built with Next.js 15, Supabase, Prisma and
+Groq/OpenAI/Anthropic, shipping as two editions from one codebase: **Ballast Business**
+for companies and **Ballast Personal** for individuals. Live at
 <https://app.ballastmoney.com>.
 
 > The npm package name (`ai-finance-copilot`) and the GitHub repository name are unchanged;
 > only the product name is Ballast.
+
+## The two editions
+
+A visitor picks a path on the landing page ("For my business" / "For myself"). The choice
+travels as `?for=business|personal`, into Supabase user metadata at signup so it survives
+the email-confirmation round trip, and finally into the `type` of the workspace created on
+first login. Every workspace that existed before this shipped is `BUSINESS`, and the
+Business edition is unchanged — nothing was taken away from it.
+
+A workspace's type, not the account, decides the edition, so one account can own a company
+workspace and a personal one and switch between them; **Create workspace** in the switcher
+asks which type to make.
+
+| | Business | Personal |
+| --- | --- | --- |
+| Shared core | Transactions, CSV import, categories & rules, bank connections, cash-flow forecast, copilot, reports, notifications, exports, billing | same |
+| Invoices (AI extraction, VAT, payable/receivable, reminders) | ✅ | — |
+| Vendors & customers, AR/AP aging | ✅ | — |
+| Team sharing: members, roles, invitations, seats | ✅ | — (single-user by design) |
+| Accounting integrations (QuickBooks, Xero, Exact) | ✅ | — |
+| Monthly budgets per category, with rollover | — | ✅ |
+| Savings goals with a projected completion date | — | ✅ |
+| Subscription detection and cost insights | — | ✅ |
+| Dashboard | Revenue/expense/net KPIs, AR/AP | Spending vs budget, cash on hand, upcoming bills, goals, subscriptions |
+| Copilot & help agent | CFO framing: margins, suppliers, hiring | Money-coach framing: "can I afford this?", "where did my money go?" |
+| Plans | Free, Pro €19, Business €49, Enterprise | Free, Plus €4.99, Premium €8.99 |
+
+The matrix lives in `src/lib/workspace/editions.ts` and is enforced server-side, not by
+hiding links: the workspace context intersects a member's permissions with the edition's
+(so `requireWorkspace("edit_invoices")` already 403s in a personal workspace), each
+edition-specific page and API route rejects a typed-in URL on its own
+(`/budgets` 404s in a business workspace), and the sidebar filters itself with the same
+predicate. `src/lib/branding.ts` holds the per-edition naming and copy.
 
 ## Features
 
@@ -71,10 +105,12 @@ Next.js 15, Supabase, Prisma and Groq/OpenAI/Anthropic. Live at
   the forecast engine), and daily invoice reminders. Per-type and per-channel toggles live in
   Settings. An hourly Vercel Cron hits a CRON_SECRET-protected endpoint that evaluates all
   users idempotently via last-sent timestamps.
-- **SaaS billing** — four plans (Free, Pro, Business, Enterprise) defined in a single source
-  of truth (`src/lib/billing/plans.ts`) with per-plan limits (CSV imports and rows per
-  import, AI messages, invoice extractions, exports, forecast assumptions). Stripe Checkout
-  for upgrades, a webhook keeping the local subscription in sync, the Stripe Billing Portal
+- **SaaS billing** — two tier sets in a single source of truth
+  (`src/lib/billing/plans.ts`): Business (Free, Pro €19, Business €49, Enterprise) and
+  Personal (Free, Plus €4.99, Premium €8.99), each with per-plan limits (bank connections,
+  CSV imports and rows per import, AI messages, invoice extractions, exports, forecast
+  assumptions). A workspace is only ever shown and sold the tiers of its own edition.
+  Stripe Checkout for upgrades, a webhook keeping the local subscription in sync, the Stripe Billing Portal
   for payment methods/cancellation, and a `/billing` page with the current plan, usage
   meters, plan matrix, invoice history and a referral program (share a link, earn +30 days
   of Pro per converted referral). Every new account gets a card-free 14-day Pro trial.
@@ -85,7 +121,7 @@ Next.js 15, Supabase, Prisma and Groq/OpenAI/Anthropic. Live at
   (plan/usage/joined), KPI cards (total users, active subscriptions, MRR estimate, signups,
   AI usage) and charts driven by a lightweight internal `AnalyticsEvent` table (signup,
   import, AI message, export, upgrade — no third-party trackers).
-- **Integrations** (Business plan) — an `/integrations` page connecting banks (Plaid via
+- **Integrations** (Business plan; banks on every Personal plan) — an `/integrations` page connecting banks (Plaid via
   Link, Tink via OAuth, GoCardless Bank Account Data via requisitions — transactions flow
   through the same dedupe/categorization pipeline as CSV imports), accounting software
   (QuickBooks, Xero, Exact Online — bills and invoices upserted into the invoice module),
@@ -95,13 +131,28 @@ Next.js 15, Supabase, Prisma and Groq/OpenAI/Anthropic. Live at
   encrypted at rest (AES-256-GCM), refreshed automatically, and every connection shows its
   status, last sync and last error with connect/disconnect/sync-now controls. An hourly
   cron runs due syncs with per-connection error isolation and failure backoff; providers
-  without credentials simply show as "Not configured" with the env vars they need.
-- **Teams & shared workspaces** — every account gets a personal workspace, and Business+
+  without credentials simply show as "Not configured" with the env vars they need. A
+  personal workspace sees only the tiles that make sense for one person's money — banks,
+  calendar, chat — and its plan caps bank connections (1 on Free, unlimited from Plus),
+  enforced at the connect route rather than after the OAuth round trip.
+- **Teams & shared workspaces** (Business) — every account gets a workspace, and Business+
   plans can invite more people into it: members sign in with their own accounts and share
   the workspace's transactions, invoices, forecasts and copilot. Roles
   (owner/admin/member/viewer) with per-member permission overrides, hashed single-use email
   invitations (7-day expiry), a workspace switcher, seat limits from the plan, and an audit
   log of member/billing/data changes. See [Teams, roles & permissions](#teams-roles--permissions).
+- **Budgets** (Personal) — a monthly limit per category with progress bars, over/under
+  status and an optional rollover that carries an underspend (or overspend) into the next
+  month instead of restarting from the limit. `/budgets` for the full month, plus a
+  dashboard widget showing the categories closest to their limit.
+- **Savings goals** (Personal) — named goals with a target amount and optional target date,
+  contributions tracked individually (hand-entered or recognised from a linked category or
+  account), and a projected completion date from the recent saving rate — so a goal reads
+  "on track", "behind" or "needs €180/mo to make it".
+- **Subscriptions** (Personal) — recurring charges detected from real transactions by the
+  same engine the forecast uses, with total monthly cost, the next charge date per
+  subscription, flags for price increases against the previous charge, and flags for ones
+  that look unused (nothing but the charge itself for months).
 - **Profile & Settings** — display name, preferred currency, AI provider choice, theme
   (light/dark/system) and password change
 - **UI** — responsive layout, dark mode, toast notifications, loading skeletons, error
@@ -128,8 +179,9 @@ Next.js 15, Supabase, Prisma and Groq/OpenAI/Anthropic. Live at
 
 ```
 ├── prisma/
-│   ├── schema.prisma          # Profile, Category, CategoryRule, ImportBatch,
-│   │                          # Transaction, Budget, Conversation, ChatMessage,
+│   ├── schema.prisma          # Workspace (+type), Profile, Category, CategoryRule,
+│   │                          # ImportBatch, Transaction, Budget, SavingsGoal,
+│   │                          # SavingsContribution, Conversation, ChatMessage,
 │   │                          # Assumption, Invoice, InvoiceLineItem models
 │   ├── migrations/            # SQL migrations (apply with npm run db:deploy)
 │   └── seed.ts                # Demo data seeder
@@ -143,7 +195,7 @@ Next.js 15, Supabase, Prisma and Groq/OpenAI/Anthropic. Live at
 │   │   ├── (auth)/            # login, signup, forgot-password, reset-password
 │   │   ├── (dashboard)/       # dashboard, transactions, import, categories,
 │   │   │                      # invoices (+detail), forecast, copilot, profile,
-│   │   │                      # settings
+│   │   │                      # settings, budgets, goals, subscriptions
 │   │   ├── api/               # transactions (+bulk), categories, rules,
 │   │   │                      # import (parse/commit/batches), profile, copilot,
 │   │   │                      # conversations, forecast (+explain), assumptions,
@@ -172,9 +224,12 @@ Next.js 15, Supabase, Prisma and Groq/OpenAI/Anthropic. Live at
 │   │   │                      # row normalization (shared server + client)
 │   │   ├── finance/           # shared recurrence detection + forecast engine
 │   │   ├── invoices/          # AI extraction, PDF text, storage, matching,
-│   │   │                      # reminders, serialization
+│   │   │                      # reminders, serialization (Business edition)
+│   │   ├── personal/          # budget math, goal projection, subscription
+│   │   │                      # detection (Personal edition)
 │   │   ├── supabase/          # browser/server/middleware clients
 │   │   ├── validations/       # Zod schemas
+│   │   ├── workspace/         # workspace context, permissions, edition matrix
 │   │   ├── categories.ts      # default category seeding + rule matching
 │   │   ├── data.ts            # server-side data access & aggregation
 │   │   ├── env.ts             # validated environment variables
@@ -337,9 +392,13 @@ local 14-day Pro trial) and `/billing` shows a "billing not configured" notice. 
 paid plans:
 
 1. **Create the products/prices** — in the [Stripe dashboard](https://dashboard.stripe.com)
-   create two products, *Ballast Pro* and *Ballast Business*, each with a monthly
-   recurring price ($19 and $49 to match `src/lib/billing/plans.ts`, or adjust the file).
-   Copy the two `price_...` ids.
+   create four products, each with a monthly recurring price matching
+   `src/lib/billing/plans.ts` (or adjust the file): *Ballast Pro* (€19) and
+   *Ballast Business* (€49) for the Business edition, *Ballast Plus* (€4.99) and
+   *Ballast Premium* (€8.99) for the Personal edition. Copy the four `price_...` ids.
+   A workspace is only ever offered the tiers of its own edition, so if you ship one
+   edition first you can leave the other pair blank — upgrades are disabled there and
+   nowhere else.
 2. **Configure the webhook** — add an endpoint pointing at
    `https://yourapp.vercel.app/api/webhooks/stripe` subscribed to:
    `checkout.session.completed`, `customer.subscription.created`,
@@ -353,8 +412,10 @@ paid plans:
 ```bash
 STRIPE_SECRET_KEY="sk_live_..."        # or sk_test_...
 STRIPE_WEBHOOK_SECRET="whsec_..."
-STRIPE_PRICE_PRO="price_..."
-STRIPE_PRICE_BUSINESS="price_..."
+STRIPE_PRICE_PRO="price_..."               # Business edition, EUR 19/mo
+STRIPE_PRICE_BUSINESS="price_..."          # Business edition, EUR 49/mo
+STRIPE_PRICE_PERSONAL_PLUS="price_..."     # Personal edition, EUR 4.99/mo
+STRIPE_PRICE_PERSONAL_PREMIUM="price_..."  # Personal edition, EUR 8.99/mo
 ```
 
 Enterprise is contact-sales only (no checkout). Upgrades run through Stripe Checkout with a
@@ -552,7 +613,8 @@ keys are missing. Full commented reference in [.env.example](.env.example).
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | — | Web Push channel |
 | `CRON_SECRET` | ✅ in prod | Bearer token for both cron endpoints |
 | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | — | Shared rate limiting for multi-instance deployments |
-| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_BUSINESS` | — | Paid plans, webhook sync, billing portal |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_BUSINESS` | — | Paid plans (Business edition), webhook sync, billing portal |
+| `STRIPE_PRICE_PERSONAL_PLUS`, `STRIPE_PRICE_PERSONAL_PREMIUM` | — | Paid plans for the Personal edition (Plus €4.99, Premium €8.99) |
 | `INTEGRATION_ENCRYPTION_KEY` | for integrations | AES-256-GCM token encryption (`openssl rand -hex 32`) |
 | `SUPABASE_SERVICE_ROLE_KEY` | for mail ingestion | Background storage uploads (Gmail/Outlook) — server-only, never expose |
 | `PLAID_*`, `TINK_*`, `GOCARDLESS_*`, `QUICKBOOKS_*`, `XERO_*`, `EXACT_*`, `GOOGLE_*`, `MICROSOFT_*`, `SLACK_*` | per provider | Integration credentials (see the integrations section) |
@@ -562,11 +624,17 @@ to be public), the app URL and the VAPID *public* key. Everything else is server
 
 ## Teams, roles & permissions
 
-All business data (transactions, categories, rules, imports, invoices, forecasts,
-assumptions, copilot conversations, integrations, billing) belongs to a **workspace**, not
-to an individual user. Every account owns a personal workspace, created automatically, so
-single-user Free/Pro accounts work exactly as before. Business+ plans can share a
-workspace with more people.
+All data (transactions, categories, rules, imports, invoices, forecasts, assumptions,
+copilot conversations, budgets, goals, integrations, billing) belongs to a **workspace**,
+not to an individual user. Every account owns one, created automatically on first login, so
+single-user accounts work exactly as before. Business+ plans can share a workspace with
+more people.
+
+This section is about the Business edition. A Personal workspace keeps the same model — it
+is a workspace with one member who owns it — but sharing is not part of the product: the
+`manage_members` permission is stripped from the edition, the Team UI and its API routes
+are gone, and seats are fixed at 1. Everything below therefore applies to Business
+workspaces.
 
 **Roles.** Each member has one of four roles:
 
@@ -607,8 +675,8 @@ issues a new token and expiry, and is recorded in the audit log. Seat usage is u
 exactly one of the two rows is pending at any moment.
 
 **Seats.** Seats (members + pending invitations) come from the plan: Free/Pro 1, Business
-5, Enterprise custom. Inviting beyond the limit returns an upgrade prompt. The workspace —
-not the user — carries the subscription.
+5, Enterprise custom, and every Personal tier 1. Inviting beyond the limit returns an
+upgrade prompt. The workspace — not the user — carries the subscription.
 
 **Audit log.** Member, permission, billing, export and destructive data changes are
 recorded per workspace (`AuditLog`) and visible to owners/admins in *Settings → Team*.
@@ -691,12 +759,15 @@ npm test          # run everything once
 npm run test:watch
 ```
 
-The Vitest suite (`tests/`, 69 tests) covers the pure logic: CSV parsing/encoding/column
-detection, import dedupe fingerprints, the forecast engine (recurrence detection, trend +
-scheduling, assumptions, runway), entitlements and plan-gating math, report period
-resolution, CSV/Excel/PDF export generation, notification scheduling idempotency, the
-AES-256-GCM round-trip and the rate limiter. `server-only` is aliased out in
-`vitest.config.ts` so lib modules import cleanly under Node.
+The Vitest suite (`tests/`, 475 tests in 30 files) covers the pure logic: CSV
+parsing/encoding/column detection, import dedupe fingerprints, the forecast engine
+(recurrence detection, trend + scheduling, assumptions, runway), entitlements and
+plan-gating math per edition, the edition gating matrix (permissions, route guards,
+navigation, the signup → workspace-type flow), budget and rollover math, savings-goal
+projection, subscription detection on fixture data, report period resolution, CSV/Excel/PDF
+export generation, notification scheduling idempotency, the AES-256-GCM round-trip and the
+rate limiter. `server-only` is aliased out in `vitest.config.ts` so lib modules import
+cleanly under Node.
 
 ## CI
 

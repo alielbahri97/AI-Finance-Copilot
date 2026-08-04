@@ -3,16 +3,81 @@
 Applying pending Prisma migrations from any browser (including a phone),
 because the machine that has the repo cannot reach Postgres directly.
 
-There have been two rounds. Each has its own file to paste:
+There have been three rounds. Each has its own file to paste:
 
 | Round | Migrations | File |
 | --- | --- | --- |
 | 1 (done) | `0013`, `0014`, `0015` | [`apply-pending-migrations.sql`](./apply-pending-migrations.sql) |
-| 2 | `0016_multi_bank_connections` | [`apply-0016.sql`](./apply-0016.sql) |
+| 2 (done) | `0016_multi_bank_connections` | [`apply-0016.sql`](./apply-0016.sql) |
+| 3 | `0017_workspace_editions` | [`apply-0017.sql`](./apply-0017.sql) |
 
-Everything from "Step A" onwards describes round 1, but the mechanics —
-backup, paste the whole file, press Run, read the last result table — are the
-same for both.
+Run them in order; round 3 checks for round 2's schema and refuses to run
+without it. Everything from "Step A" onwards describes round 1, but the
+mechanics — backup, paste the whole file, press Run, read the last result
+table — are the same for all three.
+
+---
+
+## Round 3: `0017_workspace_editions`
+
+The Personal edition. One codebase now ships two products, and which one a
+workspace runs is a column: `workspaces.type` is `BUSINESS` or `PERSONAL`,
+defaulting to `BUSINESS`, so every workspace that exists today keeps exactly
+the app it has been using. The migration also adds the two Personal plan tiers
+to the `PlanId` enum (`PLUS`, `PREMIUM`), makes the long-dormant `budgets`
+table usable (a real `category_id` link and a `rollover` switch), and adds
+`savings_goals` plus `savings_contributions`.
+
+Nothing is dropped, narrowed or renamed. It is columns, tables, indexes and two
+enum labels, which is why a Business workspace cannot notice it at all.
+
+File to paste:
+
+```text
+ops/migrations-bundle/apply-0017.sql
+```
+
+What to do:
+
+1. **Back up.** Supabase → **Database → Backups**. Note the latest
+   Point-in-Time Recovery timestamp (or take a snapshot). This one adds rather
+   than rewrites, so it is quick and low-risk — but the habit is cheap.
+2. **Paste all of it** into Supabase → **SQL Editor → New query**, in the
+   **production** project, and press **Run**. Supabase may warn that the query
+   looks destructive because it contains `ALTER TABLE`. Confirm.
+3. **Read the last result table.** It has 23 rows; every one should say `OK` in
+   the `result` column. Scroll up for three more result sets: the migration
+   history (expect 17 rows, `0001`–`0017`), the per-edition workspace counts,
+   and the enum labels and indexes on the new/changed tables.
+4. **Load the site**, and check `https://app.ballastmoney.com/api/health` —
+   `status: "ok"`, `schema: "ok"`, empty `missingTables`, `missingColumns` and
+   `pendingMigrations`.
+
+Right after the migration, result set 2 shows every workspace as `BUSINESS`.
+`PERSONAL` rows appear only once someone signs up via "For myself" or creates a
+personal workspace from the switcher; that is the feature working, not drift.
+
+If it errors: nothing was changed (single transaction), so send me the full
+error. Two errors have specific answers here:
+
+- **`This database is missing "bank_accounts" …`** — round 2 was never applied.
+  Run [`apply-0016.sql`](./apply-0016.sql) first, then this file. The refusal
+  happens before anything is changed.
+- **`ALTER TYPE ... ADD cannot run inside a transaction block`** — should not
+  happen on Supabase (PostgreSQL 12+ allows it, and the new labels are not used
+  before the `COMMIT`). If it does, run these two lines on their own in a
+  separate query and then re-run the whole file:
+
+  ```sql
+  ALTER TYPE "PlanId" ADD VALUE IF NOT EXISTS 'PLUS';
+  ALTER TYPE "PlanId" ADD VALUE IF NOT EXISTS 'PREMIUM';
+  ```
+
+**Instant Rollback is safe for this one**, unlike 0014 and 0016. The pre-0017
+code neither reads `workspaces.type` nor writes the new tables, and 0017 removes
+nothing it depends on — so an older deployment runs unchanged on the new schema.
+The only visible effect of rolling back is that the Personal edition disappears
+along with the code that serves it.
 
 ---
 
@@ -340,13 +405,14 @@ SHA-256, hex, of the exact `migration.sql` file bytes — the same thing
 | `0014_workspaces` | `0648890dda5ff8d916dd674424531264a1da1d9f976a0b75a31aa85f64d1743e` | `apply-pending-migrations.sql` |
 | `0015_extraction_telemetry` | `c7aad200de37b496f33bbe77e2dcffbbd47fa25b4a1f17a2e94ab8aec7e6ff9f` | `apply-pending-migrations.sql` |
 | `0016_multi_bank_connections` | `f92b0da30a50ac653bd603aa512c1a5fdb3fdd9227cb02218b503ae4d72b5fb8` | `apply-0016.sql` |
+| `0017_workspace_editions` | `6ea302ea168c82af6f8f6e627f879809a4ea48cecc2b5c47d83f1ee9422d681d` | `apply-0017.sql` |
 
 **Important:** these checksums describe the migration files as they were when
 this bundle was generated. They were re-verified against the migration files as
-committed alongside this README and they match. If any of those three files
-changes afterwards, `npm run db:apply` will print a "checksum mismatch"
-*warning* (it will not re-run the migration and it will not fail). If you see
-that warning, tell me and I will regenerate the bundle.
+committed alongside this README and they match. If any of those files changes
+afterwards, `npm run db:apply` will print a "checksum mismatch" *warning* (it
+will not re-run the migration and it will not fail). If you see that warning,
+tell me and I will regenerate the bundle.
 
 ### What the script does, in order
 
@@ -422,3 +488,32 @@ survive a re-run; it converges from a half-applied state; a deliberate failure
 injected before the `COMMIT` leaves the database untouched; and the real
 PostgreSQL parser reports one `BEGIN`, one `COMMIT`, read-only `SELECT`s after
 it, and nothing that cannot run inside a transaction.
+
+### How `apply-0017.sql` differs from `0017`'s migration file
+
+- `IF NOT EXISTS` on the two `ADD COLUMN`s per table, both new tables, all five
+  indexes, and both new enum labels; `CREATE TYPE "WorkspaceType"` became a `DO`
+  block guarded on `to_regtype`, which has no `IF NOT EXISTS` form.
+  `DROP CONSTRAINT IF EXISTS` precedes each of the six foreign keys.
+- The one statement that changes rows — resolving `budgets.category` (a name) to
+  `budgets.category_id` — only ever fills blanks, and additionally does nothing
+  once 0017 is recorded in `_prisma_migrations`. That matters because after this
+  migration the app writes `category_id` itself: a bare re-run of the original
+  `UPDATE` would relink a budget the user had since pointed elsewhere.
+- A prerequisite check up front (`STEP 0a`) that stops with a readable error if
+  `bank_accounts` is missing, rather than failing halfway through on the
+  `savings_goals` → `bank_accounts` foreign key.
+- The baseline block records 0001–**0016** rather than 0001–0015.
+
+Verified the same way as the 0016 bundle, on top of a database built by
+replaying 0001–0016: the bundle and the original migration produce identical
+schemas (291 columns, 89 indexes, 80 constraints, 64 enum labels) and identical
+data, including the `budgets` backfill resolving `"Groceries"` to its category
+and leaving a budget that names a deleted category unlinked. Also checked:
+applying it three times changes nothing after the first; a goal and a
+contribution written by the app survive a re-run, a `PERSONAL` workspace is not
+reset to `BUSINESS`, and a `category_id` the app had cleared is not relinked; it
+converges from a half-applied state (enum and two columns already present); the
+pre-0016 refusal fires and leaves the database untouched; a failure injected
+before the `COMMIT` changes nothing; and the bundle's own 23 verification checks
+all report `OK` on a freshly migrated database.

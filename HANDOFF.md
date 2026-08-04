@@ -9,10 +9,12 @@
 
 ## Start here (the 10 things that matter most)
 
-1. **What this is**: **Ballast** — a production-deployed AI finance app for
-   small businesses, live at <https://app.ballastmoney.com>. Next.js 15 +
-   Supabase + Prisma. Built end to end over the previous conversation; it is not
-   a toy.
+1. **What this is**: **Ballast** — a production-deployed AI finance app, live at
+   <https://app.ballastmoney.com>. Next.js 15 + Supabase + Prisma. Built end to
+   end over the previous conversations; it is not a toy. It ships **two editions
+   from one codebase**: Ballast Business (companies) and Ballast Personal
+   (individuals), selected per workspace by `Workspace.type`. See
+   [section 12](#12-the-two-editions).
 2. **The Ballast rebrand is done.** Product name, taglines and marketing copy
    all read from `src/lib/branding.ts` — edit that file, not the call sites.
    Never write "Your AI finance copilot"; it is a competitor's exact headline
@@ -31,9 +33,13 @@
    `src/lib/workspace/context.ts`. The app is multi-tenant; cross-workspace
    leakage is the number one thing to never regress.
 7. **Migrations are hand-written SQL** in `prisma/migrations/NNNN_name/migration.sql`
-   (0001 → 0016 all applied to production). Never use `prisma migrate dev`.
+   (0001 → 0016 applied to production; **0017_workspace_editions is written and
+   bundled but NOT yet applied** — the user pastes
+   `ops/migrations-bundle/apply-0017.sql` into Supabase). Never use
+   `prisma migrate dev`.
 8. **Forward-only deploys.** Vercel Instant Rollback is now unsafe — migration
-   0014 dropped unique indexes the older code depends on.
+   0014 dropped unique indexes the older code depends on. (0017 is the exception:
+   purely additive, so pre-0017 code runs fine on the post-0017 schema.)
 9. **Before every push**: `npm test`, `npm run lint`, `npx tsc --noEmit`,
    `npm run build` must all pass. This has been held to on every commit so far.
 10. **Deadline on the calendar**: Groq retires `llama-3.3-70b-versatile` on
@@ -46,7 +52,8 @@
 
 An AI-powered finance copilot. The user owns a restaurant and built this first
 for their own business, then decided to sell it as a SaaS product to other small
-businesses, with a lighter personal-finance edition planned for individuals.
+businesses. The personal-finance edition for individuals has since been built —
+same codebase, same domain, same logo, chosen per workspace.
 
 ### Features as built
 
@@ -62,11 +69,15 @@ businesses, with a lighter personal-finance edition planned for individuals.
 | **Invoices** | PDF/image/receipt upload to Supabase Storage; AI extraction (vendor, number, dates, currency, VAT, line items, totals) with vision-model routing and cross-provider fallback; per-field confidence highlighting; arithmetic validation; payable/receivable direction; paid/unpaid; reminders; transaction matching and linking |
 | **Executive reports** | `/reports` with period selector (this month, last month, quarter, YTD, last 12 months, custom); KPIs (revenue, expenses, profit, margin, cash, AR, AP); monthly and year-over-year charts; category breakdown; top vendors/customers; AR/AP aging; PDF (pdf-lib), Excel (exceljs) and CSV export |
 | **Notifications** | Daily/weekly/monthly AI digests, large-transaction alerts, low-cash warnings, invoice reminders; in-app notification centre with unread badge, email (Resend), web push (VAPID); per-type and per-channel settings; hourly Vercel cron with idempotent last-sent tracking |
-| **Billing** | Stripe subscriptions — Free / Pro €19 / Business €49 / Enterprise; 14-day card-free Pro trial; usage records and feature gating enforced server-side; billing portal; referral programme; admin dashboard with KPIs and analytics events |
+| **Billing** | Stripe subscriptions, two tier sets by edition — Business: Free / Pro €19 / Business €49 / Enterprise; Personal: Free / Plus €4.99 / Premium €8.99. 14-day card-free trial (Pro or Plus); usage records and feature gating enforced server-side; billing portal; referral programme; admin dashboard with KPIs and analytics events |
 | **Integrations** | 11 providers: Plaid, Tink, GoCardless (banks); QuickBooks, Xero, Exact Online (accounting); Gmail, Outlook (invoice ingestion); Slack, Teams (alerts); Google Calendar (bill reminders). AES-256-GCM encrypted tokens, automatic sync via cron with backoff, icon-grid UI with per-provider setup guides |
 | **Teams** | Multi-user workspaces; OWNER/ADMIN/MEMBER/VIEWER roles; 12 granular permissions with per-member overrides; email-bound single-use invitations with regenerate-link; workspace switcher; audit log; seat limits by plan |
 | **Help agent** | Separate in-app support assistant answering "how do I…" questions from a knowledge base written against the real UI; keyword retrieval; streaming; context-aware (knows the user's plan and which integrations are configured); does not consume copilot quota |
 | **Multi-bank** | Several bank connections per workspace, each with its own consent/sync/rate-limit budget; per-account balances; combined cash total with per-account breakdown; `includeInTotals` toggle |
+| **Editions** | Business / Personal chosen on the landing page, carried through signup and the email-confirmation round trip, stamped on the workspace. Server-enforced gating (permissions, route guards, navigation), per-edition plans, prompts and help knowledge. A user can own one of each and switch |
+| **Budgets** (Personal) | Monthly limit per category with progress and over/under status, optional rollover of last month's under/overspend, `/budgets` page and dashboard widget |
+| **Savings goals** (Personal) | Target amount and optional date, tracked contributions (hand-entered or from a linked category/account), progress and a projected completion date from the recent saving rate |
+| **Subscriptions** (Personal) | Recurring charges detected by the existing `src/lib/finance` recurrence engine, monthly total, next charge, price-increase and looks-unused flags |
 | **Onboarding** | Wizard with business profile and industry benchmarks (added by the user directly) |
 | **PWA** | Manifest, icons, service worker, install prompt, Windows packaging config (`WINDOWS_APP.md`) |
 
@@ -89,8 +100,8 @@ Vercel dashboard with no redeploy.
 
 ```
 prisma/
-  schema.prisma            # 42 models/enums, single source of truth
-  migrations/0001…0016/    # hand-written SQL, all applied to production
+  schema.prisma            # 46 models/enums, single source of truth
+  migrations/0001…0017/    # hand-written SQL, 0001–0016 applied to production
   seed.ts
 scripts/
   apply-migrations.ts      # `npm run db:apply` — pg-based migration runner
@@ -103,15 +114,18 @@ src/
     (dashboard)/           # dashboard, transactions, categories, import,
                            # invoices, forecast, reports, copilot, help,
                            # integrations, team settings, billing, admin, profile
+                           # budgets, goals, subscriptions  ← Personal only
     (onboarding)/
-    api/                   # 60 route handlers
+    api/                   # 66 route handlers
     auth/                  # Supabase callback + confirm
   components/              # ui/ + one folder per feature area
   lib/
     workspace/{context,permissions}.ts   # ← AUTHORIZATION CORE
+    workspace/editions.ts  # ← THE EDITION MATRIX (features, permissions, paths)
     ai/                    # provider registry, adapters, prompts, context, suggestions
     help/                  # knowledge base, retrieval, prompts
     finance/               # shared recurrence/forecast primitives
+    personal/              # budgets, goals, subscriptions: pure math + data access
     integrations/          # registry, providers/*, gocardless-core, bank-import
     billing/{plans,entitlements}.ts
     csv/                   # detect, normalize, fingerprint
@@ -124,7 +138,7 @@ src/
     db-errors.ts           # outage vs schema-drift classification
     logger.ts, prisma.ts, env.ts, env-url.ts, rate-limit.ts, data.ts
 scripts/generate-icons.ts  # `npm run icons` — rebuilds PNGs + favicon from the mark
-tests/                     # 26 Vitest files, pure-logic coverage
+tests/                     # 30 Vitest files, pure-logic coverage
 ```
 
 ### Key architectural rules
@@ -137,9 +151,18 @@ tests/                     # 26 Vitest files, pure-logic coverage
   cookie alone; *never* query business tables without a workspace scope.
 - **`src/lib/workspace/permissions.ts`** — 12 permissions, role defaults,
   per-member overrides (owners are immune to overrides).
+- **`src/lib/workspace/editions.ts`** — the edition matrix. The context
+  intersects the member's permissions with the edition's, so
+  `requireWorkspace("edit_invoices")` already 403s in a Personal workspace with
+  no route knowing why. API routes with no permission of their own call
+  `requireEditionFeature()`; edition-specific pages `notFound()` on
+  `editionHasFeature()`; the sidebar filters on the same predicate. A hidden nav
+  link is never the reason something is safe.
 - **`src/lib/billing/entitlements.ts`** — `getEntitlements(workspaceId)` returns
-  plan + limits + period usage. Gating is enforced server-side; UI state is
-  cosmetic.
+  plan + limits + period usage + the workspace's `edition`. The stored `planId`
+  is resolved against the edition (`FREE` means different limits in each), so
+  never call `PLANS[id]` where the workspace is known — use
+  `getPlan(id, edition)`. Gating is enforced server-side; UI state is cosmetic.
 - **`src/lib/prisma.ts`** — pg pool (`DB_POOL_MAX`, default 5) + driver adapter,
   fails fast on missing `DATABASE_URL`. No Prisma query engine binary needed at
   runtime.
@@ -189,7 +212,8 @@ the source of truth. Highlights:
 | `INTEGRATION_ENCRYPTION_KEY` | 32-byte hex, AES-256-GCM for OAuth tokens. Required for any integration |
 | `SUPABASE_SERVICE_ROLE_KEY` | Only for Gmail/Outlook background invoice ingestion |
 | `VAPID_SUBJECT`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | Web push |
-| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_BUSINESS` | Billing (optional) |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_BUSINESS` | Billing, Business tiers (optional) |
+| `STRIPE_PRICE_PERSONAL_PLUS`, `STRIPE_PRICE_PERSONAL_PREMIUM` | Billing, Personal tiers. Missing ids disable upgrades for personal workspaces only |
 | `DB_POOL_MAX`, `DB_POOL_IDLE_TIMEOUT_MS`, `DB_CONNECT_TIMEOUT_MS`, `SUPABASE_AUTH_TIMEOUT_MS` | Performance knobs, see `PERFORMANCE.md` |
 | `PLAID_*`, `TINK_*`, `GOCARDLESS_*`, `QUICKBOOKS_*`, `XERO_*`, `EXACT_*`, `GOOGLE_*`, `MICROSOFT_*`, `SLACK_*` | Per-provider integration credentials, all optional |
 
@@ -283,8 +307,17 @@ process is:
    `"schema":"ok"`.
 
 Existing bundles: `ops/migrations-bundle/apply-pending-migrations.sql`
-(0013–0015, includes baselining 0001–0012) and `apply-0016.sql`, plus a runbook
-`README.md`.
+(0013–0015, includes baselining 0001–0012), `apply-0016.sql`, and
+`apply-0017.sql` (**pending — this is the one the user still has to run**), plus
+a runbook `README.md`.
+
+Bundles are now verified by *execution*, not only by parsing: PGlite (Postgres
+compiled to wasm, in `node_modules` but not in `package.json`) replays the
+migration history, then the migration file and the bundle are applied to two
+databases and the resulting schemas and data diffed. The 0017 bundle was also
+checked for idempotency (three runs), survival of rows the app writes,
+convergence from a half-applied state, its pre-0016 refusal, and a failure
+injected before `COMMIT`.
 
 ### Traps discovered the hard way
 
@@ -316,6 +349,13 @@ Applied migrations: `0001_init`, `0002_conversations`, `0003_assumptions`,
 `0011_business_profile`, `0012_default_ai_provider_groq`, `0013_help_messages`,
 `0014_workspaces`, `0015_extraction_telemetry`, `0016_multi_bank_connections`.
 
+**Pending: `0017_workspace_editions`** — `workspaces.type`
+(`BUSINESS | PERSONAL`, default `BUSINESS`), the `PLUS`/`PREMIUM` plan labels,
+`budgets.category_id` + `budgets.rollover`, and the `savings_goals` /
+`savings_contributions` tables. Additive only. Until it is applied,
+`/api/health` reports `schema: "outdated"` and the dashboard shows the
+"database is mid-update" page; the Business edition is otherwise unaffected.
+
 ---
 
 ## 7. Current state — what has been built
@@ -324,7 +364,8 @@ Commit history (most recent first), each verified green before pushing:
 
 | Commit | Delivered |
 | --- | --- |
-| *(this one)* | **Ballast rebrand** — `src/lib/branding.ts` as the single source of product copy, a keel/ballast logo mark with regenerated icons and favicon, `src/lib/env-url.ts` URL env validation, `ballast_workspace` cookie with a legacy fallback, service-worker cache bumped to `ballast-shell-v3` |
+| *(this one)* | **Business / Personal dual edition** — `Workspace.type` (0017), the edition matrix in `src/lib/workspace/editions.ts` with server-side gating, landing-page choice carried through signup, "Create workspace" with a type choice, budgets / savings goals / subscription detection, a personal dashboard, personal-flavoured copilot and help agent, two plan tier sets, and the `apply-0017.sql` bundle |
+| `91ac459` | **Ballast rebrand** — `src/lib/branding.ts` as the single source of product copy, a keel/ballast logo mark with regenerated icons and favicon, `src/lib/env-url.ts` URL env validation, `ballast_workspace` cookie with a legacy fallback, service-worker cache bumped to `ballast-shell-v3` |
 | `9137717` | `/api/health` reports email configuration (diagnostic for the current email issue) |
 | `db0a502` | Rollback warning after 0016 |
 | `f3c7833` | Paste-into-Supabase bundle for 0016 |
@@ -346,10 +387,9 @@ industry benchmarks, Groq + OpenAI-compatible adapter (Groq made default),
 currency detection/parsing, PWA and Windows packaging, DB-resilience hardening,
 report-issue button.
 
-**Scale**: 42 Prisma models/enums · 60 API route handlers · 25 Vitest files ·
-16 migrations. The last full verification reported 269 passing tests before the
-final two agents added `email-delivery`, `email-health`, `ai-config`,
-`multi-connection` and related specs — run `npm test` for the current number.
+**Scale**: 46 Prisma models/enums · 66 API route handlers · 30 Vitest files ·
+17 migrations · 475 passing tests at the last full verification. Run
+`npm test` for the current number.
 
 **Docs in the repo**: `README.md`, `FIRST_RUN.md`, `DEPLOYMENT.md`,
 `PRODUCTION_CHECKLIST.md`, `PERFORMANCE.md`, `WINDOWS_APP.md`,
@@ -359,6 +399,13 @@ final two agents added `email-delivery`, `email-health`, `ai-config`,
 
 ## 8. Outstanding actions for the USER (not code)
 
+0. **Apply migration 0017** — open `ops/migrations-bundle/apply-0017.sql` on
+   GitHub, **Copy raw contents**, take a Supabase backup, paste into
+   **Supabase → SQL Editor → New query** and Run. The last result table has 23
+   rows and every one should read `OK`. Then
+   `WebFetch https://app.ballastmoney.com/api/health` → `"schema":"ok"`. Until
+   this runs, the deployed code is asking for `workspaces.type` and the app shows
+   the "database is mid-update" page.
 1. **Email delivery still reports "not configured"** in production. The user
    confirms `RESEND_API_KEY` is saved; the likely gaps are a missing
    `EMAIL_FROM`, environments not ticked for Production, or no redeploy after
@@ -380,7 +427,10 @@ final two agents added `email-delivery`, `email-health`, `ai-config`,
    marketing spend — several wealth-advisory firms use the name (services, not
    software, so coexistence is likely).
 8. Optional: verify a Stripe account and set the Stripe env vars when ready to
-   charge; add `send.ballastmoney.com` warm-up before high email volume.
+   charge; add `send.ballastmoney.com` warm-up before high email volume. Four
+   prices are needed now, not two: Pro €19 and Business €49 for the Business
+   edition, Plus €4.99 and Premium €8.99 for Personal. Shipping one edition's
+   prices first is fine — the other edition simply cannot upgrade.
 
 ---
 
@@ -441,24 +491,12 @@ per-locale product copy.
   with `NEXT_PUBLIC_APP_URL is not a valid URL: "<value>"`. Any remaining
   non-URL `NEXT_PUBLIC_*` validation can be added to the same module.
 
-### 5. Business / Personal dual edition *(largest item)*
+### 5. Business / Personal dual edition ✅ *done*
 
-- Edition choice **before/at signup** ("For my business" / "For myself") driving
-  a workspace type. Existing accounts stay Business. Users can hold both via the
-  existing workspace switcher.
-- **Personal keeps**: bank connections, import/categorization, AI chat,
-  forecasting, alerts and digests, reports/exports.
-  **Personal adds**: budgets per category with progress, savings goals,
-  recurring-subscription detection, personal-flavoured AI prompts ("Can I afford
-  this?" rather than "Can I hire?").
-  **Personal hides**: invoices/VAT, AR/AP, vendors and customers, team sharing.
-- Branding: **Ballast Business** / **Ballast Personal** under one domain — both
-  already defined in `EDITIONS` in `src/lib/branding.ts`, with `personal` unused
-  until this lands.
-- **Proposed personal pricing — not yet confirmed by the user**: Free €0
-  (1 bank, 50 AI messages) · Plus €4.99/mo (unlimited banks, 500 AI messages,
-  budgets, goals, exports) · Premium €8.99/mo (unlimited AI, assumptions,
-  everything). Business tiers unchanged at €19/€49.
+Delivered as described below; the pricing above was confirmed and implemented.
+See [section 12](#12-the-two-editions) for how it works. The one thing left is
+operational: **apply migration 0017** and, when the user wants to charge for
+Personal, create the two Stripe prices.
 
 ### Smaller undecided item
 
@@ -523,3 +561,102 @@ A healthy response looks like:
 ```json
 {"status":"ok","db":"up","storage":"up","schema":"ok","ai":{...},"latencyMs":760}
 ```
+
+---
+
+## 12. The two editions
+
+One codebase, one domain, one logo, two products. **The workspace decides, not
+the account** — a user can own a company workspace and a personal one and switch
+between them in the header.
+
+### The chain from landing page to workspace
+
+1. `/` shows two paths, `EDITIONS[...].choiceLabel` in
+   `src/lib/branding.ts`: "For my business" / "For myself".
+2. The choice becomes `?for=business|personal` on `/signup`
+   (`EDITION_PARAM` in `src/lib/workspace/editions.ts`).
+3. `signUp` writes it into Supabase **user metadata**
+   (`EDITION_METADATA_KEY = "workspace_type"`). Metadata is the only carrier that
+   survives the email-confirmation round trip — the same reason the referral code
+   travels this way. The param is also preserved on the confirmation link so the
+   post-confirm redirect keeps the flavour.
+4. First login: `getOrCreateProfile` reads the metadata and stamps the new
+   workspace's `type`. Anything unrecognised (or absent, i.e. every existing
+   account) means `BUSINESS`.
+5. Later, **Create workspace** in the switcher asks which type to make;
+   `POST /api/workspace` validates it and writes an audit entry.
+
+### The matrix
+
+`src/lib/workspace/editions.ts` is the single source of truth. Only
+*differences* live there — anything both editions have is deliberately absent.
+
+| Feature | Business | Personal |
+| --- | --- | --- |
+| `invoices` (AI extraction, VAT, AR/AP, reminders) | ✅ | — |
+| `counterparties` (vendors, customers, aging) | ✅ | — |
+| `team` (members, roles, invitations, seats) | ✅ | — |
+| `accounting` (QuickBooks, Xero, Exact) | ✅ | — |
+| `budgets` | — | ✅ |
+| `goals` | — | ✅ |
+| `subscriptions` | — | ✅ |
+
+Everything else is shared: transactions, CSV import, categories and rules, bank
+connections, forecast, copilot, reports, notifications, exports, billing, help.
+
+### How it is enforced (three layers, one predicate)
+
+- **Permissions**: `applyEditionPermissions()` runs inside
+  `getWorkspaceContext()`, so a Personal workspace never has `view_invoices`,
+  `edit_invoices` or `manage_members`. Every existing `requireWorkspace(...)`
+  call therefore gates correctly without knowing editions exist.
+- **Routes**: each edition-specific page checks `editionHasFeature()` and calls
+  `notFound()`, so a typed-in `/budgets` is rejected by the server; API routes
+  with no permission of their own use `requireEditionFeature()`, which 404s
+  (not 403 — in the wrong edition the feature does not exist).
+  `FEATURE_PATHS`/`editionAllowsPath()` map URLs to features, which is how a
+  test proves the nav never offers a link the guards would reject.
+- **Navigation**: the sidebar, mobile nav and command palette filter on the same
+  predicate, so the UI agrees with the server rather than being the reason it is
+  safe.
+
+Sections inside shared pages are gated in place: `/reports` drops its vendor,
+customer and AR/AP blocks and renames its KPIs, `/settings` swaps the Team card
+for a simpler Workspace card, `/integrations` filters the provider grid.
+
+### What Personal changes beyond gating
+
+- **Dashboard** — `PersonalDashboard` replaces the business KPI set: spending vs
+  budget, cash on hand, upcoming bills, goals progress, subscriptions total. The
+  charts (cashflow, categories, balances, largest expenses) are shared via
+  `components/dashboard/charts-section.tsx`.
+- **Copilot** — `buildSystemPrompt(snapshot, edition)` swaps the CFO voice for a
+  money coach; suggested questions become "Where did my money go this month?",
+  "Can I afford …?".
+- **Help agent** — topics carry an `editions` field; `getHelpTopics(edition)`
+  hides invoice/team topics from personal users and budget/goal topics from
+  business ones, and the prompt's app map is built per edition.
+- **Plans** — `EDITION_PLANS` in `src/lib/billing/plans.ts`. The stored `PlanId`
+  is resolved *with* the edition, because `FREE` means 1 bank connection and 50
+  AI messages in Personal and something different in Business.
+
+### Pricing as implemented
+
+| | Free | Paid 1 | Paid 2 | Paid 3 |
+| --- | --- | --- | --- | --- |
+| Business | €0 | Pro €19 | Business €49 | Enterprise (contact sales) |
+| Personal | €0, 1 bank, 50 AI msgs, budgets | Plus €4.99: unlimited banks, 500 AI msgs, goals, subscription insights, exports | Premium €8.99: unlimited AI, what-if assumptions | — |
+
+Personal is single-user: `seats: 1` on every tier, and
+`invoiceExtractionsPerMonth: 0` (the usage meter hides itself rather than
+showing 0/0). Bank-connection quota is enforced in
+`src/lib/integrations/bank-quota.ts`, checked at the connect route *before* the
+OAuth round trip as well as at save time.
+
+### Tests
+
+`tests/editions.test.ts` (gating matrix, permissions, route guards, navigation,
+the signup → workspace-type flow, per-edition plan resolution, AI flavouring),
+`tests/budgets.test.ts` (spent vs budget, rollover), `tests/goals.test.ts`
+(projection math), `tests/subscriptions.test.ts` (detection on fixtures).

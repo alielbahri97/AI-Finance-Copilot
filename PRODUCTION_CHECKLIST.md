@@ -32,9 +32,19 @@ apply if you enable that feature.
 - [ ] RLS enabled on all tables in the `public` schema with no anon-role policies
       (Prisma connects with the postgres role; the anon key must not read app tables)
 - [ ] All migrations applied: `npx prisma migrate deploy` (through
-      `0015_extraction_telemetry`; note `0014_workspaces` migrates every existing user
+      `0017_workspace_editions`; note `0014_workspaces` migrates every existing user
       into a personal workspace and remaps all business data to workspace scope — take a
-      backup first and apply it in one go)
+      backup first and apply it in one go). From a machine that cannot reach Postgres,
+      paste `ops/migrations-bundle/apply-0016.sql` and then `apply-0017.sql` into the
+      Supabase SQL editor instead; each records its own `_prisma_migrations` row, so
+      `npm run db:apply` agrees afterwards.
+- [ ] `0017_workspace_editions` applied: adds `workspaces.type`
+      (`BUSINESS | PERSONAL`, default `BUSINESS`, so every existing workspace stays on
+      the Business edition), the `PLUS`/`PREMIUM` plan tiers, `budgets.category_id` +
+      `budgets.rollover`, and the `savings_goals` / `savings_contributions` tables.
+      Additive only — nothing is dropped or narrowed, and an Instant Rollback to
+      pre-0017 code runs fine on the new schema. Verify with result set 2 of the
+      bundle: every existing workspace should read `BUSINESS`.
 - [ ] `GROQ_VISION_MODEL` verified against https://console.groq.com/docs/vision (Groq
       rotates vision-capable models; a stale id makes image invoice extraction fall back
       or fail with a reason on the review page)
@@ -43,7 +53,11 @@ apply if you enable that feature.
 ## Stripe *(optional)*
 
 - [ ] Live-mode products and monthly prices created; `STRIPE_PRICE_PRO` /
-      `STRIPE_PRICE_BUSINESS` match `src/lib/billing/plans.ts` pricing
+      `STRIPE_PRICE_BUSINESS` (Business edition, €19 / €49) and
+      `STRIPE_PRICE_PERSONAL_PLUS` / `STRIPE_PRICE_PERSONAL_PREMIUM` (Personal
+      edition, €4.99 / €8.99) match `src/lib/billing/plans.ts` pricing. A missing
+      personal price id only disables upgrades for personal workspaces; the
+      Business tiers keep working.
 - [ ] Webhook endpoint `https://<domain>/api/webhooks/stripe` subscribed to
       `checkout.session.completed`, `customer.subscription.created/updated/deleted`,
       `invoice.paid`, `invoice.payment_failed`; `STRIPE_WEBHOOK_SECRET` set from it
