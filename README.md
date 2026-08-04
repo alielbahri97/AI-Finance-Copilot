@@ -294,14 +294,7 @@ npm run db:seed -- <supabase-user-id> <email>
 In-app notifications (the bell in the header) work out of the box. Email and push are
 enabled by env vars — when they are missing, those sends are logged and skipped.
 
-**Email (Resend)** — create an API key at [resend.com](https://resend.com), verify your
-sending domain, and set:
-
-```bash
-RESEND_API_KEY="re_..."
-EMAIL_FROM="FinPilot <notifications@yourdomain.com>"
-NEXT_PUBLIC_APP_URL="https://yourapp.vercel.app"   # used for links in emails
-```
+**Email (Resend)** — see [Email delivery (Resend)](#email-delivery-resend) below.
 
 **Web Push (VAPID)** — generate a key pair once and put it in the env:
 
@@ -409,6 +402,43 @@ invoices upsert by `external_ref`; Gmail/Outlook PDF attachments flow through th
 extraction pipeline into the review queue; Slack/Teams act as additional notification
 channels; Google Calendar events for upcoming bills are opt-in via a toggle on the card.
 
+## Email delivery (Resend)
+
+Email is optional. The app runs fine without it — in-app notifications still work, and
+**team invitations always show a copyable link that works on its own**, so you can onboard
+a partner with no mail setup at all.
+
+**1. Get an API key.** Sign up at [resend.com](https://resend.com) and create an API key
+(`re_...`) under *API Keys*.
+
+**2. Set the two env vars** and restart the server:
+
+```bash
+RESEND_API_KEY="re_..."
+EMAIL_FROM="FinPilot <notifications@send.yourdomain.com>"
+NEXT_PUBLIC_APP_URL="https://yourapp.vercel.app"   # used for links inside emails
+```
+
+Both are required: with either one missing the app reports `not_configured` and skips the
+send rather than pretending it worked.
+
+**3. Verify a sending domain — this is the step people miss.** Resend will not deliver to
+arbitrary recipients until you have verified a domain. With the shared
+`onboarding@resend.dev` sender you can *only* email the address your Resend account was
+registered with; anything else comes back as HTTP 403 ("you can only send testing emails to
+your own email address… please verify a domain"). Add your domain under
+*Domains → Add domain*, publish the DNS records it gives you, and point `EMAIL_FROM` at it.
+Use a dedicated subdomain such as `send.yourdomain.com` (Resend's recommendation): sending
+reputation stays isolated from your main domain's mail, and the DNS records don't collide
+with an existing mailbox provider on the apex.
+
+**How failures surface.** Every send goes through `sendEmail()` in
+`src/lib/notifications/email.ts`, which returns `sent`, `not_configured`, or `failed` (with
+the provider message, sanitized, and a `domainRestricted` flag for the case above) and logs
+it through the structured logger. The invite dialog shows that status next to the link, and
+*Settings → Notifications* says plainly when email delivery isn't configured instead of
+implying the channel works.
+
 ## Scripts
 
 | Script               | Purpose                                  |
@@ -485,7 +515,7 @@ keys are missing. Full commented reference in [.env.example](.env.example).
 | `NEXT_PUBLIC_ISSUES_URL` | — | GitHub Issues new-issue URL for “Report issue” (falls back to mailto) |
 | `NEXT_PUBLIC_SUPPORT_EMAIL` | — | Mailto fallback when `NEXT_PUBLIC_ISSUES_URL` is unset |
 | `AI_PROVIDER`, `GROQ_API_KEY`, `GROQ_MODEL`, `GROQ_VISION_MODEL`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | — | AI copilot, help agent, forecast explanations, invoice extraction, digests. Model ids are read at request time, so retiring a hosted model is fixed by editing the `*_MODEL` variable — see `/api/health` for the ids in use |
-| `RESEND_API_KEY`, `EMAIL_FROM` | — | Email notification channel |
+| `RESEND_API_KEY`, `EMAIL_FROM` | — | Email channel for notifications and invites — both required, and Resend needs a verified sending domain (see [Email delivery](#email-delivery-resend)) |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | — | Web Push channel |
 | `CRON_SECRET` | ✅ in prod | Bearer token for both cron endpoints |
 | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | — | Shared rate limiting for multi-instance deployments |
@@ -531,9 +561,17 @@ check is the source of truth.
 
 **Invitations.** Owners/admins invite by email with a role. Invitations are single-use,
 bound to the invited email, expire after 7 days, and can be revoked while pending; only a
-SHA-256 hash of the invite token is stored. The invite is emailed via Resend when
-configured — otherwise the dialog shows a copyable link. Accepting requires signing in (or
-signing up) with the invited address at `/invite/<token>`.
+SHA-256 hash of the invite token is stored. Accepting requires signing in (or signing up)
+with the invited address at `/invite/<token>`.
+
+The **link is the reliable path** and is always shown with a Copy button after inviting
+(plus the native share sheet on mobile); email is a convenience on top and its outcome —
+sent, not configured, or failed — is reported honestly next to the link, including targeted
+guidance for Resend's unverified-domain restriction. A send failure never blocks the
+invitation. Because only the hash is stored, a pending invite's original link cannot be
+shown again: *Get link* in the Team list regenerates it, which revokes the old invitation,
+issues a new token and expiry, and is recorded in the audit log. Seat usage is unaffected —
+exactly one of the two rows is pending at any moment.
 
 **Seats.** Seats (members + pending invitations) come from the plan: Free/Pro 1, Business
 5, Enterprise custom. Inviting beyond the limit returns an upgrade prompt. The workspace —

@@ -8,6 +8,8 @@ import {
   hashInviteToken,
   invitationExpiry,
   INVITATION_TTL_DAYS,
+  isPendingInvitation,
+  planInvitationRegeneration,
 } from "@/lib/workspace/invitations";
 import {
   ALL_PERMISSIONS,
@@ -163,6 +165,70 @@ describe("invitation acceptance", () => {
       valid: false,
       reason: "email_mismatch",
     });
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* Regenerating an invite link                                         */
+/* ------------------------------------------------------------------ */
+
+describe("invitation link regeneration", () => {
+  const now = new Date("2026-08-04T12:00:00Z");
+  const original = {
+    email: "partner@example.com",
+    role: "MEMBER" as const,
+    tokenHash: hashInviteToken("original-token"),
+    expiresAt: new Date("2026-08-06T12:00:00Z"),
+    acceptedAt: null as Date | null,
+    revokedAt: null as Date | null,
+  };
+
+  it("issues a fresh token, stores only its hash, and resets the expiry", () => {
+    const plan = planInvitationRegeneration(now);
+
+    expect(plan.token).toMatch(/^[\w-]+$/);
+    expect(plan.tokenHash).toBe(hashInviteToken(plan.token));
+    expect(plan.tokenHash).not.toBe(original.tokenHash);
+    // The raw token must never be recoverable from what gets persisted.
+    expect(plan.tokenHash).not.toContain(plan.token);
+    expect(plan.expiresAt).toEqual(invitationExpiry(now));
+    expect(plan.expiresAt.getTime()).toBeGreaterThan(original.expiresAt.getTime());
+  });
+
+  it("revokes the superseded invitation so its old link stops working", () => {
+    const plan = planInvitationRegeneration(now);
+    const superseded = { ...original, revokedAt: plan.revokedAt };
+
+    expect(plan.revokedAt).toEqual(now);
+    expect(isPendingInvitation(superseded, now)).toBe(false);
+    expect(assessInvitation(superseded, original.email, now)).toEqual({
+      valid: false,
+      reason: "revoked",
+    });
+  });
+
+  it("does not double-count the seat: exactly one of the two rows stays pending", () => {
+    const plan = planInvitationRegeneration(now);
+    const rows = [
+      { ...original, revokedAt: plan.revokedAt },
+      { ...original, tokenHash: plan.tokenHash, expiresAt: plan.expiresAt },
+    ];
+
+    const pending = rows.filter((row) => isPendingInvitation(row, now));
+    expect(pending).toHaveLength(1);
+    expect(pending[0].tokenHash).toBe(plan.tokenHash);
+    expect(canAddSeat(1, pending.length, 2)).toEqual({
+      allowed: false,
+      seatsUsed: 2,
+      seatLimit: 2,
+    });
+  });
+
+  it("counts an accepted or expired invitation as no longer pending", () => {
+    expect(isPendingInvitation(original, now)).toBe(true);
+    expect(isPendingInvitation({ ...original, acceptedAt: now }, now)).toBe(false);
+    expect(isPendingInvitation(original, new Date("2026-08-07T12:00:00Z"))).toBe(false);
+    expect(isPendingInvitation(original, original.expiresAt)).toBe(false);
   });
 });
 

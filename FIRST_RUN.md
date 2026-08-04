@@ -93,6 +93,36 @@ Now the **Dashboard** charts populate, **Forecast** detects the recurring
 salary/rent/subscription patterns, and the **Copilot** chat can answer
 questions about the data (requires the AI key).
 
+## 8. (Optional) Email delivery (Resend)
+
+Nothing in the app requires email: in-app notifications work out of the box, and
+**team invites always show a copyable link** that gets your partner in without
+a single email being sent. Set it up only if you want digests, alerts and
+invites to land in an inbox.
+
+1. Create an API key at [resend.com](https://resend.com) → *API Keys*.
+2. Put both values in `.env` and restart the dev server:
+
+   ```powershell
+   RESEND_API_KEY="re_..."
+   EMAIL_FROM="FinPilot <notifications@send.yourdomain.com>"
+   ```
+
+   If either is missing, the app reports "email delivery isn't set up" instead
+   of pretending the send worked.
+
+3. **Verify a sending domain.** Resend only delivers to the address your Resend
+   account is registered with until you verify a domain — inviting anyone else
+   fails with a 403 ("you can only send testing emails to your own email
+   address"). Add your domain under *Domains*, publish the DNS records, and set
+   `EMAIL_FROM` to it. A dedicated `send.yourdomain.com` subdomain is the
+   recommended setup: it keeps sending reputation separate and avoids clashing
+   with the mail records on your apex domain.
+
+Until that is done, invite people with the link — *Settings → Team → Invite
+member* shows it with a Copy button, and *Get link* reissues one for a pending
+invitation.
+
 ## Troubleshooting
 
 - **`db:apply` hangs or times out** — Postgres TCP is blocked on your
@@ -101,6 +131,10 @@ questions about the data (requires the AI key).
   `*.supabase.co` (proxy-only network) or the Supabase URL/key is wrong.
 - **Copilot errors** — `OPENAI_API_KEY` missing/invalid, or
   `api.openai.com` unreachable from the network.
+- **An invite never arrives by email** — either `RESEND_API_KEY`/`EMAIL_FROM`
+  are unset, or Resend is refusing the recipient because no sending domain is
+  verified (step 8). The invite dialog says which one it is; share the invite
+  link in the meantime.
 - **`prisma generate` fails** (`binaries.prisma.sh` blocked) — only needed
   after schema changes; the stub-engine workaround is described in the
   README's corporate network section.

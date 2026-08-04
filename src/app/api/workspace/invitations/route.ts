@@ -102,7 +102,9 @@ export async function POST(request: Request) {
   const inviteLink = appUrl(`/invite/${token}`);
   const inviterName =
     (user.user_metadata?.full_name as string | undefined) ?? user.email ?? "A teammate";
-  const emailSent = await sendInvitationEmail({
+  // Delivery is reported, not enforced: the invitation stands either way and
+  // the link below always works.
+  const delivery = await sendInvitationEmail({
     email,
     workspaceName: workspace.name,
     inviterName,
@@ -110,5 +112,8 @@ export async function POST(request: Request) {
   });
 
   // The raw token appears only in this response and the email — never stored.
-  return NextResponse.json({ invitation, inviteLink, emailSent }, { status: 201 });
+  return NextResponse.json(
+    { invitation, inviteLink, emailDelivery: delivery },
+    { status: 201 }
+  );
 }

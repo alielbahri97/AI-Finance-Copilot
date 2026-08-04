@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 export type AuditAction =
   | "member.invited"
   | "member.invitation_revoked"
+  | "member.invitation_regenerated"
   | "member.joined"
   | "member.removed"
   | "member.left"

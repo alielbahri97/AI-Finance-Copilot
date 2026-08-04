@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BellRingIcon, Loader2Icon } from "lucide-react";
+import { BellRingIcon, Loader2Icon, MailWarningIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -269,7 +269,7 @@ export function NotificationSettings({
             <p className={rowHint}>
               {emailConfigured
                 ? "Delivered via Resend to your account email"
-                : "Not configured on the server (RESEND_API_KEY) — sends are skipped"}
+                : "Email delivery is not configured — nothing is sent on this channel"}
             </p>
           </div>
           <Switch
@@ -277,6 +277,17 @@ export function NotificationSettings({
             onCheckedChange={(value) => set("channelEmail", value)}
           />
         </div>
+        {!emailConfigured && (
+          <div className="text-muted-foreground bg-muted/40 flex items-start gap-2 rounded-md border p-3 text-xs">
+            <MailWarningIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
+            <p>
+              Email delivery isn&apos;t set up, so this switch has no effect. An administrator
+              needs to set <code className="font-mono">RESEND_API_KEY</code> and{" "}
+              <code className="font-mono">EMAIL_FROM</code> on the server. Resend also only
+              delivers to your own address until a sending domain is verified.
+            </p>
+          </div>
+        )}
         <div className={row}>
           <div className={rowText}>
             <p className={rowTitle}>Push</p>

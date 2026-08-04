@@ -230,7 +230,27 @@ Exports require the Pro plan or higher (see [Billing](/billing)).`,
 3. Pick **channels** per type: in-app (always available), email, and browser push notifications (click enable and accept the browser prompt).
 4. In-app notifications arrive at the **bell icon** in the header — open it to read or mark all read.
 
-If email or push options appear disabled, that channel hasn't been configured on the server (administrator: set RESEND_API_KEY for email, VAPID keys for push).`,
+If email or push options appear disabled, that channel hasn't been configured on the server (administrator: set RESEND_API_KEY and EMAIL_FROM for email, VAPID keys for push).`,
+    },
+    {
+      id: "team-invitations",
+      title: "Inviting people and invite links",
+      keywords: [
+        "invite", "invitation", "invited", "team", "member", "members", "colleague",
+        "partner", "accountant", "seat", "seats", "role", "permission", "workspace",
+        "not received", "didn't arrive", "link",
+      ],
+      content: `Invite people in [Settings](/settings) → **Team** → *Invite member*: enter their email, pick a role (Admin, Member or Viewer), and send.
+
+**The invite link is what actually gets them in.** After inviting, the dialog shows the link with a Copy button — send it to them however you like (chat, SMS, your own email). They open it, sign in or sign up **with the invited email address**, and join the workspace. The link is single-use and expires after 7 days.
+
+**If no email arrives**, the dialog tells you why underneath the link:
+- *Email delivery isn't set up* — an administrator has to set RESEND_API_KEY and EMAIL_FROM on the server. Share the link instead; nothing else is needed.
+- *Resend only delivers to your own address until you verify a domain* — the email provider is in testing mode. Share the link, or verify a sending domain in Resend.
+
+An invite link can't be shown twice (only a hashed copy is stored), so for an invitation already in the **Pending invitations** list use **Get link**: it issues a fresh link and the previous one stops working. **Revoke** cancels the invitation entirely.
+
+Members plus pending invitations use up your plan's seats — see [Billing](/billing) if you run out.`,
     },
     {
       id: "bank-connections",

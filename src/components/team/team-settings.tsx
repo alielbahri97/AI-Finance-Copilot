@@ -1,12 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CopyIcon,
+  LinkIcon,
   Loader2Icon,
   LogOutIcon,
   MailPlusIcon,
+  Share2Icon,
   ShieldIcon,
   Trash2Icon,
   UserMinusIcon,
@@ -35,6 +37,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import type { EmailDeliveryResult } from "@/lib/notifications/email";
 import {
   ALL_PERMISSIONS,
   assignableRoles,
@@ -135,7 +138,14 @@ export function TeamSettings({
 
       {canManage && invitations.length > 0 && (
         <div className="flex flex-col gap-2">
-          <h3 className="text-sm font-medium">Pending invitations</h3>
+          <div>
+            <h3 className="text-sm font-medium">Pending invitations</h3>
+            <p className="text-muted-foreground text-xs">
+              Invite links are stored hashed and can&apos;t be shown again — use{" "}
+              <span className="font-medium">Get link</span> to issue a fresh one (the previous
+              link stops working).
+            </p>
+          </div>
           <ul className="flex flex-col divide-y rounded-lg border">
             {invitations.map((invitation) => (
               <InvitationRow
@@ -159,6 +169,119 @@ export function TeamSettings({
 }
 
 /* ------------------------------------------------------------------ */
+/* Invite link + email delivery status                                 */
+/* ------------------------------------------------------------------ */
+
+interface InviteResult {
+  invitation: PendingInvitationView;
+  inviteLink: string;
+  emailDelivery: EmailDeliveryResult;
+}
+
+/** navigator.share is mobile-only; resolved after mount to keep SSR stable. */
+function useCanShare(): boolean {
+  const [canShare, setCanShare] = useState(false);
+  useEffect(() => {
+    setCanShare(typeof navigator !== "undefined" && typeof navigator.share === "function");
+  }, []);
+  return canShare;
+}
+
+/**
+ * The link is the part that always works, so it leads. Email delivery is
+ * reported underneath as a fact, never as an assumption.
+ */
+function InviteLinkPanel({ result }: { result: InviteResult }) {
+  const canShare = useCanShare();
+  const email = result.invitation.email;
+
+  async function share() {
+    try {
+      await navigator.share({
+        title: "Join my FinPilot workspace",
+        text: `Join my FinPilot workspace — sign in with ${email}.`,
+        url: result.inviteLink,
+      });
+    } catch {
+      // The user dismissed the share sheet; nothing to report.
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-sm">
+        Invitation created. Send this link to <span className="font-medium">{email}</span> — they
+        will need to sign in with that address.
+      </p>
+      <div className="flex items-center gap-2">
+        <Input readOnly value={result.inviteLink} aria-label="Invitation link" />
+        <Button
+          aria-label="Copy invitation link"
+          onClick={() => {
+            void navigator.clipboard.writeText(result.inviteLink);
+            toast.success("Link copied");
+          }}
+        >
+          <CopyIcon />
+          Copy
+        </Button>
+        {canShare && (
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Share invitation link"
+            onClick={() => void share()}
+          >
+            <Share2Icon />
+          </Button>
+        )}
+      </div>
+      <EmailDeliveryNote email={email} delivery={result.emailDelivery} />
+    </div>
+  );
+}
+
+function EmailDeliveryNote({ email, delivery }: { email: string; delivery: EmailDeliveryResult }) {
+  if (delivery.status === "sent") {
+    return <p className="text-muted-foreground text-xs">We also emailed the link to {email}.</p>;
+  }
+
+  if (delivery.status === "not_configured") {
+    return (
+      <div className="text-muted-foreground flex flex-col gap-1 text-xs">
+        <p>Email delivery isn&apos;t set up, so use the link above.</p>
+        <details>
+          <summary className="cursor-pointer">Enable email (admin)</summary>
+          <p className="mt-1">
+            Set <code className="font-mono">RESEND_API_KEY</code> and{" "}
+            <code className="font-mono">EMAIL_FROM</code> on the server, then restart it.
+          </p>
+        </details>
+      </div>
+    );
+  }
+
+  return (
+    <div className="text-muted-foreground flex flex-col gap-1 text-xs">
+      {delivery.domainRestricted ? (
+        <p>
+          Resend only delivers to your own address until you verify a domain — share the link
+          instead, or verify a domain in Resend.
+        </p>
+      ) : (
+        <p>The invitation email couldn&apos;t be sent, so share the link above.</p>
+      )}
+      {delivery.error && (
+        <details>
+          <summary className="cursor-pointer">Provider response</summary>
+          <p className="mt-1 break-words">{delivery.error}</p>
+        </details>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Invite dialog                                                       */
 /* ------------------------------------------------------------------ */
 
@@ -175,17 +298,22 @@ function InviteDialog({
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<WorkspaceRoleName>("MEMBER");
   const [isLoading, setIsLoading] = useState(false);
-  const [result, setResult] = useState<{ inviteLink: string; emailSent: boolean } | null>(null);
+  const [result, setResult] = useState<InviteResult | null>(null);
 
   async function invite() {
     setIsLoading(true);
     try {
-      const data = await api("/api/workspace/invitations", "POST", { email, role });
-      setResult({ inviteLink: data.inviteLink, emailSent: data.emailSent });
-      toast.success(
-        data.emailSent ? `Invitation emailed to ${email}` : "Invitation created",
-        data.emailSent ? undefined : { description: "Share the invite link manually." }
-      );
+      const data = (await api("/api/workspace/invitations", "POST", {
+        email,
+        role,
+      })) as InviteResult;
+      setResult(data);
+      toast.success("Invitation created", {
+        description:
+          data.emailDelivery.status === "sent"
+            ? `Emailed to ${email}. The link is in the dialog too.`
+            : "Copy the link in the dialog and send it to them.",
+      });
       onDone();
     } catch (error) {
       toast.error("Couldn't send the invitation", {
@@ -222,27 +350,7 @@ function InviteDialog({
           </DialogDescription>
         </DialogHeader>
         {result ? (
-          <div className="flex flex-col gap-3">
-            <p className="text-sm">
-              {result.emailSent
-                ? "The invitation email is on its way. You can also share the link directly:"
-                : "Email sending isn't configured — share this link with them instead:"}
-            </p>
-            <div className="flex items-center gap-2">
-              <Input readOnly value={result.inviteLink} aria-label="Invitation link" />
-              <Button
-                variant="outline"
-                size="icon"
-                aria-label="Copy invitation link"
-                onClick={() => {
-                  navigator.clipboard.writeText(result.inviteLink);
-                  toast.success("Link copied");
-                }}
-              >
-                <CopyIcon />
-              </Button>
-            </div>
-          </div>
+          <InviteLinkPanel result={result} />
         ) : (
           <div className="flex flex-col gap-4">
             <div className="grid gap-2">
@@ -495,16 +603,38 @@ function InvitationRow({
   onChanged: () => void;
 }) {
   const [isBusy, setIsBusy] = useState(false);
+  const [link, setLink] = useState<InviteResult | null>(null);
+  // Regenerating replaces the row server-side; tracking the live invitation
+  // here keeps the freshly issued link on screen instead of refreshing it away.
+  const [current, setCurrent] = useState(invitation);
   const daysLeft = Math.max(
     0,
-    Math.ceil((new Date(invitation.expiresAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000))
+    Math.ceil((new Date(current.expiresAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000))
   );
+
+  async function regenerate() {
+    setIsBusy(true);
+    try {
+      const data = (await api(
+        `/api/workspace/invitations/${current.id}/regenerate`,
+        "POST"
+      )) as InviteResult;
+      setCurrent(data.invitation);
+      setLink(data);
+    } catch (error) {
+      toast.error("Couldn't create a new link", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    } finally {
+      setIsBusy(false);
+    }
+  }
 
   async function revoke() {
     setIsBusy(true);
     try {
-      await api(`/api/workspace/invitations/${invitation.id}`, "DELETE");
-      toast.success(`Invitation for ${invitation.email} revoked`);
+      await api(`/api/workspace/invitations/${current.id}`, "DELETE");
+      toast.success(`Invitation for ${current.email} revoked`);
       onChanged();
     } catch (error) {
       toast.error("Couldn't revoke the invitation", {
@@ -516,24 +646,45 @@ function InvitationRow({
   }
 
   return (
-    <li className="flex items-center gap-3 p-3">
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm">{invitation.email}</p>
-        <p className="text-muted-foreground text-xs">
-          {invitation.role.charAt(0) + invitation.role.slice(1).toLowerCase()} · expires in{" "}
-          {daysLeft} day{daysLeft === 1 ? "" : "s"}
-        </p>
+    <li className="flex flex-col gap-3 p-3">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm">{current.email}</p>
+          <p className="text-muted-foreground text-xs">
+            {current.role.charAt(0) + current.role.slice(1).toLowerCase()} · expires in {daysLeft}{" "}
+            day{daysLeft === 1 ? "" : "s"}
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void regenerate()}
+          disabled={isBusy}
+          title="Issues a new link and invalidates the previous one"
+        >
+          {isBusy ? <Loader2Icon className="animate-spin" /> : <LinkIcon />}
+          Get link
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-destructive size-8"
+          onClick={revoke}
+          disabled={isBusy}
+          aria-label={`Revoke invitation for ${current.email}`}
+        >
+          <Trash2Icon />
+        </Button>
       </div>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="text-destructive size-8"
-        onClick={revoke}
-        disabled={isBusy}
-        aria-label={`Revoke invitation for ${invitation.email}`}
-      >
-        <Trash2Icon />
-      </Button>
+      {link && (
+        <div className="bg-muted/40 flex flex-col gap-2 rounded-md border p-3">
+          <p className="text-muted-foreground text-xs">
+            The original link was stored hashed and can&apos;t be shown again, so this is a fresh
+            one — the previous link no longer works.
+          </p>
+          <InviteLinkPanel result={link} />
+        </div>
+      )}
     </li>
   );
 }

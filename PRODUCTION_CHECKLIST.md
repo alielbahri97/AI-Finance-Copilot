@@ -51,6 +51,8 @@ apply if you enable that feature.
 ## Notifications *(optional)*
 
 - [ ] Resend API key + verified sending domain; `EMAIL_FROM` uses that domain
+      (unverified = Resend only delivers to your own account address, so team
+      invites to anyone else fail with a 403 — they still work via their link)
 - [ ] VAPID keys generated and set; push tested from Settings on a real device
 - [ ] Cron running: Vercel Cron jobs visible (or self-hosted crontab installed) and a
       manual `curl -H "Authorization: Bearer $CRON_SECRET" .../api/cron/notifications`

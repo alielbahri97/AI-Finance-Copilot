@@ -3,23 +3,101 @@ import "server-only";
 import { logger, serializeError } from "@/lib/logger";
 
 /**
- * Email channel via Resend's REST API (plain fetch, no SDK). When the
- * RESEND_API_KEY / EMAIL_FROM env vars are missing the send is logged and
- * skipped gracefully — in-app notifications still work.
+ * Email channel via Resend's REST API (plain fetch, no SDK). Every send goes
+ * through sendEmail() so callers get the same three-way answer — delivered,
+ * not configured, or failed — instead of a silent no-op.
  */
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
+
+/** What actually happened to a send, so the UI can say something true. */
+export type EmailDeliveryStatus = "sent" | "not_configured" | "failed";
+
+export interface EmailDeliveryResult {
+  status: EmailDeliveryStatus;
+  /** Provider message, sanitized for display. Only set when status is "failed". */
+  error?: string;
+  /**
+   * Resend refuses to deliver to anyone but the account owner until a sending
+   * domain is verified. That is a setup step, not an outage, so it gets its
+   * own flag and its own guidance in the UI.
+   */
+  domainRestricted?: boolean;
+}
 
 export function isEmailConfigured(): boolean {
   return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
 }
 
-export async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
+const DOMAIN_RESTRICTION_HINTS = [
+  /verify a domain/i,
+  /domain is not verified/i,
+  /testing emails/i,
+  /your own email address/i,
+  /resend\.com\/domains/i,
+];
+
+/** Pulls the human-readable part out of a provider error body. */
+function extractProviderMessage(body: string, status: number): string {
+  const trimmed = body.trim();
+  if (trimmed.length === 0) return `Resend returned HTTP ${status}`;
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    if (parsed && typeof parsed === "object") {
+      const record = parsed as Record<string, unknown>;
+      for (const key of ["message", "error"]) {
+        if (typeof record[key] === "string" && record[key].trim().length > 0) {
+          return record[key] as string;
+        }
+      }
+    }
+  } catch {
+    // Not JSON — fall through to the raw body.
+  }
+  return trimmed;
+}
+
+/**
+ * Strips anything credential-shaped before the message reaches a client, and
+ * keeps it short enough for a toast.
+ */
+function sanitizeProviderMessage(message: string): string {
+  return message
+    .replace(/re_[A-Za-z0-9_-]{6,}/g, "re_***")
+    .replace(/Bearer\s+\S+/gi, "Bearer ***")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 300);
+}
+
+/**
+ * Turns a Resend HTTP error into a displayable result. Exported for tests and
+ * for any caller that talks to the API directly.
+ */
+export function classifyEmailFailure(status: number, body: string): EmailDeliveryResult {
+  const message = sanitizeProviderMessage(extractProviderMessage(body, status));
+  const domainRestricted =
+    DOMAIN_RESTRICTION_HINTS.some((hint) => hint.test(message)) ||
+    // A rejected key comes back as 401; a 403 from Resend is the sandbox rule.
+    (status === 403 && !/api key/i.test(message));
+  return { status: "failed", error: message, domainRestricted };
+}
+
+/**
+ * Sends one email and reports what happened. Never throws: callers treat email
+ * as best-effort, but they are expected to surface or log the result.
+ */
+export async function sendEmail(
+  to: string,
+  subject: string,
+  html: string,
+  channel = "notifications"
+): Promise<EmailDeliveryResult> {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.EMAIL_FROM;
   if (!apiKey || !from) {
-    logger.info(`[notifications] email skipped (RESEND_API_KEY/EMAIL_FROM not set): "${subject}"`);
-    return false;
+    logger.info("[email] send skipped — RESEND_API_KEY/EMAIL_FROM not set", { channel, subject });
+    return { status: "not_configured" };
   }
 
   try {
@@ -33,13 +111,25 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
     });
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
-      logger.error(`[notifications] Resend returned ${response.status}: ${detail.slice(0, 300)}`);
-      return false;
+      const result = classifyEmailFailure(response.status, detail);
+      logger.error("[email] provider rejected the send", {
+        channel,
+        subject,
+        httpStatus: response.status,
+        domainRestricted: result.domainRestricted,
+        providerError: result.error,
+      });
+      return result;
     }
-    return true;
+    return { status: "sent" };
   } catch (error) {
-    logger.error("[notifications] email send", { error: serializeError(error) });
-    return false;
+    const serialized = serializeError(error);
+    logger.error("[email] send failed", { channel, subject, error: serialized });
+    return {
+      status: "failed",
+      error: sanitizeProviderMessage(serialized.message),
+      domainRestricted: false,
+    };
   }
 }
 

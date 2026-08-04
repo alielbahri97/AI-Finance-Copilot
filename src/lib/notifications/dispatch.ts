@@ -57,9 +57,22 @@ export async function dispatchNotification(
   }
 
   if (prefs.channelEmail && event.emailHtml) {
-    await sendEmail(user.email, event.emailSubject ?? event.title, event.emailHtml).catch(
-      (error) => logger.error("[notifications] email channel", { error: serializeError(error) })
-    );
+    const result = await sendEmail(
+      user.email,
+      event.emailSubject ?? event.title,
+      event.emailHtml,
+      `notification:${event.type.toLowerCase()}`
+    ).catch((error) => {
+      logger.error("[notifications] email channel", { error: serializeError(error) });
+      return null;
+    });
+    if (result?.status === "failed") {
+      logger.warn("[notifications] email channel undelivered", {
+        type: event.type,
+        domainRestricted: result.domainRestricted,
+        providerError: result.error,
+      });
+    }
   }
 
   if (prefs.channelPush) {

@@ -26,6 +26,47 @@ export interface InvitationState {
   revokedAt: Date | null;
 }
 
+/**
+ * Pending = still usable and still consuming a seat. Mirrors the where-clause
+ * used for the pending-invitation queries.
+ */
+export function isPendingInvitation(
+  invitation: Pick<InvitationState, "expiresAt" | "acceptedAt" | "revokedAt">,
+  now = new Date()
+): boolean {
+  return (
+    invitation.acceptedAt === null &&
+    invitation.revokedAt === null &&
+    invitation.expiresAt.getTime() > now.getTime()
+  );
+}
+
+export interface RegenerationPlan {
+  /** The raw token — goes into the new link and is never persisted. */
+  token: string;
+  tokenHash: string;
+  expiresAt: Date;
+  /** Stamped on the superseded invitation so its old link stops working. */
+  revokedAt: Date;
+}
+
+/**
+ * A pending invite's raw token only ever existed in the original link, so it
+ * cannot be shown again. Getting a fresh link therefore means replacing the
+ * invitation: revoke the old one and issue a new token with a new expiry. The
+ * seat count is unaffected — the old row stops being pending as the new one
+ * starts.
+ */
+export function planInvitationRegeneration(now = new Date()): RegenerationPlan {
+  const token = generateInviteToken();
+  return {
+    token,
+    tokenHash: hashInviteToken(token),
+    expiresAt: invitationExpiry(now),
+    revokedAt: now,
+  };
+}
+
 export type InvitationAssessment =
   | { valid: true }
   | { valid: false; reason: "accepted" | "revoked" | "expired" | "email_mismatch" };

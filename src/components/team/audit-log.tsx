@@ -16,6 +16,7 @@ export interface AuditEntryView {
 const ACTION_LABELS: Record<string, string> = {
   "member.invited": "invited a member",
   "member.invitation_revoked": "revoked an invitation",
+  "member.invitation_regenerated": "issued a new invitation link",
   "member.joined": "joined the workspace",
   "member.removed": "removed a member",
   "member.left": "left the workspace",

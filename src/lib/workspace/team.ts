@@ -1,17 +1,25 @@
 import "server-only";
 
 import { logger, serializeError } from "@/lib/logger";
-import { appUrl, isEmailConfigured, renderAlertEmail, sendEmail } from "@/lib/notifications/email";
+import {
+  appUrl,
+  renderAlertEmail,
+  sendEmail,
+  type EmailDeliveryResult,
+} from "@/lib/notifications/email";
 import { prisma } from "@/lib/prisma";
 
-/** Sends the invitation email; returns false when email isn't configured or fails. */
+/**
+ * Sends the invitation email. The result is reported back to the inviter —
+ * a failure here must never stop the invitation itself, because the link in
+ * the response is the reliable way to get someone in.
+ */
 export async function sendInvitationEmail(options: {
   email: string;
   workspaceName: string;
   inviterName: string;
   inviteLink: string;
-}): Promise<boolean> {
-  if (!isEmailConfigured()) return false;
+}): Promise<EmailDeliveryResult> {
   const title = `${options.inviterName} invited you to ${options.workspaceName}`;
   const html = renderAlertEmail({
     title,
@@ -19,7 +27,12 @@ export async function sendInvitationEmail(options: {
     ctaLabel: "Accept invitation",
     ctaPath: options.inviteLink.replace(appUrl(), ""),
   });
-  return sendEmail(options.email, title, html);
+  try {
+    return await sendEmail(options.email, title, html, "workspace_invitation");
+  } catch (error) {
+    logger.error("[workspace] invitation email threw", { error: serializeError(error) });
+    return { status: "failed", error: "The email could not be sent." };
+  }
 }
 
 /** Creates an in-app WORKSPACE notification (best-effort, never throws). */
