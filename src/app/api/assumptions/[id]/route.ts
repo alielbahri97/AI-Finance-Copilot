@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { apiError } from "@/lib/api/response";
 import { prisma } from "@/lib/prisma";
-import { getUser } from "@/lib/supabase/server";
+import { requireWorkspace } from "@/lib/workspace/context";
 import {
   assumptionSchema,
   assumptionToggleSchema,
@@ -14,16 +14,15 @@ type RouteContext = { params: Promise<{ id: string }> };
 
 export async function PATCH(request: Request, context: RouteContext) {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireWorkspace("manage_forecast");
+    if (!auth.ok) return auth.response;
+    const { workspace } = auth.ctx;
 
     const { id } = await context.params;
     const body = await request.json();
 
     const existing = await prisma.assumption.findFirst({
-      where: { id, userId: user.id },
+      where: { id, workspaceId: workspace.id },
       select: { id: true },
     });
     if (!existing) {
@@ -66,13 +65,14 @@ export async function PATCH(request: Request, context: RouteContext) {
 
 export async function DELETE(_request: Request, context: RouteContext) {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireWorkspace("manage_forecast");
+    if (!auth.ok) return auth.response;
+    const { workspace } = auth.ctx;
 
     const { id } = await context.params;
-    const result = await prisma.assumption.deleteMany({ where: { id, userId: user.id } });
+    const result = await prisma.assumption.deleteMany({
+      where: { id, workspaceId: workspace.id },
+    });
     if (result.count === 0) {
       return NextResponse.json({ error: "Assumption not found" }, { status: 404 });
     }

@@ -1,20 +1,21 @@
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
-import { getUser } from "@/lib/supabase/server";
 import { apiError } from "@/lib/api/response";
+import { requireWorkspace } from "@/lib/workspace/context";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function DELETE(_request: Request, context: RouteContext) {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireWorkspace("edit_transactions");
+    if (!auth.ok) return auth.response;
+    const { workspace } = auth.ctx;
 
     const { id } = await context.params;
-    const result = await prisma.categoryRule.deleteMany({ where: { id, userId: user.id } });
+    const result = await prisma.categoryRule.deleteMany({
+      where: { id, workspaceId: workspace.id },
+    });
     if (result.count === 0) {
       return NextResponse.json({ error: "Rule not found" }, { status: 404 });
     }

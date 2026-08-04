@@ -11,6 +11,7 @@ import { formatCurrency } from "@/lib/utils";
 import { dispatchNotification, type DispatchTarget } from "./dispatch";
 import { renderAlertEmail } from "./email";
 import { getOrCreatePreferences } from "./preferences";
+import { listNotifiableMembers } from "./recipients";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -27,24 +28,28 @@ export interface AlertCandidate {
 }
 
 /**
- * A transaction is "large" when it exceeds the user's configured threshold,
- * or when it is an expense far above the user's statistical norm
+ * A transaction is "large" when it exceeds a member's configured threshold,
+ * or when it is an expense far above the workspace's statistical norm
  * (mean + 3 standard deviations over the last 90 days, minimum 10 samples).
+ * Workspace-aware: every member with view_transactions permission is
+ * evaluated against their own notification preferences.
  */
 export async function evaluateLargeTransactions(
-  userId: string,
+  workspaceId: string,
   currency: string,
   candidates: AlertCandidate[]
 ): Promise<void> {
   try {
-    const prefs = await getOrCreatePreferences(userId);
-    if (!prefs.largeTransaction) return;
-
-    const threshold = Number(prefs.largeTransactionThreshold);
+    const members = await listNotifiableMembers(workspaceId, "view_transactions");
+    if (members.length === 0) return;
 
     // Statistical norm from recent expense history (before this batch).
     const history = await prisma.transaction.findMany({
-      where: { userId, type: "EXPENSE", date: { gte: new Date(Date.now() - 90 * MS_PER_DAY) } },
+      where: {
+        workspaceId,
+        type: "EXPENSE",
+        date: { gte: new Date(Date.now() - 90 * MS_PER_DAY) },
+      },
       select: { amount: true },
       take: 2000,
     });
@@ -57,69 +62,77 @@ export async function evaluateLargeTransactions(
       statLimit = mean + 3 * Math.sqrt(variance);
     }
 
-    const large = candidates.filter(
-      (tx) =>
-        (threshold > 0 && tx.amount >= threshold) ||
-        (tx.type === "EXPENSE" && tx.amount >= statLimit)
-    );
-    if (large.length === 0) return;
-
-    const profile = await prisma.profile.findUnique({
-      where: { id: userId },
-      select: { email: true },
-    });
-    if (!profile) return;
-    const target: DispatchTarget = { id: userId, email: profile.email };
-
     const describe = (tx: AlertCandidate) =>
       `${tx.type === "EXPENSE" ? "-" : "+"}${formatCurrency(tx.amount, currency)} ${tx.counterparty || tx.description}`;
 
-    if (large.length === 1) {
-      const tx = large[0];
-      const title = `Large ${tx.type === "EXPENSE" ? "expense" : "incoming payment"}: ${formatCurrency(tx.amount, currency)}`;
-      const body = `${describe(tx)} on ${tx.date.toISOString().slice(0, 10)}.`;
+    // Post to the workspace's Slack/Teams channel once, not once per member.
+    let chatPosted = false;
+
+    for (const member of members) {
+      const prefs = await getOrCreatePreferences(member.userId);
+      if (!prefs.largeTransaction) continue;
+
+      const threshold = Number(prefs.largeTransactionThreshold);
+      const large = candidates.filter(
+        (tx) =>
+          (threshold > 0 && tx.amount >= threshold) ||
+          (tx.type === "EXPENSE" && tx.amount >= statLimit)
+      );
+      if (large.length === 0) continue;
+
+      const target: DispatchTarget = { id: member.userId, email: member.email };
+      const chatWorkspaceId = chatPosted ? undefined : workspaceId;
+      chatPosted = true;
+
+      if (large.length === 1) {
+        const tx = large[0];
+        const title = `Large ${tx.type === "EXPENSE" ? "expense" : "incoming payment"}: ${formatCurrency(tx.amount, currency)}`;
+        const body = `${describe(tx)} on ${tx.date.toISOString().slice(0, 10)}.`;
+        await dispatchNotification(target, prefs, {
+          type: "LARGE_TRANSACTION",
+          title,
+          body,
+          link: "/transactions",
+          chatWorkspaceId,
+          emailSubject: title,
+          emailHtml: renderAlertEmail({
+            title,
+            bodyText: "A transaction above your alert threshold was just recorded.",
+            details: [
+              { label: "Amount", value: formatCurrency(tx.amount, currency) },
+              { label: "Type", value: tx.type === "EXPENSE" ? "Expense" : "Income" },
+              { label: "Counterparty", value: tx.counterparty || tx.description },
+              { label: "Date", value: tx.date.toISOString().slice(0, 10) },
+            ],
+            ctaLabel: "Review transactions",
+            ctaPath: "/transactions",
+          }),
+        });
+        continue;
+      }
+
+      // Aggregate to avoid spamming on large imports.
+      const sorted = [...large].sort((a, b) => b.amount - a.amount);
+      const title = `${large.length} large transactions recorded`;
+      const body = sorted.slice(0, 5).map(describe).join("\n");
       await dispatchNotification(target, prefs, {
         type: "LARGE_TRANSACTION",
         title,
         body,
         link: "/transactions",
+        chatWorkspaceId,
         emailSubject: title,
         emailHtml: renderAlertEmail({
           title,
-          bodyText: "A transaction above your alert threshold was just recorded.",
-          details: [
-            { label: "Amount", value: formatCurrency(tx.amount, currency) },
-            { label: "Type", value: tx.type === "EXPENSE" ? "Expense" : "Income" },
-            { label: "Counterparty", value: tx.counterparty || tx.description },
-            { label: "Date", value: tx.date.toISOString().slice(0, 10) },
-          ],
+          bodyText: `These transactions exceeded your alert threshold:\n${sorted
+            .slice(0, 8)
+            .map((tx) => `- ${describe(tx)}`)
+            .join("\n")}`,
           ctaLabel: "Review transactions",
           ctaPath: "/transactions",
         }),
       });
-      return;
     }
-
-    // Aggregate to avoid spamming on large imports.
-    const sorted = [...large].sort((a, b) => b.amount - a.amount);
-    const title = `${large.length} large transactions recorded`;
-    const body = sorted.slice(0, 5).map(describe).join("\n");
-    await dispatchNotification(target, prefs, {
-      type: "LARGE_TRANSACTION",
-      title,
-      body,
-      link: "/transactions",
-      emailSubject: title,
-      emailHtml: renderAlertEmail({
-        title,
-        bodyText: `These transactions exceeded your alert threshold:\n${sorted
-          .slice(0, 8)
-          .map((tx) => `- ${describe(tx)}`)
-          .join("\n")}`,
-        ctaLabel: "Review transactions",
-        ctaPath: "/transactions",
-      }),
-    });
   } catch (error) {
     // Alerting must never break the transaction write path.
     logger.error("[notifications] large transaction evaluation", { error: serializeError(error) });
@@ -142,11 +155,11 @@ export interface LowCashCheck {
  * forecast projects it to drop below the floor within the horizon.
  */
 export async function checkLowCash(
-  userId: string,
+  workspaceId: string,
   currency: string,
   prefs: NotificationPreference
 ): Promise<LowCashCheck> {
-  const forecast = await buildForecast(userId, currency);
+  const forecast = await buildForecast(workspaceId, currency);
   const floor = Number(prefs.lowCashFloor);
   const horizonDays = prefs.lowCashHorizonDays;
 
@@ -217,10 +230,10 @@ export interface InvoiceReminderCheck {
 
 /** Reuses the stage-5 reminders logic: due within 7 days or overdue. */
 export async function checkInvoiceReminders(
-  userId: string,
+  workspaceId: string,
   currency: string
 ): Promise<InvoiceReminderCheck> {
-  const reminders = await getInvoiceReminders(userId);
+  const reminders = await getInvoiceReminders(workspaceId);
   const overdueCount = reminders.overdue.length;
   const dueSoonCount = reminders.dueSoon.length;
   if (overdueCount === 0 && dueSoonCount === 0) return { triggered: false };

@@ -84,7 +84,7 @@ async function sync(ctx: SyncContext): Promise<SyncStats> {
   }
 
   const result = await importBankTransactions(
-    ctx.userId,
+    { workspaceId: ctx.workspaceId, userId: ctx.userId },
     ctx.currency,
     "tink",
     `Tink sync ${new Date().toISOString().slice(0, 10)}`,

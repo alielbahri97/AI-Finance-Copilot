@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/card";
 import { serializeInvoice } from "@/lib/invoices/serialize";
 import { prisma } from "@/lib/prisma";
-import { getUser } from "@/lib/supabase/server";
+import { getWorkspaceContext } from "@/lib/workspace/context";
 
 export const metadata: Metadata = { title: "Invoice" };
 export const dynamic = "force-dynamic";
@@ -27,12 +27,13 @@ interface InvoiceDetailPageProps {
 }
 
 export default async function InvoiceDetailPage({ params }: InvoiceDetailPageProps) {
-  const user = await getUser();
-  if (!user) redirect("/login");
+  const ctx = await getWorkspaceContext();
+  if (!ctx) redirect("/login");
+  if (!ctx.permissions.has("view_invoices")) redirect("/dashboard");
 
   const { id } = await params;
   const invoice = await prisma.invoice.findFirst({
-    where: { id, userId: user.id },
+    where: { id, workspaceId: ctx.workspace.id },
     include: { lineItems: true, transaction: true },
   });
   if (!invoice) notFound();

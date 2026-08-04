@@ -35,12 +35,12 @@ interface SummaryProfile {
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**
- * Builds an AI-written digest of the user's finances for the period. Falls
- * back to a deterministic text summary when no AI provider is configured or
- * the call fails — a digest is always produced.
+ * Builds an AI-written digest of the workspace's finances for the period.
+ * Falls back to a deterministic text summary when no AI provider is
+ * configured or the call fails — a digest is always produced.
  */
 export async function generateSummary(
-  userId: string,
+  workspaceId: string,
   profile: SummaryProfile,
   kind: SummaryKind
 ): Promise<SummaryDigest> {
@@ -50,7 +50,7 @@ export async function generateSummary(
 
   const [rows, forecast] = await Promise.all([
     prisma.transaction.findMany({
-      where: { userId, date: { gte: windowStart, lte: now } },
+      where: { workspaceId, date: { gte: windowStart, lte: now } },
       orderBy: { amount: "desc" },
       select: {
         type: true,
@@ -60,7 +60,7 @@ export async function generateSummary(
         category: { select: { name: true } },
       },
     }),
-    buildForecast(userId, profile.currency),
+    buildForecast(workspaceId, profile.currency),
   ]);
 
   const currency = profile.currency;
@@ -101,7 +101,7 @@ export async function generateSummary(
   const periodLabel = `Covering ${config.label} · ${now.toISOString().slice(0, 10)}`;
 
   const body =
-    (await generateAiBody(userId, profile, kind, config.label, {
+    (await generateAiBody(workspaceId, profile, kind, config.label, {
       transactionCount: rows.length,
       income,
       expenses,
@@ -142,14 +142,14 @@ interface SummaryFacts {
 }
 
 async function generateAiBody(
-  userId: string,
+  workspaceId: string,
   profile: SummaryProfile,
   kind: SummaryKind,
   windowLabel: string,
   facts: SummaryFacts
 ): Promise<string | null> {
   try {
-    const snapshot = await buildFinancialSnapshot(userId, profile.currency);
+    const snapshot = await buildFinancialSnapshot(workspaceId, profile.currency);
     const client = getAiClient(providerFromProfile(profile.aiProvider));
 
     const activity = [

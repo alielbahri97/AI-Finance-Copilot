@@ -16,10 +16,10 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: resolved.error }, { status: resolved.status });
     }
 
-    const { userId, currency, period } = resolved.context;
-    const report = await buildReport(userId, currency, period);
+    const { workspaceId, userId, currency, period } = resolved.context;
+    const report = await buildReport(workspaceId, currency, period);
     const bytes = await buildPdfReport(report);
-    await incrementUsage(userId, "exports");
+    await incrementUsage(workspaceId, "exports");
     await trackEvent(userId, "export", { format: "pdf" });
 
     return new NextResponse(Buffer.from(bytes), {

@@ -19,13 +19,13 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
  * Due-soon and overdue unpaid invoices. Shared by the reminders API, the
  * invoices page and the main dashboard card (and, later, notifications).
  */
-export async function getInvoiceReminders(userId: string): Promise<InvoiceReminders> {
+export async function getInvoiceReminders(workspaceId: string): Promise<InvoiceReminders> {
   const now = new Date();
   const weekAhead = new Date(now.getTime() + 7 * MS_PER_DAY);
 
   const invoices = await prisma.invoice.findMany({
     where: {
-      userId,
+      workspaceId,
       status: "UNPAID",
       dueDate: { not: null, lte: weekAhead },
     },

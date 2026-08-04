@@ -21,6 +21,12 @@ export interface NotificationEvent {
   /** Pre-rendered HTML for the email channel; skipped when absent. */
   emailHtml?: string;
   emailSubject?: string;
+  /**
+   * When set, the event is also posted to this workspace's Slack/Teams
+   * connections. Callers must set it on at most one dispatch per event so a
+   * shared channel is not spammed once per member.
+   */
+  chatWorkspaceId?: string;
 }
 
 export interface DispatchTarget {
@@ -64,9 +70,11 @@ export async function dispatchNotification(
     }).catch((error) => logger.error("[notifications] push channel", { error: serializeError(error) }));
   }
 
-  await sendToChatIntegrations(user.id, event).catch((error) =>
-    logger.error("[notifications] chat channel", { error: serializeError(error) })
-  );
+  if (event.chatWorkspaceId) {
+    await sendToChatIntegrations(event.chatWorkspaceId, event).catch((error) =>
+      logger.error("[notifications] chat channel", { error: serializeError(error) })
+    );
+  }
 }
 
 const APP_URL = () => (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
@@ -76,14 +84,14 @@ const APP_URL = () => (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000
  * integrations page is the opt-in. Each webhook post is best-effort.
  */
 async function sendToChatIntegrations(
-  userId: string,
+  workspaceId: string,
   event: NotificationEvent
 ): Promise<void> {
   if (!isEncryptionConfigured()) return;
 
   const connections = await prisma.integrationConnection.findMany({
     where: {
-      userId,
+      workspaceId,
       provider: { in: ["slack", "teams"] },
       status: "CONNECTED",
       accessToken: { not: null },

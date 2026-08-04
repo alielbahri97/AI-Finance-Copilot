@@ -37,12 +37,13 @@ function fingerprint(provider: string, externalId: string): string {
 }
 
 export async function importBankTransactions(
-  userId: string,
+  scope: { workspaceId: string; userId: string },
   currency: string,
   provider: string,
   label: string,
   transactions: BankTransaction[]
 ): Promise<BankImportResult> {
+  const { workspaceId, userId } = scope;
   if (transactions.length === 0) {
     return { imported: 0, duplicates: 0, batchId: null };
   }
@@ -53,7 +54,7 @@ export async function importBankTransactions(
   }));
 
   const existing = await prisma.transaction.findMany({
-    where: { userId, hash: { in: withHashes.map((tx) => tx.hash) } },
+    where: { workspaceId, hash: { in: withHashes.map((tx) => tx.hash) } },
     select: { hash: true },
   });
   const existingHashes = new Set(existing.map((row) => row.hash));
@@ -64,13 +65,14 @@ export async function importBankTransactions(
     return { imported: 0, duplicates, batchId: null };
   }
 
-  const matchers = await loadRuleMatchers(userId);
+  const matchers = await loadRuleMatchers(workspaceId);
   const batch = await prisma.$transaction(async (tx) => {
     const created = await tx.importBatch.create({
-      data: { userId, fileName: label.slice(0, 200) },
+      data: { workspaceId, userId, fileName: label.slice(0, 200) },
     });
     await tx.transaction.createMany({
       data: fresh.map((row) => ({
+        workspaceId,
         userId,
         type: row.type,
         amount: Math.round(row.amount * 100) / 100,
@@ -87,7 +89,7 @@ export async function importBankTransactions(
   });
 
   await evaluateLargeTransactions(
-    userId,
+    workspaceId,
     currency,
     fresh.map((row) => ({
       type: row.type,

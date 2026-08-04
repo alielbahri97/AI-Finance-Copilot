@@ -2,9 +2,8 @@ import { NextResponse } from "next/server";
 
 import { apiError } from "@/lib/api/response";
 import { getEntitlements, upgradeError } from "@/lib/billing/entitlements";
-import { getOrCreateProfile } from "@/lib/data";
 import { prisma } from "@/lib/prisma";
-import { getUser } from "@/lib/supabase/server";
+import { requireWorkspace } from "@/lib/workspace/context";
 import {
   assumptionSchema,
   toAssumptionData,
@@ -13,13 +12,12 @@ import {
 
 export async function GET() {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireWorkspace("view_reports");
+    if (!auth.ok) return auth.response;
+    const { workspace } = auth.ctx;
 
     const assumptions = await prisma.assumption.findMany({
-      where: { userId: user.id },
+      where: { workspaceId: workspace.id },
       orderBy: { createdAt: "asc" },
     });
 
@@ -31,10 +29,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireWorkspace("manage_forecast");
+    if (!auth.ok) return auth.response;
+    const { user, workspace } = auth.ctx;
 
     const body = await request.json();
     const parsed = assumptionSchema.safeParse(body);
@@ -49,10 +46,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: windowError }, { status: 400 });
     }
 
-    await getOrCreateProfile(user);
-
     // Plan gating: what-if assumptions are a paid feature.
-    const entitlements = await getEntitlements(user.id);
+    const entitlements = await getEntitlements(workspace.id);
     if (!entitlements.plan.limits.assumptionsEnabled) {
       return NextResponse.json(upgradeError("Forecast assumptions", entitlements.planId), {
         status: 402,
@@ -60,7 +55,7 @@ export async function POST(request: Request) {
     }
 
     const assumption = await prisma.assumption.create({
-      data: { userId: user.id, ...toAssumptionData(parsed.data) },
+      data: { workspaceId: workspace.id, userId: user.id, ...toAssumptionData(parsed.data) },
     });
 
     return NextResponse.json({ assumption }, { status: 201 });

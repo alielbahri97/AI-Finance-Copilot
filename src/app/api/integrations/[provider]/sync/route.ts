@@ -20,7 +20,7 @@ export async function POST(
     const access = await requireIntegrationAccess();
     if (!access.ok) return access.response;
 
-    const limited = await enforceRateLimit("sync", access.user.id);
+    const limited = await enforceRateLimit("sync", access.ctx.user.id);
     if (limited) return limited;
 
     const provider = getProvider(providerId);
@@ -34,7 +34,7 @@ export async function POST(
       );
     }
 
-    const connection = await getConnection(access.user.id, provider.id);
+    const connection = await getConnection(access.ctx.workspace.id, provider.id);
     if (!connection) {
       return NextResponse.json({ error: "Not connected" }, { status: 404 });
     }
@@ -49,7 +49,7 @@ export async function POST(
 
     // Bank providers record the ImportBatch of the sync so the UI can link
     // straight to the imported transactions.
-    const refreshed = await getConnection(access.user.id, provider.id);
+    const refreshed = await getConnection(access.ctx.workspace.id, provider.id);
     const batchId =
       (refreshed?.metadata as Record<string, unknown> | null)?.lastBatchId ?? null;
 

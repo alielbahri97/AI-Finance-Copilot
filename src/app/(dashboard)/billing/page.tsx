@@ -28,9 +28,8 @@ import { PLAN_ORDER, PLANS } from "@/lib/billing/plans";
 import { getReferralStats, REFERRAL_REWARD_DAYS } from "@/lib/billing/referrals";
 import { getStripe, isBillingConfigured } from "@/lib/billing/stripe";
 import { logger, serializeError } from "@/lib/logger";
-import { getOrCreateProfile } from "@/lib/data";
 import { prisma } from "@/lib/prisma";
-import { getUser } from "@/lib/supabase/server";
+import { getWorkspaceContext } from "@/lib/workspace/context";
 
 export const metadata: Metadata = { title: "Billing" };
 
@@ -44,11 +43,11 @@ interface StripeInvoiceRow {
   url: string | null;
 }
 
-async function getInvoiceHistory(userId: string): Promise<StripeInvoiceRow[]> {
+async function getInvoiceHistory(workspaceId: string): Promise<StripeInvoiceRow[]> {
   const stripe = getStripe();
   if (!stripe) return [];
   const subscription = await prisma.subscription.findUnique({
-    where: { userId },
+    where: { workspaceId },
     select: { stripeCustomerId: true },
   });
   if (!subscription?.stripeCustomerId) return [];
@@ -85,17 +84,18 @@ export default async function BillingPage({
 }: {
   searchParams: Promise<{ checkout?: string }>;
 }) {
-  const user = await getUser();
-  if (!user) redirect("/login");
+  const ctx = await getWorkspaceContext();
+  if (!ctx) redirect("/login");
+  if (!ctx.permissions.has("view_billing")) redirect("/dashboard");
+  const { user, workspace } = ctx;
 
   const { checkout } = await searchParams;
-  await getOrCreateProfile(user);
 
   const billingConfigured = isBillingConfigured();
   const [entitlements, referralStats, invoiceHistory] = await Promise.all([
-    getEntitlements(user.id),
+    getEntitlements(workspace.id),
     getReferralStats(user.id),
-    getInvoiceHistory(user.id),
+    getInvoiceHistory(workspace.id),
   ]);
 
   const { plan, usage } = entitlements;

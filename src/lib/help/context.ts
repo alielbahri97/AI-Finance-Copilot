@@ -12,15 +12,15 @@ import type { HelpUserContext } from "./prompt";
  * (plan gates, which integrations exist on this server, whether the user has
  * data yet) without exposing any actual financial figures.
  */
-export async function buildHelpUserContext(userId: string): Promise<HelpUserContext> {
+export async function buildHelpUserContext(workspaceId: string): Promise<HelpUserContext> {
   const [entitlements, connections, transactionCount, invoiceCount] = await Promise.all([
-    getEntitlements(userId),
+    getEntitlements(workspaceId),
     prisma.integrationConnection.findMany({
-      where: { userId },
+      where: { workspaceId },
       select: { provider: true, status: true },
     }),
-    prisma.transaction.count({ where: { userId } }),
-    prisma.invoice.count({ where: { userId } }),
+    prisma.transaction.count({ where: { workspaceId } }),
+    prisma.invoice.count({ where: { workspaceId } }),
   ]);
 
   const encryptionReady = isEncryptionConfigured();

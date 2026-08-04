@@ -6,6 +6,7 @@ import { randomBytes } from "node:crypto";
 
 import { trackEvent } from "@/lib/analytics";
 import { prisma } from "@/lib/prisma";
+import { personalWorkspaceId } from "@/lib/workspace/ids";
 
 import { getOrCreateSubscription } from "./entitlements";
 
@@ -95,13 +96,15 @@ export async function convertReferral(referredUserId: string): Promise<void> {
       data: { status: "CONVERTED", convertedAt: new Date() },
     });
 
-    const referrerSubscription = await getOrCreateSubscription(referral.referrerId);
+    // The reward lands on the referrer's personal workspace subscription.
+    const referrerWorkspaceId = personalWorkspaceId(referral.referrerId);
+    const referrerSubscription = await getOrCreateSubscription(referrerWorkspaceId);
     const base =
       referrerSubscription.trialEndsAt && referrerSubscription.trialEndsAt > new Date()
         ? referrerSubscription.trialEndsAt
         : new Date();
     await prisma.subscription.update({
-      where: { userId: referral.referrerId },
+      where: { workspaceId: referrerWorkspaceId },
       data: { trialEndsAt: new Date(base.getTime() + REFERRAL_REWARD_DAYS * MS_PER_DAY) },
     });
 

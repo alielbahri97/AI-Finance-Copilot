@@ -25,12 +25,12 @@ export function mapAssumptionRow(row: Assumption): AssumptionInput {
 }
 
 /**
- * Loads the user's transactions and assumptions and computes the forecast.
- * Pass `preloadedAssumptions` when the caller already fetched the rows
- * (e.g. the forecast page shows them too) to avoid a duplicate query.
+ * Loads the workspace's transactions and assumptions and computes the
+ * forecast. Pass `preloadedAssumptions` when the caller already fetched the
+ * rows (e.g. the forecast page shows them too) to avoid a duplicate query.
  */
 export async function buildForecast(
-  userId: string,
+  workspaceId: string,
   currency: string,
   preloadedAssumptions?: Assumption[]
 ): Promise<ForecastResult> {
@@ -39,7 +39,7 @@ export async function buildForecast(
 
   const [rows, priorRows, assumptionRows] = await Promise.all([
     prisma.transaction.findMany({
-      where: { userId, date: { gte: windowStart } },
+      where: { workspaceId, date: { gte: windowStart } },
       orderBy: { date: "asc" },
       select: {
         type: true,
@@ -51,11 +51,11 @@ export async function buildForecast(
       },
     }),
     prisma.transaction.findMany({
-      where: { userId, date: { lt: windowStart } },
+      where: { workspaceId, date: { lt: windowStart } },
       select: { type: true, amount: true },
     }),
     preloadedAssumptions ??
-      prisma.assumption.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
+      prisma.assumption.findMany({ where: { workspaceId }, orderBy: { createdAt: "asc" } }),
   ]);
 
   const transactions: FinanceTransaction[] = rows.map((row) => ({

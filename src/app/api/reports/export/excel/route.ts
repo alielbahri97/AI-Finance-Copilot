@@ -16,13 +16,13 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: resolved.error }, { status: resolved.status });
     }
 
-    const { userId, currency, period } = resolved.context;
+    const { workspaceId, userId, currency, period } = resolved.context;
     const [report, transactions] = await Promise.all([
-      buildReport(userId, currency, period),
-      getReportTransactions(userId, period),
+      buildReport(workspaceId, currency, period),
+      getReportTransactions(workspaceId, period),
     ]);
     const bytes = await buildExcelReport(report, transactions);
-    await incrementUsage(userId, "exports");
+    await incrementUsage(workspaceId, "exports");
     await trackEvent(userId, "export", { format: "excel" });
 
     return new NextResponse(Buffer.from(bytes), {

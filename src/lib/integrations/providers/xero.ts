@@ -95,7 +95,10 @@ async function sync(ctx: SyncContext): Promise<SyncStats> {
     status: invoice.Status === "PAID" || (invoice.AmountDue ?? 1) === 0 ? "PAID" : "UNPAID",
   }));
 
-  const result = await upsertSyncedInvoices(ctx.userId, synced);
+  const result = await upsertSyncedInvoices(
+    { workspaceId: ctx.workspaceId, userId: ctx.userId },
+    synced
+  );
   return { fetched: invoices.length, created: result.created, updated: result.updated };
 }
 

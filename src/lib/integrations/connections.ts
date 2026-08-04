@@ -17,9 +17,9 @@ export interface SaveConnectionInput {
   metadata?: Record<string, unknown>;
 }
 
-/** Creates or replaces a user's connection to a provider (status CONNECTED). */
+/** Creates or replaces a workspace's connection to a provider (status CONNECTED). */
 export async function saveConnection(
-  userId: string,
+  scope: { workspaceId: string; userId: string },
   providerId: string,
   input: SaveConnectionInput
 ): Promise<IntegrationConnection> {
@@ -33,18 +33,25 @@ export async function saveConnection(
     consecutiveFailures: 0,
   };
   return prisma.integrationConnection.upsert({
-    where: { userId_provider: { userId, provider: providerId } },
-    update: data,
-    create: { userId, provider: providerId, ...data },
+    where: {
+      workspaceId_provider: { workspaceId: scope.workspaceId, provider: providerId },
+    },
+    update: { ...data, userId: scope.userId },
+    create: {
+      workspaceId: scope.workspaceId,
+      userId: scope.userId,
+      provider: providerId,
+      ...data,
+    },
   });
 }
 
 export async function getConnection(
-  userId: string,
+  workspaceId: string,
   providerId: string
 ): Promise<IntegrationConnection | null> {
   return prisma.integrationConnection.findUnique({
-    where: { userId_provider: { userId, provider: providerId } },
+    where: { workspaceId_provider: { workspaceId, provider: providerId } },
   });
 }
 

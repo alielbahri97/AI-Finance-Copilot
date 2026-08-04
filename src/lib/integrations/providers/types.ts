@@ -14,6 +14,9 @@ export interface ConnectResult {
 
 export interface SyncContext {
   connection: IntegrationConnection;
+  /** The workspace the connection belongs to; all imported data lands here. */
+  workspaceId: string;
+  /** The member who connected the provider. */
   userId: string;
   currency: string;
   aiProvider: "OPENAI" | "ANTHROPIC" | "GROQ";

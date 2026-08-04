@@ -107,7 +107,7 @@ function monthKeyOf(date: Date): string {
 }
 
 export async function buildReport(
-  userId: string,
+  workspaceId: string,
   currency: string,
   period: ResolvedPeriod
 ): Promise<ReportData> {
@@ -115,7 +115,7 @@ export async function buildReport(
 
   const [rows, previousAggregates, priorRows, allRows, unpaidInvoices] = await Promise.all([
     prisma.transaction.findMany({
-      where: { userId, date: { gte: period.from, lte: period.to } },
+      where: { workspaceId, date: { gte: period.from, lte: period.to } },
       select: {
         type: true,
         amount: true,
@@ -126,20 +126,20 @@ export async function buildReport(
     }),
     prisma.transaction.groupBy({
       by: ["type"],
-      where: { userId, date: { gte: previous.from, lte: previous.to } },
+      where: { workspaceId, date: { gte: previous.from, lte: previous.to } },
       _sum: { amount: true },
     }),
     prisma.transaction.groupBy({
       by: ["type"],
-      where: { userId, date: { lt: period.from } },
+      where: { workspaceId, date: { lt: period.from } },
       _sum: { amount: true },
     }),
     prisma.transaction.findMany({
-      where: { userId },
+      where: { workspaceId },
       select: { type: true, amount: true, date: true },
     }),
     prisma.invoice.findMany({
-      where: { userId, status: "UNPAID" },
+      where: { workspaceId, status: "UNPAID" },
       select: { direction: true, dueDate: true, total: true },
     }),
   ]);
@@ -314,11 +314,11 @@ export async function buildReport(
 
 /** Transactions in the period, for the CSV/Excel exports. */
 export async function getReportTransactions(
-  userId: string,
+  workspaceId: string,
   period: ResolvedPeriod
 ): Promise<ReportTransaction[]> {
   const rows = await prisma.transaction.findMany({
-    where: { userId, date: { gte: period.from, lte: period.to } },
+    where: { workspaceId, date: { gte: period.from, lte: period.to } },
     orderBy: { date: "asc" },
     select: {
       date: true,

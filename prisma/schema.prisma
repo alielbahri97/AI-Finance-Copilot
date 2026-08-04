@@ -91,6 +91,19 @@ enum NotificationType {
   LARGE_TRANSACTION
   LOW_CASH
   INVOICE_REMINDER
+  /// Team events: added to a workspace, role changed, removed.
+  WORKSPACE
+}
+
+enum WorkspaceRole {
+  /// Full control including deletion; exactly the creator by default.
+  OWNER
+  /// Everything except transferring/deleting the workspace.
+  ADMIN
+  /// Edit-level access to business data, no member/billing management.
+  MEMBER
+  /// Read-only access.
+  VIEWER
 }
 
 enum AssumptionKind {
@@ -120,6 +133,95 @@ enum EmployeeRange {
   MEDIUM
   LARGE
   ENTERPRISE
+}
+
+/// A shared workspace: all business data (transactions, invoices, forecasts,
+/// integrations, billing) belongs to a workspace, and users access it through
+/// a WorkspaceMember row. Every user gets a personal workspace on signup
+/// (id "ws-<userId>"); multi-member workspaces are a paid-plan feature.
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  /// Business currency for the workspace's shared data.
+  currency  String   @default("USD")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  members      WorkspaceMember[]
+  invitations  WorkspaceInvitation[]
+  auditLogs    AuditLog[]
+  subscription Subscription?
+  usageRecords UsageRecord[]
+
+  transactions           Transaction[]
+  categories             Category[]
+  categoryRules          CategoryRule[]
+  importBatches          ImportBatch[]
+  invoices               Invoice[]
+  assumptions            Assumption[]
+  conversations          Conversation[]
+  budgets                Budget[]
+  integrationConnections IntegrationConnection[]
+
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  workspaceId String        @map("workspace_id")
+  userId      String        @map("user_id") @db.Uuid
+  role        WorkspaceRole @default(MEMBER)
+  /// Per-member permission overrides on top of the role defaults, e.g.
+  /// { "export_data": false, "manage_integrations": true }. Ignored for OWNER.
+  permissions Json?
+  joinedAt    DateTime      @default(now()) @map("joined_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  profile   Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@map("workspace_members")
+}
+
+/// A pending email invitation. Only the SHA-256 hash of the invite token is
+/// stored; the raw token lives solely in the emailed link. Single-use,
+/// 7-day expiry, bound to the invited email address.
+model WorkspaceInvitation {
+  id          String        @id @default(cuid())
+  workspaceId String        @map("workspace_id")
+  email       String
+  role        WorkspaceRole @default(MEMBER)
+  tokenHash   String        @unique @map("token_hash")
+  expiresAt   DateTime      @map("expires_at")
+  acceptedAt  DateTime?     @map("accepted_at")
+  revokedAt   DateTime?     @map("revoked_at")
+  invitedById String        @map("invited_by_id") @db.Uuid
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy Profile   @relation("Inviter", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@map("workspace_invitations")
+}
+
+/// Security audit trail: member/permission/billing changes, deletions and
+/// exports. Visible to owners and admins in the Team settings.
+model AuditLog {
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+  /// The acting user; null for system actions (cron, webhooks).
+  userId      String?  @map("user_id") @db.Uuid
+  action      String
+  detail      Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  profile   Profile?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@map("audit_logs")
 }
 
 model Profile {
@@ -152,7 +254,8 @@ model Profile {
   notifications          Notification[]
   notificationPreference NotificationPreference?
   pushSubscriptions      PushSubscription[]
-  subscription           Subscription?
+  /// Workspace subscriptions this user set up (informational back-relation).
+  subscriptionsManaged   Subscription[]
   usageRecords           UsageRecord[]
   referralsMade          Referral[]              @relation("Referrer")
   referralReceived       Referral?               @relation("Referred")
@@ -160,6 +263,9 @@ model Profile {
   integrationConnections IntegrationConnection[]
   businessProfile        BusinessProfile?
   helpMessages           HelpMessage[]
+  workspaceMemberships   WorkspaceMember[]
+  invitationsSent        WorkspaceInvitation[]   @relation("Inviter")
+  auditLogs              AuditLog[]
 
   @@map("profiles")
 }
@@ -209,10 +315,12 @@ model BusinessProfile {
 /// A user's link to an external provider (bank, accounting, productivity).
 /// Tokens are encrypted at rest with AES-256-GCM (INTEGRATION_ENCRYPTION_KEY).
 model IntegrationConnection {
-  id       String            @id @default(cuid())
-  userId   String            @map("user_id") @db.Uuid
-  provider String
-  status   IntegrationStatus @default(CONNECTED)
+  id          String            @id @default(cuid())
+  workspaceId String            @map("workspace_id")
+  /// The member who connected the provider (their OAuth identity).
+  userId      String            @map("user_id") @db.Uuid
+  provider    String
+  status      IntegrationStatus @default(CONNECTED)
 
   /// Encrypted (iv || tag || ciphertext, base64). For webhook-style providers
   /// (Slack incoming webhook, Teams) this holds the encrypted webhook URL.
@@ -232,10 +340,11 @@ model IntegrationConnection {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  profile  Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  syncRuns SyncRun[]
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  profile   Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  syncRuns  SyncRun[]
 
-  @@unique([userId, provider])
+  @@unique([workspaceId, provider])
   @@map("integration_connections")
 }
 
@@ -256,11 +365,13 @@ model SyncRun {
   @@map("sync_runs")
 }
 
-/// The user's billing state. Free/trial users have a row with no Stripe ids;
-/// paid users are kept in sync by the Stripe webhook.
+/// The workspace's billing state. Free/trial workspaces have a row with no
+/// Stripe ids; paid workspaces are kept in sync by the Stripe webhook.
 model Subscription {
   id                   String             @id @default(cuid())
-  userId               String             @unique @map("user_id") @db.Uuid
+  workspaceId          String             @unique @map("workspace_id")
+  /// The member who set up billing (informational).
+  userId               String?            @map("user_id") @db.Uuid
   plan                 PlanId             @default(FREE)
   status               SubscriptionStatus @default(ACTIVE)
   stripeCustomerId     String?            @unique @map("stripe_customer_id")
@@ -273,15 +384,18 @@ model Subscription {
   createdAt            DateTime           @default(now()) @map("created_at")
   updatedAt            DateTime           @updatedAt @map("updated_at")
 
-  profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  profile   Profile?  @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@map("subscriptions")
 }
 
-/// Metered usage per user per calendar month (period = "YYYY-MM").
+/// Metered usage per workspace per calendar month (period = "YYYY-MM").
 model UsageRecord {
   id                 String   @id @default(cuid())
-  userId             String   @map("user_id") @db.Uuid
+  workspaceId        String   @map("workspace_id")
+  /// Legacy column from the per-user era; not used for quota decisions.
+  userId             String?  @map("user_id") @db.Uuid
   period             String
   aiMessages         Int      @default(0) @map("ai_messages")
   csvImports         Int      @default(0) @map("csv_imports")
@@ -290,9 +404,10 @@ model UsageRecord {
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
-  profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  profile   Profile?  @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  @@unique([userId, period])
+  @@unique([workspaceId, period])
   @@map("usage_records")
 }
 
@@ -405,6 +520,8 @@ model PushSubscription {
 /// An uploaded invoice/receipt document with extracted metadata.
 model Invoice {
   id               String           @id @default(cuid())
+  workspaceId      String           @map("workspace_id")
+  /// The member who uploaded/created the invoice.
   userId           String           @map("user_id") @db.Uuid
   vendor           String           @default("")
   invoiceNumber    String?          @map("invoice_number")
@@ -432,14 +549,15 @@ model Invoice {
   createdAt        DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
 
+  workspace   Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   profile     Profile           @relation(fields: [userId], references: [id], onDelete: Cascade)
   transaction Transaction?      @relation(fields: [transactionId], references: [id], onDelete: SetNull)
   lineItems   InvoiceLineItem[]
 
-  @@index([userId, status])
-  @@index([userId, dueDate])
-  @@index([userId, createdAt(sort: Desc)])
-  @@index([userId, externalRef])
+  @@index([workspaceId, status])
+  @@index([workspaceId, dueDate])
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@index([workspaceId, externalRef])
   @@map("invoices")
 }
 
@@ -460,9 +578,10 @@ model InvoiceLineItem {
 
 /// A user-defined adjustment applied on top of the data-driven cash forecast.
 model Assumption {
-  id        String          @id @default(cuid())
-  userId    String          @map("user_id") @db.Uuid
-  kind      AssumptionKind
+  id          String          @id @default(cuid())
+  workspaceId String          @map("workspace_id")
+  userId      String          @map("user_id") @db.Uuid
+  kind        AssumptionKind
   type      TransactionType
   label     String
   /// Amount for ONE_OFF and RECURRING assumptions.
@@ -477,66 +596,74 @@ model Assumption {
   createdAt DateTime        @default(now()) @map("created_at")
   updatedAt DateTime        @updatedAt @map("updated_at")
 
-  profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  profile   Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
+  @@index([workspaceId])
   @@map("assumptions")
 }
 
 model Category {
-  id        String          @id @default(cuid())
-  userId    String          @map("user_id") @db.Uuid
-  name      String
-  type      TransactionType
-  color     String          @default("#6366f1")
+  id          String          @id @default(cuid())
+  workspaceId String          @map("workspace_id")
+  userId      String          @map("user_id") @db.Uuid
+  name        String
+  type        TransactionType
+  color       String          @default("#6366f1")
   /// Seeded default categories; users can still rename/delete them.
-  isDefault Boolean         @default(false) @map("is_default")
-  createdAt DateTime        @default(now()) @map("created_at")
-  updatedAt DateTime        @updatedAt @map("updated_at")
+  isDefault   Boolean         @default(false) @map("is_default")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
 
+  workspace    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   profile      Profile        @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions Transaction[]
   rules        CategoryRule[]
 
-  @@unique([userId, name])
-  @@index([userId, type])
+  @@unique([workspaceId, name])
+  @@index([workspaceId, type])
   @@map("categories")
 }
 
 /// Auto-categorization rule: transactions whose description or counterparty
 /// contains `pattern` (case-insensitive) get assigned `categoryId`.
 model CategoryRule {
-  id         String   @id @default(cuid())
-  userId     String   @map("user_id") @db.Uuid
-  pattern    String
-  categoryId String   @map("category_id")
-  createdAt  DateTime @default(now()) @map("created_at")
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+  userId      String   @map("user_id") @db.Uuid
+  pattern     String
+  categoryId  String   @map("category_id")
+  createdAt   DateTime @default(now()) @map("created_at")
 
-  profile  Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  profile   Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category  Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, pattern])
-  @@index([userId])
+  @@unique([workspaceId, pattern])
+  @@index([workspaceId])
   @@map("category_rules")
 }
 
 /// One CSV upload. Deleting a batch cascades to its transactions,
 /// which is how an import gets undone.
 model ImportBatch {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id") @db.Uuid
-  fileName  String   @map("file_name")
-  createdAt DateTime @default(now()) @map("created_at")
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+  userId      String   @map("user_id") @db.Uuid
+  fileName    String   @map("file_name")
+  createdAt   DateTime @default(now()) @map("created_at")
 
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   profile      Profile       @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions Transaction[]
 
-  @@index([userId, createdAt(sort: Desc)])
+  @@index([workspaceId, createdAt(sort: Desc)])
   @@map("import_batches")
 }
 
 model Transaction {
   id            String          @id @default(cuid())
+  workspaceId   String          @map("workspace_id")
   userId        String          @map("user_id") @db.Uuid
   type          TransactionType
   amount        Decimal         @db.Decimal(12, 2)
@@ -552,45 +679,52 @@ model Transaction {
   createdAt     DateTime        @default(now()) @map("created_at")
   updatedAt     DateTime        @updatedAt @map("updated_at")
 
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   profile     Profile      @relation(fields: [userId], references: [id], onDelete: Cascade)
   category    Category?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   importBatch ImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
   invoice     Invoice?
 
-  @@unique([userId, hash])
-  @@index([userId, date(sort: Desc)])
-  @@index([userId, categoryId])
-  @@index([userId, importBatchId])
+  @@unique([workspaceId, hash])
+  @@index([workspaceId, date(sort: Desc)])
+  @@index([workspaceId, categoryId])
+  @@index([workspaceId, importBatchId])
   @@map("transactions")
 }
 
 model Budget {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id") @db.Uuid
-  category  String
-  limit     Decimal  @db.Decimal(12, 2)
-  month     Int
-  year      Int
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+  userId      String   @map("user_id") @db.Uuid
+  category    String
+  limit       Decimal  @db.Decimal(12, 2)
+  month       Int
+  year        Int
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  profile   Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, category, month, year])
+  @@unique([workspaceId, category, month, year])
   @@map("budgets")
 }
 
+/// A copilot conversation, shared across the workspace's members.
+/// userId records who started it.
 model Conversation {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id") @db.Uuid
-  title     String
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+  userId      String   @map("user_id") @db.Uuid
+  title       String
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  profile  Profile       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages ChatMessage[]
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  profile   Profile       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  ChatMessage[]
 
-  @@index([userId, updatedAt(sort: Desc)])
+  @@index([workspaceId, updatedAt(sort: Desc)])
   @@map("conversations")
 }
 

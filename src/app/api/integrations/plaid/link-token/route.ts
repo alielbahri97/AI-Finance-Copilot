@@ -19,7 +19,7 @@ export async function POST() {
       );
     }
 
-    const linkToken = await createPlaidLinkToken(access.user.id);
+    const linkToken = await createPlaidLinkToken(access.ctx.user.id);
     return NextResponse.json({ linkToken });
   } catch (error) {
     logger.error("POST /api/integrations/plaid/link-token", { error: serializeError(error) });

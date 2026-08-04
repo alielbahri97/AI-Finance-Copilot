@@ -1,29 +1,24 @@
 import "server-only";
 
 import { NextResponse } from "next/server";
-import type { User } from "@supabase/supabase-js";
 
 import { getEntitlements, upgradeError } from "@/lib/billing/entitlements";
-import { getUser } from "@/lib/supabase/server";
+import { requireWorkspace, type WorkspaceContext } from "@/lib/workspace/context";
 
 import { isEncryptionConfigured } from "./crypto";
 
 /**
- * Common gate for integration API routes: authenticated + Business-plan
- * entitlement + the shared token-encryption key present.
+ * Common gate for integration API routes: authenticated + manage_integrations
+ * permission in the current workspace + Business-plan entitlement + the
+ * shared token-encryption key present.
  */
 export async function requireIntegrationAccess(): Promise<
-  { ok: true; user: User } | { ok: false; response: NextResponse }
+  { ok: true; ctx: WorkspaceContext } | { ok: false; response: NextResponse }
 > {
-  const user = await getUser();
-  if (!user) {
-    return {
-      ok: false,
-      response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
-    };
-  }
+  const auth = await requireWorkspace("manage_integrations");
+  if (!auth.ok) return auth;
 
-  const entitlements = await getEntitlements(user.id);
+  const entitlements = await getEntitlements(auth.ctx.workspace.id);
   if (!entitlements.plan.limits.integrationsEnabled) {
     return {
       ok: false,
@@ -43,5 +38,5 @@ export async function requireIntegrationAccess(): Promise<
     };
   }
 
-  return { ok: true, user };
+  return { ok: true, ctx: auth.ctx };
 }

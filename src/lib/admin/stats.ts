@@ -4,6 +4,7 @@ import { currentPeriod, resolvePlanId } from "@/lib/billing/entitlements";
 import { PLANS, type PlanId } from "@/lib/billing/plans";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
+import { personalWorkspaceId } from "@/lib/workspace/ids";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -131,23 +132,33 @@ export async function getAdminUsers(limit = 200): Promise<AdminUserRow[]> {
       fullName: true,
       isAdmin: true,
       createdAt: true,
-      subscription: true,
-      usageRecords: { where: { period }, take: 1 },
     },
   });
 
+  // Billing is workspace-scoped now; the admin table shows each user's
+  // personal-workspace plan and usage.
+  const workspaceIds = profiles.map((profile) => personalWorkspaceId(profile.id));
+  const [subscriptions, usageRecords] = await Promise.all([
+    prisma.subscription.findMany({ where: { workspaceId: { in: workspaceIds } } }),
+    prisma.usageRecord.findMany({ where: { workspaceId: { in: workspaceIds }, period } }),
+  ]);
+  const subscriptionByWorkspace = new Map(subscriptions.map((s) => [s.workspaceId, s]));
+  const usageByWorkspace = new Map(usageRecords.map((u) => [u.workspaceId, u]));
+
   return profiles.map((profile) => {
-    const resolved = profile.subscription
-      ? resolvePlanId(profile.subscription)
+    const workspaceId = personalWorkspaceId(profile.id);
+    const subscription = subscriptionByWorkspace.get(workspaceId) ?? null;
+    const resolved = subscription
+      ? resolvePlanId(subscription)
       : { planId: "FREE" as PlanId, isTrial: false };
-    const usage = profile.usageRecords[0];
+    const usage = usageByWorkspace.get(workspaceId);
     return {
       id: profile.id,
       email: profile.email,
       fullName: profile.fullName,
       plan: resolved.planId,
       isTrial: resolved.isTrial,
-      subscriptionStatus: profile.subscription?.status ?? null,
+      subscriptionStatus: subscription?.status ?? null,
       aiMessagesThisMonth: usage?.aiMessages ?? 0,
       csvImportsThisMonth: usage?.csvImports ?? 0,
       isAdmin: profile.isAdmin,

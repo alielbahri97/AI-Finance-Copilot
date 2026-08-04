@@ -2,19 +2,18 @@ import { NextResponse } from "next/server";
 
 import { serializeInvoice } from "@/lib/invoices/serialize";
 import { prisma } from "@/lib/prisma";
-import { getUser } from "@/lib/supabase/server";
 import { invoiceLinkSchema } from "@/lib/validations/invoice";
 import { apiError } from "@/lib/api/response";
+import { requireWorkspace } from "@/lib/workspace/context";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 /** Links a transaction to the invoice and marks it paid. */
 export async function POST(request: Request, context: RouteContext) {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireWorkspace("edit_invoices");
+    if (!auth.ok) return auth.response;
+    const { workspace } = auth.ctx;
 
     const { id } = await context.params;
     const body = await request.json();
@@ -24,9 +23,12 @@ export async function POST(request: Request, context: RouteContext) {
     }
 
     const [invoice, transaction] = await Promise.all([
-      prisma.invoice.findFirst({ where: { id, userId: user.id }, select: { id: true } }),
+      prisma.invoice.findFirst({
+        where: { id, workspaceId: workspace.id },
+        select: { id: true },
+      }),
       prisma.transaction.findFirst({
-        where: { id: parsed.data.transactionId, userId: user.id },
+        where: { id: parsed.data.transactionId, workspaceId: workspace.id },
         select: { id: true, invoice: { select: { id: true } } },
       }),
     ]);
@@ -58,14 +60,13 @@ export async function POST(request: Request, context: RouteContext) {
 /** Removes the transaction link; the invoice reverts to unpaid. */
 export async function DELETE(_request: Request, context: RouteContext) {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireWorkspace("edit_invoices");
+    if (!auth.ok) return auth.response;
+    const { workspace } = auth.ctx;
 
     const { id } = await context.params;
     const invoice = await prisma.invoice.findFirst({
-      where: { id, userId: user.id },
+      where: { id, workspaceId: workspace.id },
       select: { id: true },
     });
     if (!invoice) {

@@ -11,20 +11,19 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { getOrCreateProfile } from "@/lib/data";
 import { prisma } from "@/lib/prisma";
-import { getUser } from "@/lib/supabase/server";
+import { getWorkspaceContext } from "@/lib/workspace/context";
 
 export const metadata: Metadata = { title: "Import" };
 export const dynamic = "force-dynamic";
 
 export default async function ImportPage() {
-  const user = await getUser();
-  if (!user) redirect("/login");
+  const ctx = await getWorkspaceContext();
+  if (!ctx) redirect("/login");
+  if (!ctx.permissions.has("edit_transactions")) redirect("/dashboard");
 
-  const profile = await getOrCreateProfile(user);
   const batches = await prisma.importBatch.findMany({
-    where: { userId: user.id },
+    where: { workspaceId: ctx.workspace.id },
     orderBy: { createdAt: "desc" },
     take: 20,
     include: { _count: { select: { transactions: true } } },
@@ -47,7 +46,7 @@ export default async function ImportPage() {
         </p>
       </div>
 
-      <ImportWizard currency={profile.currency} />
+      <ImportWizard currency={ctx.workspace.currency} />
 
       <Card>
         <CardHeader>

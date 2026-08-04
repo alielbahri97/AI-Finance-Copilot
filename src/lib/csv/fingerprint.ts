@@ -7,7 +7,7 @@ import type { NormalizedRow } from "./types";
  * are legitimate (e.g. two identical card payments the same day), so each
  * repeat gets an occurrence index; re-importing the same file therefore maps
  * onto the same set of hashes, while distinct duplicates within a file are
- * preserved. Hashes are stored per user (unique [userId, hash]).
+ * preserved. Hashes are stored per workspace (unique [workspaceId, hash]).
  */
 export function fingerprintRows<T extends NormalizedRow>(rows: T[]): (T & { hash: string })[] {
   const occurrence = new Map<string, number>();

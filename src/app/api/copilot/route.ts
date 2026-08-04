@@ -8,9 +8,9 @@ import { trackEvent } from "@/lib/analytics";
 import { checkLimit, getEntitlements, incrementUsage, limitError } from "@/lib/billing/entitlements";
 import { getOrCreateProfile } from "@/lib/data";
 import { prisma } from "@/lib/prisma";
-import { getUser } from "@/lib/supabase/server";
 import { enforceRateLimit } from "@/lib/api/rate-limit-guard";
 import { logger, serializeError } from "@/lib/logger";
+import { requireWorkspace } from "@/lib/workspace/context";
 
 export const maxDuration = 120;
 
@@ -37,10 +37,9 @@ function titleFromMessage(message: string): string {
  */
 export async function POST(request: Request) {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireWorkspace("use_copilot");
+    if (!auth.ok) return auth.response;
+    const { user, workspace } = auth.ctx;
 
     const limited = await enforceRateLimit("ai", user.id);
     if (limited) return limited;
@@ -54,13 +53,13 @@ export async function POST(request: Request) {
 
     const profile = await getOrCreateProfile(user);
 
-    // Plan gating: monthly AI message quota.
-    const entitlements = await getEntitlements(user.id);
+    // Plan gating: monthly AI message quota (shared across the workspace).
+    const entitlements = await getEntitlements(workspace.id);
     const quota = checkLimit(entitlements, "aiMessages", entitlements.plan.limits.aiMessagesPerMonth);
     if (!quota.allowed) {
       return NextResponse.json(limitError("AI message", entitlements.planId), { status: 402 });
     }
-    await incrementUsage(user.id, "aiMessages");
+    await incrementUsage(workspace.id, "aiMessages");
     await trackEvent(user.id, "ai_message", { conversationId: conversationId ?? null });
 
     // Resolve or create the conversation.
@@ -69,7 +68,7 @@ export async function POST(request: Request) {
 
     if (conversationId) {
       const existing = await prisma.conversation.findFirst({
-        where: { id: conversationId, userId: user.id },
+        where: { id: conversationId, workspaceId: workspace.id },
         select: { id: true, title: true },
       });
       if (!existing) {
@@ -85,7 +84,7 @@ export async function POST(request: Request) {
       history = recent.reverse();
     } else {
       conversation = await prisma.conversation.create({
-        data: { userId: user.id, title: titleFromMessage(message) },
+        data: { workspaceId: workspace.id, userId: user.id, title: titleFromMessage(message) },
         select: { id: true, title: true },
       });
     }
@@ -105,7 +104,7 @@ export async function POST(request: Request) {
       }),
     ]);
 
-    const snapshot = await buildFinancialSnapshot(user.id, profile.currency);
+    const snapshot = await buildFinancialSnapshot(workspace.id, workspace.currency);
     const messages: AiChatMessage[] = [
       { role: "system", content: buildSystemPrompt(snapshot) },
       ...history.map((entry) => ({

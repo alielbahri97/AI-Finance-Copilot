@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 import { SUPPORTED_CURRENCIES } from "@/lib/validations/profile";
 import { apiError } from "@/lib/api/response";
+import { getWorkspaceContext } from "@/lib/workspace/context";
 
 const updateSchema = z
   .object({
@@ -36,6 +37,18 @@ export async function PATCH(request: Request) {
       where: { id: user.id },
       data: parsed.data,
     });
+
+    // Currency drives how business data is displayed, so it lives on the
+    // workspace. Sync it when the member is allowed to manage settings.
+    if (parsed.data.currency) {
+      const ctx = await getWorkspaceContext();
+      if (ctx && ctx.permissions.has("manage_settings")) {
+        await prisma.workspace.update({
+          where: { id: ctx.workspace.id },
+          data: { currency: parsed.data.currency },
+        });
+      }
+    }
 
     return NextResponse.json({
       profile: {

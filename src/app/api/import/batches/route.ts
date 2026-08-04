@@ -1,18 +1,17 @@
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
-import { getUser } from "@/lib/supabase/server";
 import { apiError } from "@/lib/api/response";
+import { requireWorkspace } from "@/lib/workspace/context";
 
 export async function GET() {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireWorkspace("view_transactions");
+    if (!auth.ok) return auth.response;
+    const { workspace } = auth.ctx;
 
     const batches = await prisma.importBatch.findMany({
-      where: { userId: user.id },
+      where: { workspaceId: workspace.id },
       orderBy: { createdAt: "desc" },
       include: { _count: { select: { transactions: true } } },
     });

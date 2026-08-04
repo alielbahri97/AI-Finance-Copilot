@@ -3,12 +3,11 @@ import { NextResponse } from "next/server";
 import { detectStatementCurrency, suggestMapping } from "@/lib/csv/detect";
 import { normalizeRows } from "@/lib/csv/normalize";
 import { parseCsv } from "@/lib/csv/parse";
-import { getOrCreateProfile } from "@/lib/data";
-import { getUser } from "@/lib/supabase/server";
 import { MAX_IMPORT_FILE_BYTES, MAX_IMPORT_ROWS } from "@/lib/validations/import";
 import { enforceRateLimit } from "@/lib/api/rate-limit-guard";
 import { apiError } from "@/lib/api/response";
 import { SUPPORTED_CURRENCIES } from "@/lib/validations/profile";
+import { requireWorkspace } from "@/lib/workspace/context";
 
 export const maxDuration = 60;
 
@@ -20,10 +19,9 @@ export const maxDuration = 60;
  */
 export async function POST(request: Request) {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireWorkspace("edit_transactions");
+    if (!auth.ok) return auth.response;
+    const { user, workspace } = auth.ctx;
 
     const limited = await enforceRateLimit("upload", user.id);
     if (limited) return limited;
@@ -54,14 +52,13 @@ export async function POST(request: Request) {
       );
     }
 
-    const profile = await getOrCreateProfile(user);
     const mapping = suggestMapping(csv);
     const statementCurrency = detectStatementCurrency(csv, mapping);
     const importCurrency =
       statementCurrency.code &&
       (SUPPORTED_CURRENCIES as readonly string[]).includes(statementCurrency.code)
         ? statementCurrency.code
-        : profile.currency;
+        : workspace.currency;
     const preview = normalizeRows(csv.rows.slice(0, 8), mapping, {
       expectedCurrency: statementCurrency.columnIndex !== null ? importCurrency : null,
     });
@@ -76,10 +73,10 @@ export async function POST(request: Request) {
       mapping,
       preview: preview.ok,
       previewErrors: preview.errors,
-      profileCurrency: profile.currency,
+      profileCurrency: workspace.currency,
       statementCurrency,
       currencyMismatch:
-        statementCurrency.code !== null && statementCurrency.code !== profile.currency,
+        statementCurrency.code !== null && statementCurrency.code !== workspace.currency,
     });
   } catch (error) {
     return apiError("POST /api/import/parse", "Could not parse the file", error);

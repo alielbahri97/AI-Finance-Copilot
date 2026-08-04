@@ -13,6 +13,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 import { onboardingSchema, normalizeOnboardingInput } from "@/lib/validations/onboarding";
+import { personalWorkspaceId } from "@/lib/workspace/ids";
 
 function serializeBusinessProfile(
   row: {
@@ -154,6 +155,11 @@ export async function POST(request: Request) {
     if (locationCurrency) {
       await prisma.profile.update({
         where: { id: user.id },
+        data: { currency: locationCurrency },
+      });
+      // Onboarding happens right after signup, on the personal workspace.
+      await prisma.workspace.updateMany({
+        where: { id: personalWorkspaceId(user.id) },
         data: { currency: locationCurrency },
       });
     }

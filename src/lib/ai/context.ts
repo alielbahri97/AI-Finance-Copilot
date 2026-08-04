@@ -101,7 +101,7 @@ function stdDev(values: number[], average: number): number {
 const WINDOW_MONTHS = 12;
 
 export async function buildFinancialSnapshot(
-  userId: string,
+  workspaceId: string,
   currency: string
 ): Promise<FinancialSnapshot> {
   const now = new Date();
@@ -111,7 +111,7 @@ export async function buildFinancialSnapshot(
 
   const [rows, priorRows, assumptionRows] = await Promise.all([
     prisma.transaction.findMany({
-      where: { userId, date: { gte: windowStart } },
+      where: { workspaceId, date: { gte: windowStart } },
       orderBy: { date: "asc" },
       select: {
         type: true,
@@ -123,10 +123,10 @@ export async function buildFinancialSnapshot(
       },
     }),
     prisma.transaction.findMany({
-      where: { userId, date: { lt: windowStart } },
+      where: { workspaceId, date: { lt: windowStart } },
       select: { type: true, amount: true },
     }),
-    prisma.assumption.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
+    prisma.assumption.findMany({ where: { workspaceId }, orderBy: { createdAt: "asc" } }),
   ]);
 
   const transactions: FinanceTransaction[] = rows.map((row) => ({

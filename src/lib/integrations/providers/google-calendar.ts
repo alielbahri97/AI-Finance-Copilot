@@ -28,13 +28,13 @@ interface CalendarEventInput {
   description: string;
 }
 
-function eventId(userId: string, key: string): string {
-  return createHash("sha256").update(`${userId}|${key}`).digest("hex");
+function eventId(workspaceId: string, key: string): string {
+  return createHash("sha256").update(`${workspaceId}|${key}`).digest("hex");
 }
 
 async function createEvent(
   accessToken: string,
-  userId: string,
+  workspaceId: string,
   event: CalendarEventInput
 ): Promise<"created" | "existing"> {
   const endDate = new Date(`${event.date}T00:00:00.000Z`);
@@ -47,7 +47,7 @@ async function createEvent(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      id: eventId(userId, event.key),
+      id: eventId(workspaceId, event.key),
       summary: event.title,
       description: `${event.description}\n\n${appUrl()}/forecast`,
       start: { date: event.date },
@@ -79,10 +79,10 @@ async function sync(ctx: SyncContext): Promise<SyncStats> {
   const todayIso = new Date().toISOString().slice(0, 10);
 
   const [forecast, invoices] = await Promise.all([
-    buildForecast(ctx.userId, ctx.currency),
+    buildForecast(ctx.workspaceId, ctx.currency),
     prisma.invoice.findMany({
       where: {
-        userId: ctx.userId,
+        workspaceId: ctx.workspaceId,
         status: "UNPAID",
         dueDate: { gte: new Date(), lte: windowEnd },
       },
@@ -116,7 +116,7 @@ async function sync(ctx: SyncContext): Promise<SyncStats> {
   let created = 0;
   let existing = 0;
   for (const event of events.slice(0, 40)) {
-    const outcome = await createEvent(ctx.accessToken, ctx.userId, event);
+    const outcome = await createEvent(ctx.accessToken, ctx.workspaceId, event);
     if (outcome === "created") created += 1;
     else existing += 1;
   }

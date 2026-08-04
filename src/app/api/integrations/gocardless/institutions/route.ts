@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
     const access = await requireIntegrationAccess();
     if (!access.ok) return access.response;
 
-    const limited = await enforceRateLimit("sync", access.user.id);
+    const limited = await enforceRateLimit("sync", access.ctx.user.id);
     if (limited) return limited;
 
     const provider = getProvider("gocardless");

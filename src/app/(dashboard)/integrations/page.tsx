@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import type { User } from "@supabase/supabase-js";
 import { CheckCircle2Icon, LockIcon, TriangleAlertIcon } from "lucide-react";
 
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,7 +14,7 @@ import { getEntitlements } from "@/lib/billing/entitlements";
 import { isEncryptionConfigured } from "@/lib/integrations/crypto";
 import { getProviders, isProviderConfigured } from "@/lib/integrations/registry";
 import { prisma } from "@/lib/prisma";
-import { getUser } from "@/lib/supabase/server";
+import { getWorkspaceContext, type WorkspaceContext } from "@/lib/workspace/context";
 
 export const metadata: Metadata = {
   title: "Integrations",
@@ -121,8 +120,9 @@ export default async function IntegrationsPage({
 }: {
   searchParams: Promise<IntegrationsParams>;
 }) {
-  const user = await getUser();
-  if (!user) redirect("/login");
+  const ctx = await getWorkspaceContext();
+  if (!ctx) redirect("/login");
+  if (!ctx.permissions.has("manage_integrations")) redirect("/dashboard");
 
   const params = await searchParams;
 
@@ -137,33 +137,32 @@ export default async function IntegrationsPage({
       </div>
 
       <Suspense fallback={<IntegrationsGridSkeleton />}>
-        <IntegrationsContent user={user} params={params} />
+        <IntegrationsContent ctx={ctx} params={params} />
       </Suspense>
     </div>
   );
 }
 
 async function IntegrationsContent({
-  user,
+  ctx,
   params,
 }: {
-  user: User;
+  ctx: WorkspaceContext;
   params: IntegrationsParams;
 }) {
   const encryptionReady = isEncryptionConfigured();
-  const [entitlements, connections, profile] = await Promise.all([
-    getEntitlements(user.id),
+  const [entitlements, connections] = await Promise.all([
+    getEntitlements(ctx.workspace.id),
     prisma.integrationConnection.findMany({
-      where: { userId: user.id },
+      where: { workspaceId: ctx.workspace.id },
       include: {
         syncRuns: { orderBy: { startedAt: "desc" }, take: 1 },
       },
     }),
-    prisma.profile.findUnique({ where: { id: user.id }, select: { currency: true } }),
   ]);
   const locked = !entitlements.plan.limits.integrationsEnabled;
   const byProvider = new Map(connections.map((connection) => [connection.provider, connection]));
-  const bankPickerCountry = CURRENCY_TO_COUNTRY[profile?.currency ?? ""] ?? "GB";
+  const bankPickerCountry = CURRENCY_TO_COUNTRY[ctx.workspace.currency] ?? "GB";
 
   const cards: IntegrationCardData[] = getProviders().map((provider) => {
     const connection = byProvider.get(provider.id);

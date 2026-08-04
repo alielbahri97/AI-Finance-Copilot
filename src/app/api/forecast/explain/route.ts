@@ -5,9 +5,9 @@ import { getOrCreateProfile } from "@/lib/data";
 import { buildForecast, mapAssumptionRow } from "@/lib/finance/data";
 import { renderForecastText } from "@/lib/finance/render";
 import { prisma } from "@/lib/prisma";
-import { getUser } from "@/lib/supabase/server";
 import { enforceRateLimit } from "@/lib/api/rate-limit-guard";
 import { logger, serializeError } from "@/lib/logger";
+import { requireWorkspace } from "@/lib/workspace/context";
 
 export const maxDuration = 120;
 
@@ -17,18 +17,20 @@ export const maxDuration = 120;
  */
 export async function POST(request: Request) {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireWorkspace("view_reports", "use_copilot");
+    if (!auth.ok) return auth.response;
+    const { user, workspace } = auth.ctx;
 
     const limited = await enforceRateLimit("ai", user.id);
     if (limited) return limited;
 
     const profile = await getOrCreateProfile(user);
     const [forecast, assumptionRows] = await Promise.all([
-      buildForecast(user.id, profile.currency),
-      prisma.assumption.findMany({ where: { userId: user.id }, orderBy: { createdAt: "asc" } }),
+      buildForecast(workspace.id, workspace.currency),
+      prisma.assumption.findMany({
+        where: { workspaceId: workspace.id },
+        orderBy: { createdAt: "asc" },
+      }),
     ]);
 
     const assumptions = assumptionRows.map(mapAssumptionRow);
@@ -39,7 +41,7 @@ export async function POST(request: Request) {
         content: `You are FinPilot's forecasting analyst. You explain a deterministic cash-flow forecast to the user in plain language.
 
 Rules:
-- All amounts are in ${profile.currency}; format them with thousands separators.
+- All amounts are in ${workspace.currency}; format them with thousands separators.
 - Use Markdown with exactly three sections: "### What's driving this forecast", "### Risks and uncertainty", "### Recommendations".
 - Ground everything in the FORECAST DATA below; quote concrete numbers and dates. Never invent data.
 - The forecast is a trend + recurring-pattern extrapolation, not a guarantee — reflect that honestly, especially where the confidence band is wide.

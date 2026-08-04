@@ -38,22 +38,22 @@ export interface Entitlements {
   usage: Usage;
 }
 
-/** Ensures the user has a Subscription row; starts the 14-day trial on first touch. */
-export async function getOrCreateSubscription(userId: string): Promise<Subscription> {
-  const existing = await prisma.subscription.findUnique({ where: { userId } });
+/** Ensures the workspace has a Subscription row; starts the 14-day trial on first touch. */
+export async function getOrCreateSubscription(workspaceId: string): Promise<Subscription> {
+  const existing = await prisma.subscription.findUnique({ where: { workspaceId } });
   if (existing) return existing;
   return prisma.subscription
     .create({
-      data: { userId, trialEndsAt: new Date(Date.now() + TRIAL_DAYS * MS_PER_DAY) },
+      data: { workspaceId, trialEndsAt: new Date(Date.now() + TRIAL_DAYS * MS_PER_DAY) },
     })
-    .catch(() => prisma.subscription.findUniqueOrThrow({ where: { userId } }));
+    .catch(() => prisma.subscription.findUniqueOrThrow({ where: { workspaceId } }));
 }
 
-async function getOrCreateUsage(userId: string, period: string): Promise<UsageRecord> {
+async function getOrCreateUsage(workspaceId: string, period: string): Promise<UsageRecord> {
   return prisma.usageRecord.upsert({
-    where: { userId_period: { userId, period } },
+    where: { workspaceId_period: { workspaceId, period } },
     update: {},
-    create: { userId, period },
+    create: { workspaceId, period },
   });
 }
 
@@ -79,10 +79,10 @@ export function resolvePlanId(subscription: Subscription, now = new Date()): {
  * increment usage read entitlements once before incrementing, so the
  * request-scoped memo never serves stale quota decisions.
  */
-export const getEntitlements = cache(async (userId: string): Promise<Entitlements> => {
+export const getEntitlements = cache(async (workspaceId: string): Promise<Entitlements> => {
   const [subscription, usage] = await Promise.all([
-    getOrCreateSubscription(userId),
-    getOrCreateUsage(userId, currentPeriod()),
+    getOrCreateSubscription(workspaceId),
+    getOrCreateUsage(workspaceId, currentPeriod()),
   ]);
   const period = currentPeriod();
   const { planId, isTrial } = resolvePlanId(subscription);
@@ -108,14 +108,18 @@ export const getEntitlements = cache(async (userId: string): Promise<Entitlement
 
 export type UsageField = "aiMessages" | "csvImports" | "invoiceExtractions" | "exports";
 
-/** Increments a usage counter for the current period. Never throws. */
-export async function incrementUsage(userId: string, field: UsageField, by = 1): Promise<void> {
+/** Increments a workspace usage counter for the current period. Never throws. */
+export async function incrementUsage(
+  workspaceId: string,
+  field: UsageField,
+  by = 1
+): Promise<void> {
   const period = currentPeriod();
   try {
     await prisma.usageRecord.upsert({
-      where: { userId_period: { userId, period } },
+      where: { workspaceId_period: { workspaceId, period } },
       update: { [field]: { increment: by } },
-      create: { userId, period, [field]: by },
+      create: { workspaceId, period, [field]: by },
     });
   } catch (error) {
     logger.error(`[billing] failed to increment ${field}`, { error: serializeError(error) });

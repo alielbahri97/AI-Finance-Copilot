@@ -9,20 +9,40 @@ import { attributeReferral } from "@/lib/billing/referrals";
 import { ensureDefaultCategories } from "@/lib/categories";
 import { currencyFromRequestHeaders } from "@/lib/currency/location";
 import { prisma } from "@/lib/prisma";
+import { personalMembershipId, personalWorkspaceId } from "@/lib/workspace/ids";
 
 /**
- * Ensures a Profile row (and the default category set) exists for the
- * authenticated Supabase user. Called from the dashboard layout so every
- * signed-in user has one. First creation also records the signup event and
- * attributes the referral code carried in the signup metadata, if any.
+ * Ensures a Profile row, the personal workspace and the default category set
+ * exist for the authenticated Supabase user. Called from the dashboard layout
+ * so every signed-in user has one. First creation also records the signup
+ * event and attributes the referral code from the signup metadata, if any.
  */
 /** Seeds defaults without failing the dashboard layout on transient DB errors. */
-async function seedDefaultsSafely(userId: string) {
+async function seedDefaultsSafely(workspaceId: string, userId: string) {
   try {
-    await ensureDefaultCategories(userId);
+    await ensureDefaultCategories(workspaceId, userId);
   } catch (error) {
     console.error("[getOrCreateProfile] default category seed failed", { userId, error });
   }
+}
+
+/**
+ * Creates the user's personal workspace (deterministic id "ws-<userId>")
+ * with them as OWNER. Idempotent: existing rows are left untouched.
+ */
+async function ensurePersonalWorkspace(userId: string, name: string, currency: string) {
+  const workspaceId = personalWorkspaceId(userId);
+  await prisma.workspace.upsert({
+    where: { id: workspaceId },
+    update: {},
+    create: { id: workspaceId, name, currency },
+  });
+  await prisma.workspaceMember.upsert({
+    where: { workspaceId_userId: { workspaceId, userId } },
+    update: {},
+    create: { id: personalMembershipId(userId), workspaceId, userId, role: "OWNER" },
+  });
+  return workspaceId;
 }
 
 /**
@@ -36,7 +56,7 @@ const seededThisIsolate = new Set<string>();
 async function backfillDefaultsOncePerIsolate(userId: string) {
   if (seededThisIsolate.has(userId)) return;
   seededThisIsolate.add(userId);
-  await seedDefaultsSafely(userId);
+  await seedDefaultsSafely(personalWorkspaceId(userId), userId);
 }
 
 export const getOrCreateProfile = cache(async (user: User) => {
@@ -63,7 +83,11 @@ export const getOrCreateProfile = cache(async (user: User) => {
       aiProvider: "GROQ",
     },
   });
-  await seedDefaultsSafely(user.id);
+
+  const workspaceName =
+    profile.fullName?.trim() || profile.email.split("@")[0] || "My workspace";
+  const workspaceId = await ensurePersonalWorkspace(user.id, workspaceName, currency);
+  await seedDefaultsSafely(workspaceId, user.id);
 
   await trackEvent(user.id, "signup");
   const referralCode = user.user_metadata?.referral_code as string | undefined;
@@ -134,19 +158,19 @@ function percentChange(current: number, previous: number): number | null {
  * cache()-wrapped so the streamed stats and charts sections of the dashboard
  * page share one query set per request.
  */
-export const getDashboardData = cache(async (userId: string): Promise<DashboardData> => {
+export const getDashboardData = cache(async (workspaceId: string): Promise<DashboardData> => {
   const now = new Date();
   const since = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1));
 
   const [transactions, priorNet] = await Promise.all([
     prisma.transaction.findMany({
-      where: { userId, date: { gte: since } },
+      where: { workspaceId, date: { gte: since } },
       orderBy: { date: "desc" },
       include: { category: { select: { name: true, color: true } } },
     }),
     prisma.transaction
       .findMany({
-        where: { userId, date: { lt: since } },
+        where: { workspaceId, date: { lt: since } },
         select: { type: true, amount: true },
       })
       .then((rows) =>

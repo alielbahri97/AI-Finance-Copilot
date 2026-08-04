@@ -57,10 +57,14 @@ export async function POST(
       );
     }
 
-    await saveConnection(access.user.id, provider.id, {
-      accessToken: parsed.data.url,
-      metadata: { verifiedAt: new Date().toISOString() },
-    });
+    await saveConnection(
+      { workspaceId: access.ctx.workspace.id, userId: access.ctx.user.id },
+      provider.id,
+      {
+        accessToken: parsed.data.url,
+        metadata: { verifiedAt: new Date().toISOString() },
+      }
+    );
 
     return NextResponse.json({ ok: true });
   } catch (error) {

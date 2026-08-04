@@ -20,7 +20,7 @@ export interface PlanLimits {
   assumptionsEnabled: boolean;
   /** Bank/accounting/productivity integrations (Business and up). */
   integrationsEnabled: boolean;
-  /** Seats included (informational; the app is single-user per account today). */
+  /** Workspace seats (members + pending invitations); null = custom/unlimited. */
   seats: number | null;
 }
 

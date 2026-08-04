@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import type { User } from "@supabase/supabase-js";
 import {
   CalendarClockIcon,
   FlameIcon,
@@ -34,11 +33,10 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getEntitlements } from "@/lib/billing/entitlements";
-import { getOrCreateProfile } from "@/lib/data";
 import { buildForecast } from "@/lib/finance/data";
 import { prisma } from "@/lib/prisma";
-import { getUser } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils";
+import { getWorkspaceContext, type WorkspaceContext } from "@/lib/workspace/context";
 
 export const metadata: Metadata = { title: "Forecast" };
 export const dynamic = "force-dynamic";
@@ -58,8 +56,9 @@ function runwayDisplay(months: number | null): { value: string; hint: string } {
 
 /** Streams: the header paints immediately, the forecast body follows. */
 export default async function ForecastPage() {
-  const user = await getUser();
-  if (!user) redirect("/login");
+  const ctx = await getWorkspaceContext();
+  if (!ctx) redirect("/login");
+  if (!ctx.permissions.has("view_reports")) redirect("/dashboard");
 
   return (
     <div className="flex flex-col gap-6">
@@ -78,25 +77,25 @@ export default async function ForecastPage() {
           </>
         }
       >
-        <ForecastContent user={user} />
+        <ForecastContent ctx={ctx} />
       </Suspense>
     </div>
   );
 }
 
-async function ForecastContent({ user }: { user: User }) {
-  const profile = await getOrCreateProfile(user);
+async function ForecastContent({ ctx }: { ctx: WorkspaceContext }) {
+  const workspaceId = ctx.workspace.id;
 
   // Assumptions are fetched once and shared with the forecast engine
   // (buildForecast used to fetch its own copy — one duplicate query saved).
   const assumptionsPromise = prisma.assumption.findMany({
-    where: { userId: user.id },
+    where: { workspaceId },
     orderBy: { createdAt: "asc" },
   });
   const [forecast, assumptionRows, entitlements] = await Promise.all([
-    assumptionsPromise.then((rows) => buildForecast(user.id, profile.currency, rows)),
+    assumptionsPromise.then((rows) => buildForecast(workspaceId, ctx.workspace.currency, rows)),
     assumptionsPromise,
-    getEntitlements(user.id),
+    getEntitlements(workspaceId),
   ]);
   const assumptionsUnlocked = entitlements.plan.limits.assumptionsEnabled;
 
@@ -129,21 +128,21 @@ async function ForecastContent({ user }: { user: User }) {
         />
         <StatCard
           title={isBurning ? "Net burn rate" : "Net cash added"}
-          value={`${formatCurrency(Math.abs(metrics.netBurnRate), profile.currency)}/mo`}
-          hint={`Gross expenses ${formatCurrency(metrics.grossBurnRate, profile.currency)}/mo (3-month avg)`}
+          value={`${formatCurrency(Math.abs(metrics.netBurnRate), ctx.workspace.currency)}/mo`}
+          hint={`Gross expenses ${formatCurrency(metrics.grossBurnRate, ctx.workspace.currency)}/mo (3-month avg)`}
           icon={FlameIcon}
           tone={isBurning ? "negative" : "positive"}
         />
         <StatCard
           title="Recurring expenses"
-          value={`${formatCurrency(metrics.recurringMonthlyExpenses, profile.currency)}/mo`}
-          hint={`Recurring income ${formatCurrency(metrics.recurringMonthlyIncome, profile.currency)}/mo`}
+          value={`${formatCurrency(metrics.recurringMonthlyExpenses, ctx.workspace.currency)}/mo`}
+          hint={`Recurring income ${formatCurrency(metrics.recurringMonthlyIncome, ctx.workspace.currency)}/mo`}
           icon={RepeatIcon}
         />
         <StatCard
           title="Balance in 30 days"
-          value={formatCurrency(metrics.projectedBalance30d, profile.currency)}
-          hint={`90 days: ${formatCurrency(metrics.projectedBalance90d, profile.currency)} · 12 months: ${formatCurrency(metrics.projectedBalance12m, profile.currency)}`}
+          value={formatCurrency(metrics.projectedBalance30d, ctx.workspace.currency)}
+          hint={`90 days: ${formatCurrency(metrics.projectedBalance90d, ctx.workspace.currency)} · 12 months: ${formatCurrency(metrics.projectedBalance12m, ctx.workspace.currency)}`}
           icon={WalletIcon}
           tone={metrics.projectedBalance30d >= 0 ? "default" : "negative"}
         />
@@ -157,7 +156,7 @@ async function ForecastContent({ user }: { user: User }) {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ForecastChart horizons={forecast.horizons} currency={profile.currency} />
+          <ForecastChart horizons={forecast.horizons} currency={ctx.workspace.currency} />
         </CardContent>
       </Card>
 
@@ -181,7 +180,7 @@ async function ForecastContent({ user }: { user: User }) {
           </CardHeader>
           <CardContent>
             {assumptionsUnlocked ? (
-              <AssumptionsManager assumptions={assumptions} currency={profile.currency} />
+              <AssumptionsManager assumptions={assumptions} currency={ctx.workspace.currency} />
             ) : (
               <div className="flex flex-col items-center gap-3 py-8 text-center">
                 <div className="bg-muted flex size-10 items-center justify-center rounded-full">
@@ -207,7 +206,7 @@ async function ForecastContent({ user }: { user: User }) {
             <CardDescription>Projected recurring payments over the next 45 days</CardDescription>
           </CardHeader>
           <CardContent>
-            <UpcomingBills bills={forecast.upcomingBills} currency={profile.currency} />
+            <UpcomingBills bills={forecast.upcomingBills} currency={ctx.workspace.currency} />
           </CardContent>
         </Card>
       </div>
@@ -217,14 +216,14 @@ async function ForecastContent({ user }: { user: User }) {
           <CardHeader>
             <CardTitle>Recurring expenses</CardTitle>
             <CardDescription>
-              Detected from your history · {formatCurrency(metrics.recurringMonthlyExpenses, profile.currency)}
+              Detected from your history · {formatCurrency(metrics.recurringMonthlyExpenses, ctx.workspace.currency)}
               /month total
             </CardDescription>
           </CardHeader>
           <CardContent>
             <RecurringTable
               items={forecast.recurringExpenses}
-              currency={profile.currency}
+              currency={ctx.workspace.currency}
               emptyMessage="No recurring expenses detected yet."
             />
           </CardContent>
@@ -233,14 +232,14 @@ async function ForecastContent({ user }: { user: User }) {
           <CardHeader>
             <CardTitle>Recurring income</CardTitle>
             <CardDescription>
-              Detected from your history · {formatCurrency(metrics.recurringMonthlyIncome, profile.currency)}
+              Detected from your history · {formatCurrency(metrics.recurringMonthlyIncome, ctx.workspace.currency)}
               /month total
             </CardDescription>
           </CardHeader>
           <CardContent>
             <RecurringTable
               items={forecast.recurringIncome}
-              currency={profile.currency}
+              currency={ctx.workspace.currency}
               emptyMessage="No recurring income detected yet."
             />
           </CardContent>

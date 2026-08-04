@@ -1,7 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import type { User } from "@supabase/supabase-js";
 import {
   BanknoteArrowDownIcon,
   BanknoteArrowUpIcon,
@@ -34,11 +33,10 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getEntitlements } from "@/lib/billing/entitlements";
-import { getOrCreateProfile } from "@/lib/data";
 import { buildReport } from "@/lib/reports/data";
 import { resolvePeriod, type ResolvedPeriod } from "@/lib/reports/period";
-import { getUser } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils";
+import { getWorkspaceContext, type WorkspaceContext } from "@/lib/workspace/context";
 
 export const metadata: Metadata = { title: "Reports" };
 export const dynamic = "force-dynamic";
@@ -49,8 +47,10 @@ interface ReportsPageProps {
 
 /** Streams: header + period selector paint first, KPIs/charts follow. */
 export default async function ReportsPage({ searchParams }: ReportsPageProps) {
-  const user = await getUser();
-  if (!user) redirect("/login");
+  const ctx = await getWorkspaceContext();
+  if (!ctx) redirect("/login");
+  if (!ctx.permissions.has("view_reports")) redirect("/dashboard");
+  const canExport = ctx.permissions.has("export_data");
 
   const params = await searchParams;
   const period = resolvePeriod(params.period, params.from, params.to);
@@ -66,9 +66,11 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
         </div>
         <div className="flex flex-wrap items-end gap-4">
           <PeriodSelector />
-          <Suspense fallback={<Skeleton className="h-9 w-64" />}>
-            <ExportButtonsSection userId={user.id} />
-          </Suspense>
+          {canExport && (
+            <Suspense fallback={<Skeleton className="h-9 w-64" />}>
+              <ExportButtonsSection workspaceId={ctx.workspace.id} />
+            </Suspense>
+          )}
         </div>
       </div>
 
@@ -81,22 +83,21 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
           </>
         }
       >
-        <ReportBody user={user} period={period} />
+        <ReportBody ctx={ctx} period={period} />
       </Suspense>
     </div>
   );
 }
 
-async function ExportButtonsSection({ userId }: { userId: string }) {
-  const entitlements = await getEntitlements(userId);
+async function ExportButtonsSection({ workspaceId }: { workspaceId: string }) {
+  const entitlements = await getEntitlements(workspaceId);
   return <ExportButtons locked={!entitlements.plan.limits.exportsEnabled} />;
 }
 
-async function ReportBody({ user, period }: { user: User; period: ResolvedPeriod }) {
-  const profile = await getOrCreateProfile(user);
-  const report = await buildReport(user.id, profile.currency, period);
+async function ReportBody({ ctx, period }: { ctx: WorkspaceContext; period: ResolvedPeriod }) {
+  const currency = ctx.workspace.currency;
+  const report = await buildReport(ctx.workspace.id, currency, period);
   const { kpis } = report;
-  const currency = profile.currency;
 
   const marginDelta =
     kpis.marginPct !== null && kpis.marginPrevPct !== null

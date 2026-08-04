@@ -11,27 +11,25 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { getOrCreateProfile } from "@/lib/data";
 import { prisma } from "@/lib/prisma";
-import { getUser } from "@/lib/supabase/server";
+import { getWorkspaceContext } from "@/lib/workspace/context";
 
 export const metadata: Metadata = { title: "Categories" };
 export const dynamic = "force-dynamic";
 
 export default async function CategoriesPage() {
-  const user = await getUser();
-  if (!user) redirect("/login");
-
-  await getOrCreateProfile(user);
+  const ctx = await getWorkspaceContext();
+  if (!ctx) redirect("/login");
+  if (!ctx.permissions.has("view_transactions")) redirect("/dashboard");
 
   const [categories, rules] = await Promise.all([
     prisma.category.findMany({
-      where: { userId: user.id },
+      where: { workspaceId: ctx.workspace.id },
       orderBy: [{ type: "asc" }, { name: "asc" }],
       include: { _count: { select: { transactions: true } } },
     }),
     prisma.categoryRule.findMany({
-      where: { userId: user.id },
+      where: { workspaceId: ctx.workspace.id },
       orderBy: { createdAt: "desc" },
       include: { category: { select: { name: true, color: true } } },
     }),

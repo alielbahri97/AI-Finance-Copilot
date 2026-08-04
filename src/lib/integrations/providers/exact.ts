@@ -120,7 +120,10 @@ async function sync(ctx: SyncContext): Promise<SyncStats> {
     ),
   ];
 
-  const result = await upsertSyncedInvoices(ctx.userId, synced);
+  const result = await upsertSyncedInvoices(
+    { workspaceId: ctx.workspaceId, userId: ctx.userId },
+    synced
+  );
   return {
     sales: sales.d.results.length,
     purchases: purchases.d.results.length,

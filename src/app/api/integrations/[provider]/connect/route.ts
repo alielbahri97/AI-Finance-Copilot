@@ -8,8 +8,8 @@ import { isEncryptionConfigured } from "@/lib/integrations/crypto";
 import { appUrl, buildAuthUrl } from "@/lib/integrations/oauth";
 import { createRequisition } from "@/lib/integrations/providers/gocardless";
 import { getProvider, isProviderConfigured } from "@/lib/integrations/registry";
-import { getUser } from "@/lib/supabase/server";
 import { logger, serializeError } from "@/lib/logger";
+import { getWorkspaceContext } from "@/lib/workspace/context";
 
 function backToIntegrations(error?: string): NextResponse {
   const url = new URL("/integrations", appUrl());
@@ -29,12 +29,16 @@ export async function GET(
   const { provider: providerId } = await params;
 
   try {
-    const user = await getUser();
-    if (!user) {
+    const ctx = await getWorkspaceContext();
+    if (!ctx) {
       return NextResponse.redirect(new URL("/login", appUrl()));
     }
+    if (!ctx.permissions.has("manage_integrations")) {
+      return backToIntegrations("You don't have permission to manage integrations here.");
+    }
+    const user = ctx.user;
 
-    const entitlements = await getEntitlements(user.id);
+    const entitlements = await getEntitlements(ctx.workspace.id);
     if (!entitlements.plan.limits.integrationsEnabled) {
       return backToIntegrations("Integrations require the Business plan.");
     }

@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import type { User } from "@supabase/supabase-js";
 import { UploadIcon } from "lucide-react";
 
 import { TableCardSkeleton } from "@/components/dashboard/section-skeletons";
@@ -17,9 +16,8 @@ import type {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { Prisma } from "@/generated/prisma/client";
-import { getOrCreateProfile } from "@/lib/data";
 import { prisma } from "@/lib/prisma";
-import { getUser } from "@/lib/supabase/server";
+import { getWorkspaceContext, type WorkspaceContext } from "@/lib/workspace/context";
 
 export const metadata: Metadata = { title: "Transactions" };
 export const dynamic = "force-dynamic";
@@ -54,12 +52,14 @@ export default async function TransactionsPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const user = await getUser();
-  if (!user) redirect("/login");
+  const ctx = await getWorkspaceContext();
+  if (!ctx) redirect("/login");
+  if (!ctx.permissions.has("view_transactions")) redirect("/dashboard");
+  const canEdit = ctx.permissions.has("edit_transactions");
 
   const params = await searchParams;
   const categories = await prisma.category.findMany({
-    where: { userId: user.id },
+    where: { workspaceId: ctx.workspace.id },
     orderBy: [{ type: "asc" }, { name: "asc" }],
     select: { id: true, name: true, type: true, color: true },
   });
@@ -74,35 +74,35 @@ export default async function TransactionsPage({
             Search, filter and categorize your income and expenses.
           </p>
         </div>
-        <div className="flex gap-2">
-          <TransactionDialog categories={categoryOptions} />
-          <Button asChild>
-            <Link href="/import">
-              <UploadIcon />
-              Import CSV
-            </Link>
-          </Button>
-        </div>
+        {canEdit && (
+          <div className="flex gap-2">
+            <TransactionDialog categories={categoryOptions} />
+            <Button asChild>
+              <Link href="/import">
+                <UploadIcon />
+                Import CSV
+              </Link>
+            </Button>
+          </div>
+        )}
       </div>
 
       <Suspense fallback={<TableCardSkeleton />}>
-        <TransactionsContent user={user} params={params} categories={categoryOptions} />
+        <TransactionsContent ctx={ctx} params={params} categories={categoryOptions} />
       </Suspense>
     </div>
   );
 }
 
 async function TransactionsContent({
-  user,
+  ctx,
   params,
   categories: categoryOptions,
 }: {
-  user: User;
+  ctx: WorkspaceContext;
   params: SearchParams;
   categories: CategoryOption[];
 }) {
-  const profile = await getOrCreateProfile(user);
-
   const q = first(params, "q")?.trim();
   const type = first(params, "type");
   const category = first(params, "category");
@@ -113,7 +113,7 @@ async function TransactionsContent({
   const max = parseAmountParam(first(params, "max"));
   const requestedPage = Math.max(1, Number(first(params, "page") ?? "1") || 1);
 
-  const where: Prisma.TransactionWhereInput = { userId: user.id };
+  const where: Prisma.TransactionWhereInput = { workspaceId: ctx.workspace.id };
   if (q) {
     where.OR = [
       { description: { contains: q, mode: "insensitive" } },
@@ -132,7 +132,7 @@ async function TransactionsContent({
   const [totalCount, batches] = await Promise.all([
     prisma.transaction.count({ where }),
     prisma.importBatch.findMany({
-      where: { userId: user.id },
+      where: { workspaceId: ctx.workspace.id },
       orderBy: { createdAt: "desc" },
       include: { _count: { select: { transactions: true } } },
     }),
@@ -185,7 +185,7 @@ async function TransactionsContent({
           <TransactionsTable
             transactions={rows}
             categories={categoryOptions}
-            currency={profile.currency}
+            currency={ctx.workspace.currency}
             page={page}
             pageCount={pageCount}
             totalCount={totalCount}

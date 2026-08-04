@@ -5,10 +5,11 @@ import { checkLimit, getEntitlements, incrementUsage } from "@/lib/billing/entit
 import { getOrCreateProfile } from "@/lib/data";
 import { ingestInvoiceDocument } from "@/lib/invoices/ingest";
 import { INVOICE_MIME_TYPES, MAX_INVOICE_FILE_BYTES } from "@/lib/invoices/storage";
-import { createClient, getUser } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 import { enforceRateLimit } from "@/lib/api/rate-limit-guard";
 import { apiError } from "@/lib/api/response";
 import { logger, serializeError } from "@/lib/logger";
+import { requireWorkspace } from "@/lib/workspace/context";
 
 export const maxDuration = 120;
 
@@ -20,10 +21,9 @@ export const maxDuration = 120;
  */
 export async function POST(request: Request) {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireWorkspace("edit_invoices");
+    if (!auth.ok) return auth.response;
+    const { user, workspace } = auth.ctx;
 
     const limited = await enforceRateLimit("upload", user.id);
     if (limited) return limited;
@@ -51,21 +51,22 @@ export async function POST(request: Request) {
 
     // Plan gating: AI extraction has a monthly quota. Over-quota uploads
     // still work — they just skip extraction and go to manual review.
-    const entitlements = await getEntitlements(user.id);
+    const entitlements = await getEntitlements(workspace.id);
     const extractionQuota = checkLimit(
       entitlements,
       "invoiceExtractions",
       entitlements.plan.limits.invoiceExtractionsPerMonth
     );
     if (extractionQuota.allowed) {
-      await incrementUsage(user.id, "invoiceExtractions");
+      await incrementUsage(workspace.id, "invoiceExtractions");
     }
 
     let result;
     try {
       result = await ingestInvoiceDocument({
+        workspaceId: workspace.id,
         userId: user.id,
-        currency: profile.currency,
+        currency: workspace.currency,
         aiProvider: profile.aiProvider,
         buffer: await file.arrayBuffer(),
         mimeType: file.type,

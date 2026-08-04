@@ -131,33 +131,39 @@ const STOPWORDS = new Set([
 ]);
 
 /**
- * Seeds the default category set for empty accounts, then ensures every
- * DEFAULT_CATEGORY_RULES pattern exists. Partially seeded users get missing
- * patterns (e.g. uber) on the next call; existing user patterns are left alone
- * via skipDuplicates on @@unique([userId, pattern]).
+ * Seeds the default category set for empty workspaces, then ensures every
+ * DEFAULT_CATEGORY_RULES pattern exists. Partially seeded workspaces get
+ * missing patterns (e.g. uber) on the next call; existing patterns are left
+ * alone via skipDuplicates on @@unique([workspaceId, pattern]).
+ * `userId` records who the seed ran for (the workspace creator).
  */
-export async function ensureDefaultCategories(userId: string) {
-  const count = await prisma.category.count({ where: { userId } });
+export async function ensureDefaultCategories(workspaceId: string, userId: string) {
+  const count = await prisma.category.count({ where: { workspaceId } });
   if (count === 0) {
     await prisma.category.createMany({
-      data: DEFAULT_CATEGORIES.map((category) => ({ ...category, userId, isDefault: true })),
+      data: DEFAULT_CATEGORIES.map((category) => ({
+        ...category,
+        workspaceId,
+        userId,
+        isDefault: true,
+      })),
       skipDuplicates: true,
     });
   }
-  await ensureDefaultCategoryRules(userId);
+  await ensureDefaultCategoryRules(workspaceId, userId);
 }
 
-/** Creates any missing default rules; never overwrites existing pattern+userId rows. */
-export async function ensureDefaultCategoryRules(userId: string) {
+/** Creates any missing default rules; never overwrites existing pattern rows. */
+export async function ensureDefaultCategoryRules(workspaceId: string, userId: string) {
   const categories = await prisma.category.findMany({
-    where: { userId },
+    where: { workspaceId },
     select: { id: true, name: true },
   });
   const idByName = new Map(categories.map((category) => [category.name, category.id]));
   const data = DEFAULT_CATEGORY_RULES.flatMap((rule) => {
     const categoryId = idByName.get(rule.category);
     if (!categoryId) return [];
-    return [{ userId, pattern: rule.pattern, categoryId }];
+    return [{ workspaceId, userId, pattern: rule.pattern, categoryId }];
   });
   if (data.length === 0) return;
   await prisma.categoryRule.createMany({ data, skipDuplicates: true });
@@ -168,10 +174,10 @@ export interface RuleMatcher {
   categoryId: string;
 }
 
-/** Loads the user's auto-categorization rules, longest pattern first. */
-export async function loadRuleMatchers(userId: string): Promise<RuleMatcher[]> {
+/** Loads the workspace's auto-categorization rules, longest pattern first. */
+export async function loadRuleMatchers(workspaceId: string): Promise<RuleMatcher[]> {
   const rules = await prisma.categoryRule.findMany({
-    where: { userId },
+    where: { workspaceId },
     select: { pattern: true, categoryId: true },
   });
   return rules
@@ -259,24 +265,25 @@ export interface LearnedCategoryRule {
  * choice wins when the pattern already exists.
  */
 export async function learnCategoryRule(
-  userId: string,
+  scope: { workspaceId: string; userId: string },
   input: {
     description: string;
     counterparty: string | null | undefined;
     categoryId: string;
   }
 ): Promise<LearnedCategoryRule | null> {
+  const { workspaceId, userId } = scope;
   const pattern = extractCategoryPattern(input.description, input.counterparty);
   if (!pattern) return null;
 
   const category = await prisma.category.findFirst({
-    where: { id: input.categoryId, userId },
+    where: { id: input.categoryId, workspaceId },
     select: { id: true, name: true },
   });
   if (!category) return null;
 
   const existing = await prisma.categoryRule.findFirst({
-    where: { userId, pattern: { equals: pattern, mode: "insensitive" } },
+    where: { workspaceId, pattern: { equals: pattern, mode: "insensitive" } },
     select: { id: true, pattern: true, categoryId: true },
   });
 
@@ -302,7 +309,7 @@ export async function learnCategoryRule(
   }
 
   await prisma.categoryRule.create({
-    data: { userId, pattern, categoryId: category.id },
+    data: { workspaceId, userId, pattern, categoryId: category.id },
   });
   return {
     pattern,
@@ -317,7 +324,7 @@ export async function learnCategoryRule(
  * Dedupes by pattern so bulk edits create one rule per merchant keyword.
  */
 export async function learnCategoryRulesFromTransactions(
-  userId: string,
+  scope: { workspaceId: string; userId: string },
   categoryId: string,
   transactions: { description: string; counterparty: string | null }[]
 ): Promise<LearnedCategoryRule[]> {
@@ -329,7 +336,7 @@ export async function learnCategoryRulesFromTransactions(
     if (!pattern || seen.has(pattern)) continue;
     seen.add(pattern);
 
-    const result = await learnCategoryRule(userId, {
+    const result = await learnCategoryRule(scope, {
       description: tx.description,
       counterparty: tx.counterparty,
       categoryId,

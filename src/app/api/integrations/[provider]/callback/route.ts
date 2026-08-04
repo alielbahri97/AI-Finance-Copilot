@@ -6,8 +6,9 @@ import { appUrl, exchangeCode } from "@/lib/integrations/oauth";
 import { getProviderHooks } from "@/lib/integrations/providers";
 import { finalizeRequisition } from "@/lib/integrations/providers/gocardless";
 import { getProvider } from "@/lib/integrations/registry";
-import { getUser } from "@/lib/supabase/server";
 import { logger, serializeError } from "@/lib/logger";
+import { recordAudit } from "@/lib/workspace/audit";
+import { getWorkspaceContext } from "@/lib/workspace/context";
 
 function finish(error?: string, connected?: string): NextResponse {
   const url = new URL("/integrations", appUrl());
@@ -31,10 +32,15 @@ export async function GET(
   const { provider: providerId } = await params;
 
   try {
-    const user = await getUser();
-    if (!user) {
+    const ctx = await getWorkspaceContext();
+    if (!ctx) {
       return NextResponse.redirect(new URL("/login", appUrl()));
     }
+    if (!ctx.permissions.has("manage_integrations")) {
+      return finish("You don't have permission to manage integrations in this workspace.");
+    }
+    const user = ctx.user;
+    const scope = { workspaceId: ctx.workspace.id, userId: user.id };
 
     const provider = getProvider(providerId);
     if (!provider) {
@@ -54,7 +60,7 @@ export async function GET(
         return finish("The connection session expired. Try again.");
       }
       const finalized = await finalizeRequisition(requisitionId);
-      await saveConnection(user.id, provider.id, {
+      await saveConnection(scope, provider.id, {
         metadata: {
           requisitionId,
           accounts: finalized.accounts,
@@ -64,6 +70,9 @@ export async function GET(
           consentExpiresAt: finalized.consentExpiresAt,
           maxHistoricalDays: finalized.maxHistoricalDays,
         },
+      });
+      await recordAudit(ctx.workspace.id, user.id, "integration.connected", {
+        provider: provider.id,
       });
       return finish(undefined, provider.id);
     }
@@ -86,12 +95,16 @@ export async function GET(
       ? await hooks.afterConnect({ userId: user.id, tokens, query })
       : {};
 
-    await saveConnection(user.id, provider.id, {
+    await saveConnection(scope, provider.id, {
       accessToken: extras.accessToken !== undefined ? extras.accessToken : tokens.accessToken,
       refreshToken:
         extras.refreshToken !== undefined ? extras.refreshToken : tokens.refreshToken,
       expiresAt: extras.expiresAt !== undefined ? extras.expiresAt : tokens.expiresAt,
       metadata: extras.metadata ?? {},
+    });
+
+    await recordAudit(ctx.workspace.id, user.id, "integration.connected", {
+      provider: provider.id,
     });
 
     return finish(undefined, provider.id);

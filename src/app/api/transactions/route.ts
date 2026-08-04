@@ -1,19 +1,17 @@
 import { NextResponse } from "next/server";
 
 import { loadRuleMatchers, matchCategory } from "@/lib/categories";
-import { getOrCreateProfile } from "@/lib/data";
 import { evaluateLargeTransactions } from "@/lib/notifications/alerts";
 import { prisma } from "@/lib/prisma";
-import { getUser } from "@/lib/supabase/server";
 import { transactionSchema } from "@/lib/validations/transaction";
 import { apiError } from "@/lib/api/response";
+import { requireWorkspace } from "@/lib/workspace/context";
 
 export async function POST(request: Request) {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireWorkspace("edit_transactions");
+    if (!auth.ok) return auth.response;
+    const { user, workspace } = auth.ctx;
 
     const body = await request.json();
     const parsed = transactionSchema.safeParse(body);
@@ -24,19 +22,17 @@ export async function POST(request: Request) {
       );
     }
 
-    const profile = await getOrCreateProfile(user);
-
     let categoryId = parsed.data.categoryId ?? null;
     if (categoryId) {
       const category = await prisma.category.findFirst({
-        where: { id: categoryId, userId: user.id },
+        where: { id: categoryId, workspaceId: workspace.id },
         select: { id: true },
       });
       if (!category) {
         return NextResponse.json({ error: "Unknown category" }, { status: 400 });
       }
     } else {
-      const matchers = await loadRuleMatchers(user.id);
+      const matchers = await loadRuleMatchers(workspace.id);
       categoryId = matchCategory(
         matchers,
         parsed.data.description,
@@ -46,6 +42,7 @@ export async function POST(request: Request) {
 
     const transaction = await prisma.transaction.create({
       data: {
+        workspaceId: workspace.id,
         userId: user.id,
         type: parsed.data.type,
         amount: parsed.data.amount,
@@ -57,7 +54,7 @@ export async function POST(request: Request) {
     });
 
     // Immediate large-transaction alert; never blocks or fails the create.
-    await evaluateLargeTransactions(user.id, profile.currency, [
+    await evaluateLargeTransactions(workspace.id, workspace.currency, [
       {
         type: parsed.data.type,
         amount: parsed.data.amount,

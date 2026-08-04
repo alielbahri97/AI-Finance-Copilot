@@ -2,16 +2,23 @@ import { NextResponse } from "next/server";
 
 import { getOrCreateStripeCustomer, getStripe } from "@/lib/billing/stripe";
 import { getOrCreateProfile } from "@/lib/data";
-import { getUser } from "@/lib/supabase/server";
 import { enforceRateLimit } from "@/lib/api/rate-limit-guard";
 import { apiError } from "@/lib/api/response";
+import { recordAudit } from "@/lib/workspace/audit";
+import { requireWorkspace } from "@/lib/workspace/context";
 
-/** Creates a Stripe Billing Portal session for managing the subscription. */
+/** Creates a Stripe Billing Portal session for the workspace subscription. */
 export async function POST(request: Request) {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await requireWorkspace("view_billing");
+    if (!auth.ok) return auth.response;
+    const { user, workspace, role } = auth.ctx;
+
+    if (role !== "OWNER" && role !== "ADMIN") {
+      return NextResponse.json(
+        { error: "Only workspace owners and admins can manage billing." },
+        { status: 403 }
+      );
     }
 
     const limited = await enforceRateLimit("billing", user.id);
@@ -26,13 +33,20 @@ export async function POST(request: Request) {
     }
 
     const profile = await getOrCreateProfile(user);
-    const customerId = await getOrCreateStripeCustomer(stripe, user.id, profile.email);
+    const customerId = await getOrCreateStripeCustomer(
+      stripe,
+      workspace.id,
+      user.id,
+      profile.email
+    );
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin;
 
     const session = await stripe.billingPortal.sessions.create({
       customer: customerId,
       return_url: `${appUrl}/billing`,
     });
+
+    await recordAudit(workspace.id, user.id, "billing.portal_opened");
 
     return NextResponse.json({ url: session.url });
   } catch (error) {

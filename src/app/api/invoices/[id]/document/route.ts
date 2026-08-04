@@ -2,22 +2,22 @@ import { NextResponse } from "next/server";
 
 import { createInvoiceSignedUrl } from "@/lib/invoices/storage";
 import { prisma } from "@/lib/prisma";
-import { createClient, getUser } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 import { apiError } from "@/lib/api/response";
+import { requireWorkspace } from "@/lib/workspace/context";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 /** Returns a short-lived signed URL for viewing/downloading the document. */
 export async function GET(_request: Request, context: RouteContext) {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireWorkspace("view_invoices");
+    if (!auth.ok) return auth.response;
+    const { workspace } = auth.ctx;
 
     const { id } = await context.params;
     const invoice = await prisma.invoice.findFirst({
-      where: { id, userId: user.id },
+      where: { id, workspaceId: workspace.id },
       select: { storagePath: true, mimeType: true, fileName: true },
     });
     if (!invoice) {

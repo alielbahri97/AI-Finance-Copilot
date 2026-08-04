@@ -7,9 +7,8 @@ import { CopilotShell } from "@/components/copilot/copilot-shell";
 import { buildFinancialSnapshot } from "@/lib/ai/context";
 import { buildSuggestedQuestions } from "@/lib/ai/suggestions";
 import { checkLimit, getEntitlements } from "@/lib/billing/entitlements";
-import { getOrCreateProfile } from "@/lib/data";
 import { prisma } from "@/lib/prisma";
-import { getUser } from "@/lib/supabase/server";
+import { getWorkspaceContext } from "@/lib/workspace/context";
 
 export const metadata: Metadata = { title: "Copilot" };
 export const dynamic = "force-dynamic";
@@ -19,23 +18,23 @@ export default async function CopilotPage({
 }: {
   searchParams: Promise<{ c?: string | string[] }>;
 }) {
-  const user = await getUser();
-  if (!user) redirect("/login");
+  const ctx = await getWorkspaceContext();
+  if (!ctx) redirect("/login");
+  if (!ctx.permissions.has("use_copilot")) redirect("/dashboard");
+  const workspaceId = ctx.workspace.id;
 
   const params = await searchParams;
   const requestedId = Array.isArray(params.c) ? params.c[0] : params.c;
 
-  const profile = await getOrCreateProfile(user);
-
   const [conversations, snapshot, entitlements] = await Promise.all([
     prisma.conversation.findMany({
-      where: { userId: user.id },
+      where: { workspaceId },
       orderBy: { updatedAt: "desc" },
       take: 50,
       select: { id: true, title: true, updatedAt: true },
     }),
-    buildFinancialSnapshot(user.id, profile.currency),
-    getEntitlements(user.id),
+    buildFinancialSnapshot(workspaceId, ctx.workspace.currency),
+    getEntitlements(workspaceId),
   ]);
   const aiQuota = checkLimit(
     entitlements,
@@ -49,7 +48,7 @@ export default async function CopilotPage({
 
   const messages = activeId
     ? await prisma.chatMessage.findMany({
-        where: { conversationId: activeId, userId: user.id },
+        where: { conversationId: activeId, conversation: { workspaceId } },
         orderBy: { createdAt: "asc" },
         take: 200,
         select: { id: true, role: true, content: true },

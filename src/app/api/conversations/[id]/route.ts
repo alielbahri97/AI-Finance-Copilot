@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
-import { getUser } from "@/lib/supabase/server";
 import { apiError } from "@/lib/api/response";
+import { requireWorkspace } from "@/lib/workspace/context";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -13,10 +13,9 @@ const renameSchema = z.object({
 
 export async function PATCH(request: Request, context: RouteContext) {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireWorkspace("use_copilot");
+    if (!auth.ok) return auth.response;
+    const { workspace } = auth.ctx;
 
     const { id } = await context.params;
     const body = await request.json();
@@ -29,7 +28,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
 
     const result = await prisma.conversation.updateMany({
-      where: { id, userId: user.id },
+      where: { id, workspaceId: workspace.id },
       data: { title: parsed.data.title },
     });
     if (result.count === 0) {
@@ -44,14 +43,15 @@ export async function PATCH(request: Request, context: RouteContext) {
 
 export async function DELETE(_request: Request, context: RouteContext) {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireWorkspace("use_copilot");
+    if (!auth.ok) return auth.response;
+    const { workspace } = auth.ctx;
 
     const { id } = await context.params;
     // Messages are removed by the cascading foreign key.
-    const result = await prisma.conversation.deleteMany({ where: { id, userId: user.id } });
+    const result = await prisma.conversation.deleteMany({
+      where: { id, workspaceId: workspace.id },
+    });
     if (result.count === 0) {
       return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
     }

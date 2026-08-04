@@ -37,7 +37,7 @@ export async function PATCH(
       );
     }
 
-    const connection = await getConnection(access.user.id, provider.id);
+    const connection = await getConnection(access.ctx.workspace.id, provider.id);
     if (!connection) {
       return NextResponse.json({ error: "Not connected" }, { status: 404 });
     }

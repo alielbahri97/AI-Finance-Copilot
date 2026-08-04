@@ -36,8 +36,8 @@ import {
 import { getDashboardData, getOrCreateProfile } from "@/lib/data";
 import { buildForecast } from "@/lib/finance/data";
 import { getInvoiceReminders } from "@/lib/invoices/reminders";
-import { getUser } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils";
+import { getWorkspaceContext } from "@/lib/workspace/context";
 
 export const metadata: Metadata = { title: "Dashboard" };
 export const dynamic = "force-dynamic";
@@ -49,11 +49,15 @@ export const dynamic = "force-dynamic";
  * the stats and charts sections share one query set.
  */
 export default async function DashboardPage() {
-  const user = await getUser();
-  if (!user) redirect("/login");
+  const ctx = await getWorkspaceContext();
+  if (!ctx) redirect("/login");
+  const { workspace } = ctx;
 
-  const profile = await getOrCreateProfile(user);
+  const profile = await getOrCreateProfile(ctx.user);
   const firstName = profile.fullName?.split(" ")[0];
+  const canViewTransactions = ctx.permissions.has("view_transactions");
+  const canViewInvoices = ctx.permissions.has("view_invoices");
+  const canViewReports = ctx.permissions.has("view_reports");
 
   return (
     <div className="flex flex-col gap-6">
@@ -66,35 +70,43 @@ export default async function DashboardPage() {
         </p>
       </div>
 
-      <Suspense fallback={<StatRowSkeleton />}>
-        <StatsSection userId={user.id} currency={profile.currency} />
-      </Suspense>
+      {canViewTransactions && (
+        <Suspense fallback={<StatRowSkeleton />}>
+          <StatsSection workspaceId={workspace.id} currency={workspace.currency} />
+        </Suspense>
+      )}
 
-      <Suspense fallback={null}>
-        <InvoiceAlertSection userId={user.id} currency={profile.currency} />
-      </Suspense>
+      {canViewInvoices && (
+        <Suspense fallback={null}>
+          <InvoiceAlertSection workspaceId={workspace.id} currency={workspace.currency} />
+        </Suspense>
+      )}
 
-      <Suspense fallback={<BannerSkeleton />}>
-        <ForecastTeaserSection userId={user.id} currency={profile.currency} />
-      </Suspense>
+      {canViewReports && (
+        <Suspense fallback={<BannerSkeleton />}>
+          <ForecastTeaserSection workspaceId={workspace.id} currency={workspace.currency} />
+        </Suspense>
+      )}
 
-      <Suspense
-        fallback={
-          <>
-            <ChartRowSkeleton />
-            <ChartRowSkeleton />
-            <TableCardSkeleton rows={6} />
-          </>
-        }
-      >
-        <ChartsSection userId={user.id} currency={profile.currency} />
-      </Suspense>
+      {canViewTransactions && (
+        <Suspense
+          fallback={
+            <>
+              <ChartRowSkeleton />
+              <ChartRowSkeleton />
+              <TableCardSkeleton rows={6} />
+            </>
+          }
+        >
+          <ChartsSection workspaceId={workspace.id} currency={workspace.currency} />
+        </Suspense>
+      )}
     </div>
   );
 }
 
-async function StatsSection({ userId, currency }: { userId: string; currency: string }) {
-  const data = await getDashboardData(userId);
+async function StatsSection({ workspaceId, currency }: { workspaceId: string; currency: string }) {
+  const data = await getDashboardData(workspaceId);
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <StatCard
@@ -130,8 +142,14 @@ async function StatsSection({ userId, currency }: { userId: string; currency: st
   );
 }
 
-async function InvoiceAlertSection({ userId, currency }: { userId: string; currency: string }) {
-  const invoiceReminders = await getInvoiceReminders(userId);
+async function InvoiceAlertSection({
+  workspaceId,
+  currency,
+}: {
+  workspaceId: string;
+  currency: string;
+}) {
+  const invoiceReminders = await getInvoiceReminders(workspaceId);
   const dueCount = invoiceReminders.dueSoon.length + invoiceReminders.overdue.length;
   if (dueCount === 0) return null;
 
@@ -161,8 +179,14 @@ async function InvoiceAlertSection({ userId, currency }: { userId: string; curre
   );
 }
 
-async function ForecastTeaserSection({ userId, currency }: { userId: string; currency: string }) {
-  const forecast = await buildForecast(userId, currency);
+async function ForecastTeaserSection({
+  workspaceId,
+  currency,
+}: {
+  workspaceId: string;
+  currency: string;
+}) {
+  const forecast = await buildForecast(workspaceId, currency);
   const runwayLabel =
     forecast.metrics.runwayMonths === null
       ? "∞ (cash-flow positive)"
@@ -200,8 +224,8 @@ async function ForecastTeaserSection({ userId, currency }: { userId: string; cur
   );
 }
 
-async function ChartsSection({ userId, currency }: { userId: string; currency: string }) {
-  const data = await getDashboardData(userId);
+async function ChartsSection({ workspaceId, currency }: { workspaceId: string; currency: string }) {
+  const data = await getDashboardData(workspaceId);
   return (
     <>
       <div className="grid gap-4 lg:grid-cols-5">

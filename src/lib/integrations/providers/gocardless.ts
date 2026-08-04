@@ -382,7 +382,7 @@ async function sync(ctx: SyncContext): Promise<SyncStats> {
   }
 
   const result = await importBankTransactions(
-    ctx.userId,
+    { workspaceId: ctx.workspaceId, userId: ctx.userId },
     ctx.currency,
     "gocardless",
     `GoCardless sync ${now.toISOString().slice(0, 10)}`,

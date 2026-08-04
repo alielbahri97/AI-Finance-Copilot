@@ -28,7 +28,10 @@ const MAX_BACKOFF_EXPONENT = 4; // interval * 2^4 max
 export async function runSync(connectionId: string): Promise<SyncOutcome> {
   const connection = await prisma.integrationConnection.findUnique({
     where: { id: connectionId },
-    include: { profile: { select: { currency: true, aiProvider: true } } },
+    include: {
+      profile: { select: { aiProvider: true } },
+      workspace: { select: { currency: true } },
+    },
   });
   if (!connection) {
     return { status: "SKIPPED", error: "Connection not found" };
@@ -55,8 +58,9 @@ export async function runSync(connectionId: string): Promise<SyncOutcome> {
 
     const stats = await hooks.sync({
       connection,
+      workspaceId: connection.workspaceId,
       userId: connection.userId,
-      currency: connection.profile.currency,
+      currency: connection.workspace.currency,
       aiProvider: connection.profile.aiProvider,
       accessToken,
       metadata: (connection.metadata as Record<string, unknown> | null) ?? {},

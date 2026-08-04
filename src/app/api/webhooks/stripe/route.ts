@@ -8,6 +8,8 @@ import { getStripe, mapStripeStatus, subscriptionPeriodEnd } from "@/lib/billing
 import { prisma } from "@/lib/prisma";
 import { apiError } from "@/lib/api/response";
 import { logger, serializeError } from "@/lib/logger";
+import { recordAudit } from "@/lib/workspace/audit";
+import { personalWorkspaceId } from "@/lib/workspace/ids";
 
 export const maxDuration = 60;
 
@@ -41,19 +43,27 @@ export async function POST(request: Request) {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object;
-        const userId = session.metadata?.userId;
-        if (userId && session.subscription) {
+        const userId = session.metadata?.userId ?? null;
+        const workspaceId =
+          session.metadata?.workspaceId ?? (userId ? personalWorkspaceId(userId) : null);
+        if (workspaceId && session.subscription) {
           const subscription = await stripe.subscriptions.retrieve(
             typeof session.subscription === "string"
               ? session.subscription
               : session.subscription.id
           );
-          await syncSubscription(subscription, userId);
-          await convertReferral(userId);
-          await trackEvent(userId, "upgrade", {
+          await syncSubscription(subscription, workspaceId);
+          await recordAudit(workspaceId, userId, "billing.plan_changed", {
             plan: session.metadata?.plan ?? null,
             source: "checkout",
           });
+          if (userId) {
+            await convertReferral(userId);
+            await trackEvent(userId, "upgrade", {
+              plan: session.metadata?.plan ?? null,
+              source: "checkout",
+            });
+          }
         }
         break;
       }
@@ -118,7 +128,7 @@ export async function POST(request: Request) {
 /** Writes a Stripe subscription's plan/status/period onto the local row. */
 async function syncSubscription(
   subscription: Stripe.Subscription,
-  knownUserId?: string
+  knownWorkspaceId?: string
 ): Promise<void> {
   const customerId =
     typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
@@ -135,12 +145,18 @@ async function syncSubscription(
     ...(plan ? { plan } : {}),
   };
 
-  const userId = knownUserId ?? subscription.metadata?.userId;
-  if (userId) {
+  // Metadata: new checkouts carry workspaceId; pre-workspace subscriptions
+  // carried userId, which maps onto the user's personal workspace.
+  const metadataUserId = subscription.metadata?.userId;
+  const workspaceId =
+    knownWorkspaceId ??
+    subscription.metadata?.workspaceId ??
+    (metadataUserId ? personalWorkspaceId(metadataUserId) : undefined);
+  if (workspaceId) {
     await prisma.subscription.upsert({
-      where: { userId },
+      where: { workspaceId },
       update: data,
-      create: { userId, ...data },
+      create: { workspaceId, ...data },
     });
     return;
   }
@@ -151,7 +167,7 @@ async function syncSubscription(
     data,
   });
   if (updated.count === 0) {
-    logger.warn("stripe webhook could not match subscription to a local user", {
+    logger.warn("stripe webhook could not match subscription to a local workspace", {
       stripeSubscriptionId: subscription.id,
     });
   }

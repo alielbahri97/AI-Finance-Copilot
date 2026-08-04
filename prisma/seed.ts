@@ -17,6 +17,7 @@ import {
   type InvoiceDirection,
   type InvoiceStatus,
 } from "../src/generated/prisma/client";
+import { personalMembershipId, personalWorkspaceId } from "../src/lib/workspace/ids";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
@@ -154,30 +155,49 @@ async function main() {
     create: { id: userId, email, fullName: displayName, currency: "USD" },
   });
 
+  // Personal workspace + OWNER membership (mirrors getOrCreateProfile).
+  const workspaceId = personalWorkspaceId(userId);
+  await prisma.workspace.upsert({
+    where: { id: workspaceId },
+    update: { currency: "USD" },
+    create: { id: workspaceId, name: `${displayName}'s workspace`, currency: "USD" },
+  });
+  await prisma.workspaceMember.upsert({
+    where: { id: personalMembershipId(userId) },
+    update: { role: "OWNER" },
+    create: { id: personalMembershipId(userId), workspaceId, userId, role: "OWNER" },
+  });
+
   await prisma.category.createMany({
-    data: DEFAULT_CATEGORIES.map((category) => ({ ...category, userId, isDefault: true })),
+    data: DEFAULT_CATEGORIES.map((category) => ({
+      ...category,
+      workspaceId,
+      userId,
+      isDefault: true,
+    })),
     skipDuplicates: true,
   });
-  const categories = await prisma.category.findMany({ where: { userId } });
+  const categories = await prisma.category.findMany({ where: { workspaceId } });
   const categoryIdByName = new Map(categories.map((category) => [category.name, category.id]));
 
   // Wipe demo-scoped data (keep profile + categories).
   await prisma.chatMessage.deleteMany({ where: { userId } });
-  await prisma.conversation.deleteMany({ where: { userId } });
+  await prisma.conversation.deleteMany({ where: { workspaceId } });
   await prisma.invoiceLineItem.deleteMany({
-    where: { invoice: { userId } },
+    where: { invoice: { workspaceId } },
   });
-  await prisma.invoice.deleteMany({ where: { userId } });
-  await prisma.assumption.deleteMany({ where: { userId } });
-  await prisma.categoryRule.deleteMany({ where: { userId } });
+  await prisma.invoice.deleteMany({ where: { workspaceId } });
+  await prisma.assumption.deleteMany({ where: { workspaceId } });
+  await prisma.categoryRule.deleteMany({ where: { workspaceId } });
   await prisma.notification.deleteMany({ where: { userId } });
-  await prisma.budget.deleteMany({ where: { userId } });
-  await prisma.transaction.deleteMany({ where: { userId } });
-  await prisma.importBatch.deleteMany({ where: { userId } });
+  await prisma.budget.deleteMany({ where: { workspaceId } });
+  await prisma.transaction.deleteMany({ where: { workspaceId } });
+  await prisma.importBatch.deleteMany({ where: { workspaceId } });
 
   // Category rules
   await prisma.categoryRule.createMany({
     data: CATEGORY_RULES.map((rule) => ({
+      workspaceId,
       userId,
       pattern: rule.pattern,
       categoryId: categoryIdByName.get(rule.category)!,
@@ -188,6 +208,7 @@ async function main() {
   // Transactions — 6 months of realistic history with running balance.
   const now = new Date();
   const transactions: {
+    workspaceId: string;
     userId: string;
     type: TransactionType;
     amount: number;
@@ -211,6 +232,7 @@ async function main() {
       const isIncome = fixed.category === "Salary";
       runningBalance += isIncome ? fixed.amount : -fixed.amount;
       transactions.push({
+        workspaceId,
         userId,
         type: isIncome ? "INCOME" : "EXPENSE",
         amount: fixed.amount,
@@ -229,6 +251,7 @@ async function main() {
       const amount = 650 + monthOffset * 100;
       runningBalance += amount;
       transactions.push({
+        workspaceId,
         userId,
         type: "INCOME",
         amount,
@@ -252,6 +275,7 @@ async function main() {
         const day = 3 + i * 5 + (monthOffset % 2);
         runningBalance -= amount;
         transactions.push({
+          workspaceId,
           userId,
           type: "EXPENSE",
           amount,
@@ -269,7 +293,7 @@ async function main() {
 
   // One import batch for the most recent month (shows on Import history).
   const importBatch = await prisma.importBatch.create({
-    data: { userId, fileName: "demo-bank-export-jul-2026.csv" },
+    data: { workspaceId, userId, fileName: "demo-bank-export-jul-2026.csv" },
   });
   const recentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const recentImports = transactions
@@ -300,6 +324,7 @@ async function main() {
 
   // Forecast assumptions
   const assumptions: {
+    workspaceId: string;
     userId: string;
     kind: AssumptionKind;
     type: TransactionType;
@@ -311,6 +336,7 @@ async function main() {
     endDate?: Date;
   }[] = [
     {
+      workspaceId,
       userId,
       kind: "ONE_OFF",
       type: "EXPENSE",
@@ -319,6 +345,7 @@ async function main() {
       date: atDay(now.getFullYear(), now.getMonth() + 1, 10),
     },
     {
+      workspaceId,
       userId,
       kind: "RECURRING",
       type: "INCOME",
@@ -328,6 +355,7 @@ async function main() {
       endDate: atDay(now.getFullYear(), now.getMonth() + 5, 28),
     },
     {
+      workspaceId,
       userId,
       kind: "PERCENT_GROWTH",
       type: "EXPENSE",
@@ -343,10 +371,10 @@ async function main() {
   const budgetYear = now.getFullYear();
   await prisma.budget.createMany({
     data: [
-      { userId, category: "Groceries", limit: 400, month: budgetMonth, year: budgetYear },
-      { userId, category: "Dining", limit: 250, month: budgetMonth, year: budgetYear },
-      { userId, category: "Transport", limit: 200, month: budgetMonth, year: budgetYear },
-      { userId, category: "Shopping", limit: 300, month: budgetMonth, year: budgetYear },
+      { workspaceId, userId, category: "Groceries", limit: 400, month: budgetMonth, year: budgetYear },
+      { workspaceId, userId, category: "Dining", limit: 250, month: budgetMonth, year: budgetYear },
+      { workspaceId, userId, category: "Transport", limit: 200, month: budgetMonth, year: budgetYear },
+      { workspaceId, userId, category: "Shopping", limit: 300, month: budgetMonth, year: budgetYear },
     ],
     skipDuplicates: true,
   });
@@ -426,6 +454,7 @@ async function main() {
 
     await prisma.invoice.create({
       data: {
+        workspaceId,
         userId,
         vendor: inv.vendor,
         invoiceNumber: inv.invoiceNumber,
@@ -498,7 +527,7 @@ async function main() {
 
   // Sample copilot conversation (static — no OpenAI needed to view history)
   const conversation = await prisma.conversation.create({
-    data: { userId, title: "Spending overview" },
+    data: { workspaceId, userId, title: "Spending overview" },
   });
   await prisma.chatMessage.createMany({
     data: [

@@ -28,6 +28,8 @@ import { prisma } from "@/lib/prisma";
  */
 
 export interface IngestInvoiceInput {
+  workspaceId: string;
+  /** The member who uploaded the document (also namespaces the storage path). */
   userId: string;
   currency: string;
   aiProvider: "OPENAI" | "ANTHROPIC" | "GROQ";
@@ -116,6 +118,7 @@ export async function ingestInvoiceDocument(
   const invoice = await prisma.invoice.create({
     data: {
       id: invoiceId,
+      workspaceId: input.workspaceId,
       userId: input.userId,
       vendor: extracted?.vendor ?? "",
       invoiceNumber: extracted?.invoiceNumber ?? null,

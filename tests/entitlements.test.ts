@@ -16,6 +16,7 @@ const NOW = new Date("2026-07-27T10:00:00Z");
 function subscription(overrides: Partial<Subscription> = {}): Subscription {
   return {
     id: "sub_1",
+    workspaceId: "ws-user_1",
     userId: "user_1",
     plan: "FREE",
     status: "ACTIVE",

@@ -1,20 +1,18 @@
 import { NextResponse } from "next/server";
 
-import { getOrCreateProfile } from "@/lib/data";
 import { prisma } from "@/lib/prisma";
-import { getUser } from "@/lib/supabase/server";
 import { categorySchema } from "@/lib/validations/category";
 import { apiError } from "@/lib/api/response";
+import { requireWorkspace } from "@/lib/workspace/context";
 
 export async function GET() {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireWorkspace("view_transactions");
+    if (!auth.ok) return auth.response;
+    const { workspace } = auth.ctx;
 
     const categories = await prisma.category.findMany({
-      where: { userId: user.id },
+      where: { workspaceId: workspace.id },
       orderBy: [{ type: "asc" }, { name: "asc" }],
       include: { _count: { select: { transactions: true } } },
     });
@@ -36,10 +34,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireWorkspace("edit_transactions");
+    if (!auth.ok) return auth.response;
+    const { user, workspace } = auth.ctx;
 
     const body = await request.json();
     const parsed = categorySchema.safeParse(body);
@@ -50,10 +47,11 @@ export async function POST(request: Request) {
       );
     }
 
-    await getOrCreateProfile(user);
-
     const existing = await prisma.category.findFirst({
-      where: { userId: user.id, name: { equals: parsed.data.name, mode: "insensitive" } },
+      where: {
+        workspaceId: workspace.id,
+        name: { equals: parsed.data.name, mode: "insensitive" },
+      },
       select: { id: true },
     });
     if (existing) {
@@ -61,7 +59,7 @@ export async function POST(request: Request) {
     }
 
     const category = await prisma.category.create({
-      data: { ...parsed.data, userId: user.id },
+      data: { ...parsed.data, workspaceId: workspace.id, userId: user.id },
     });
 
     return NextResponse.json({ category }, { status: 201 });

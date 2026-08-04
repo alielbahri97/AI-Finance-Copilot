@@ -91,7 +91,7 @@ async function sync(ctx: SyncContext): Promise<SyncStats> {
 
       const externalRef = `outlook:${message.id.slice(0, 60)}:${attachment.id.slice(0, 60)}`;
       const already = await prisma.invoice.findFirst({
-        where: { userId: ctx.userId, externalRef },
+        where: { workspaceId: ctx.workspaceId, externalRef },
         select: { id: true },
       });
       if (already) {
@@ -106,6 +106,7 @@ async function sync(ctx: SyncContext): Promise<SyncStats> {
       }
 
       await ingestInvoiceDocument({
+        workspaceId: ctx.workspaceId,
         userId: ctx.userId,
         currency: ctx.currency,
         aiProvider: ctx.aiProvider,

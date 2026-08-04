@@ -3,16 +3,15 @@ import { NextResponse } from "next/server";
 import type { Prisma } from "@/generated/prisma/client";
 import { serializeInvoice } from "@/lib/invoices/serialize";
 import { prisma } from "@/lib/prisma";
-import { getUser } from "@/lib/supabase/server";
 import { invoiceListQuerySchema } from "@/lib/validations/invoice";
 import { apiError } from "@/lib/api/response";
+import { requireWorkspace } from "@/lib/workspace/context";
 
 export async function GET(request: Request) {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireWorkspace("view_invoices");
+    if (!auth.ok) return auth.response;
+    const { workspace } = auth.ctx;
 
     const url = new URL(request.url);
     const parsed = invoiceListQuerySchema.safeParse({
@@ -26,7 +25,7 @@ export async function GET(request: Request) {
     }
     const { status, vendor, from, to } = parsed.data;
 
-    const where: Prisma.InvoiceWhereInput = { userId: user.id };
+    const where: Prisma.InvoiceWhereInput = { workspaceId: workspace.id };
     if (status === "OVERDUE") {
       where.status = "UNPAID";
       where.dueDate = { lt: new Date() };

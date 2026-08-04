@@ -2,18 +2,17 @@ import { NextResponse } from "next/server";
 
 import { learnCategoryRule } from "@/lib/categories";
 import { prisma } from "@/lib/prisma";
-import { getUser } from "@/lib/supabase/server";
 import { transactionUpdateSchema } from "@/lib/validations/transaction";
 import { apiError } from "@/lib/api/response";
+import { requireWorkspace } from "@/lib/workspace/context";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function PATCH(request: Request, context: RouteContext) {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireWorkspace("edit_transactions");
+    if (!auth.ok) return auth.response;
+    const { user, workspace } = auth.ctx;
 
     const { id } = await context.params;
     const body = await request.json();
@@ -26,7 +25,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
 
     const existing = await prisma.transaction.findFirst({
-      where: { id, userId: user.id },
+      where: { id, workspaceId: workspace.id },
       select: {
         id: true,
         description: true,
@@ -40,7 +39,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     if (parsed.data.categoryId) {
       const category = await prisma.category.findFirst({
-        where: { id: parsed.data.categoryId, userId: user.id },
+        where: { id: parsed.data.categoryId, workspaceId: workspace.id },
         select: { id: true },
       });
       if (!category) {
@@ -58,14 +57,17 @@ export async function PATCH(request: Request, context: RouteContext) {
     const categoryChanged =
       parsed.data.categoryId !== undefined && parsed.data.categoryId !== existing.categoryId;
     if (categoryChanged && parsed.data.categoryId) {
-      learnedRule = await learnCategoryRule(user.id, {
-        description: parsed.data.description ?? existing.description,
-        counterparty:
-          parsed.data.counterparty !== undefined
-            ? parsed.data.counterparty
-            : existing.counterparty,
-        categoryId: parsed.data.categoryId,
-      });
+      learnedRule = await learnCategoryRule(
+        { workspaceId: workspace.id, userId: user.id },
+        {
+          description: parsed.data.description ?? existing.description,
+          counterparty:
+            parsed.data.counterparty !== undefined
+              ? parsed.data.counterparty
+              : existing.counterparty,
+          categoryId: parsed.data.categoryId,
+        }
+      );
     }
 
     return NextResponse.json({
@@ -83,13 +85,14 @@ export async function PATCH(request: Request, context: RouteContext) {
 
 export async function DELETE(_request: Request, context: RouteContext) {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireWorkspace("edit_transactions");
+    if (!auth.ok) return auth.response;
+    const { workspace } = auth.ctx;
 
     const { id } = await context.params;
-    const result = await prisma.transaction.deleteMany({ where: { id, userId: user.id } });
+    const result = await prisma.transaction.deleteMany({
+      where: { id, workspaceId: workspace.id },
+    });
     if (result.count === 0) {
       return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
     }

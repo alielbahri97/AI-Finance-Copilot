@@ -8,6 +8,7 @@ import { getProvider } from "@/lib/integrations/registry";
 import { prisma } from "@/lib/prisma";
 import { apiError } from "@/lib/api/response";
 import { logger, serializeError } from "@/lib/logger";
+import { recordAudit } from "@/lib/workspace/audit";
 
 /** Removes a connection; token revocation is best-effort where supported. */
 export async function POST(
@@ -25,7 +26,7 @@ export async function POST(
       return NextResponse.json({ error: "Unknown provider" }, { status: 404 });
     }
 
-    const connection = await getConnection(access.user.id, provider.id);
+    const connection = await getConnection(access.ctx.workspace.id, provider.id);
     if (!connection) {
       return NextResponse.json({ error: "Not connected" }, { status: 404 });
     }
@@ -46,6 +47,9 @@ export async function POST(
     }
 
     await prisma.integrationConnection.delete({ where: { id: connection.id } });
+    await recordAudit(access.ctx.workspace.id, access.ctx.user.id, "integration.disconnected", {
+      provider: provider.id,
+    });
     return NextResponse.json({ ok: true });
   } catch (error) {
     return apiError(`POST /api/integrations/${providerId}/disconnect`, "Failed to disconnect", error);

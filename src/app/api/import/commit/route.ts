@@ -14,10 +14,9 @@ import { detectStatementCurrency } from "@/lib/csv/detect";
 import { fingerprintRows } from "@/lib/csv/fingerprint";
 import { normalizeRows } from "@/lib/csv/normalize";
 import { parseCsv } from "@/lib/csv/parse";
-import { getOrCreateProfile } from "@/lib/data";
 import { evaluateLargeTransactions } from "@/lib/notifications/alerts";
 import { prisma } from "@/lib/prisma";
-import { getUser } from "@/lib/supabase/server";
+import { requireWorkspace } from "@/lib/workspace/context";
 import {
   columnMappingSchema,
   MAX_IMPORT_FILE_BYTES,
@@ -34,10 +33,9 @@ export const maxDuration = 60;
  */
 export async function POST(request: Request) {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireWorkspace("edit_transactions");
+    if (!auth.ok) return auth.response;
+    const { user, workspace } = auth.ctx;
 
     const limited = await enforceRateLimit("upload", user.id);
     if (limited) return limited;
@@ -69,7 +67,7 @@ export async function POST(request: Request) {
     const mapping = mappingParsed.data;
 
     // Plan gating: monthly import quota and per-import row cap.
-    const entitlements = await getEntitlements(user.id);
+    const entitlements = await getEntitlements(workspace.id);
     const quota = checkLimit(entitlements, "csvImports", entitlements.plan.limits.csvImportsPerMonth);
     if (!quota.allowed) {
       return NextResponse.json(limitError("CSV import", entitlements.planId), { status: 402 });
@@ -114,19 +112,18 @@ export async function POST(request: Request) {
       );
     }
 
-    const profile = await getOrCreateProfile(user);
     const statementCurrency = detectStatementCurrency(csv, mapping);
 
-    let workingCurrency = profile.currency;
+    let workingCurrency = workspace.currency;
     if (
       applyStatementCurrency &&
       statementCurrency.code &&
       (SUPPORTED_CURRENCIES as readonly string[]).includes(statementCurrency.code)
     ) {
       workingCurrency = statementCurrency.code;
-      if (workingCurrency !== profile.currency) {
-        await prisma.profile.update({
-          where: { id: user.id },
+      if (workingCurrency !== workspace.currency) {
+        await prisma.workspace.update({
+          where: { id: workspace.id },
           data: { currency: workingCurrency },
         });
       }
@@ -148,7 +145,7 @@ export async function POST(request: Request) {
     const withHashes = fingerprintRows(rows);
 
     const existing = await prisma.transaction.findMany({
-      where: { userId: user.id, hash: { in: withHashes.map((row) => row.hash) } },
+      where: { workspaceId: workspace.id, hash: { in: withHashes.map((row) => row.hash) } },
       select: { hash: true },
     });
     const existingHashes = new Set(existing.map((row) => row.hash));
@@ -166,14 +163,15 @@ export async function POST(request: Request) {
       });
     }
 
-    const matchers = await loadRuleMatchers(user.id);
+    const matchers = await loadRuleMatchers(workspace.id);
 
     const batch = await prisma.$transaction(async (tx) => {
       const created = await tx.importBatch.create({
-        data: { userId: user.id, fileName: file.name.slice(0, 200) },
+        data: { workspaceId: workspace.id, userId: user.id, fileName: file.name.slice(0, 200) },
       });
       await tx.transaction.createMany({
         data: fresh.map((row) => ({
+          workspaceId: workspace.id,
           userId: user.id,
           type: row.type,
           amount: row.amount,
@@ -189,13 +187,13 @@ export async function POST(request: Request) {
       return created;
     });
 
-    await incrementUsage(user.id, "csvImports");
+    await incrementUsage(workspace.id, "csvImports");
     await trackEvent(user.id, "import", { rows: fresh.length, batchId: batch.id });
 
     // Immediate large-transaction alerts for the imported rows (aggregated
     // into one notification when several qualify); never fails the import.
     await evaluateLargeTransactions(
-      user.id,
+      workspace.id,
       workingCurrency,
       fresh.map((row) => ({
         type: row.type,

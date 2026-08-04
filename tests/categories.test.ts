@@ -108,6 +108,7 @@ describe("ensureDefaultCategories rule backfill", () => {
   });
 
   it("still seeds missing defaults when the user already has some rules", async () => {
+    const workspaceId = "ws-user-partial";
     const userId = "user-partial";
     categoryCount.mockResolvedValue(16);
     categoryFindMany.mockResolvedValue([
@@ -121,22 +122,24 @@ describe("ensureDefaultCategories rule backfill", () => {
       { id: "cat-shopping", name: "Shopping" },
     ]);
 
-    await ensureDefaultCategories(userId);
+    await ensureDefaultCategories(workspaceId, userId);
 
     expect(categoryCreateMany).not.toHaveBeenCalled();
     expect(categoryRuleCreateMany).toHaveBeenCalledOnce();
     const { data, skipDuplicates } = categoryRuleCreateMany.mock.calls[0][0] as {
-      data: { userId: string; pattern: string; categoryId: string }[];
+      data: { workspaceId: string; userId: string; pattern: string; categoryId: string }[];
       skipDuplicates: boolean;
     };
     expect(skipDuplicates).toBe(true);
     expect(data).toHaveLength(DEFAULT_CATEGORY_RULES.length);
     expect(data.find((row) => row.pattern === "uber")).toEqual({
+      workspaceId,
       userId,
       pattern: "uber",
       categoryId: "cat-transport",
     });
     expect(data.find((row) => row.pattern === "amazon")).toEqual({
+      workspaceId,
       userId,
       pattern: "amazon",
       categoryId: "cat-shopping",
@@ -144,12 +147,13 @@ describe("ensureDefaultCategories rule backfill", () => {
   });
 
   it("seeds categories then rules for a brand-new empty account", async () => {
+    const workspaceId = "ws-user-new";
     const userId = "user-new";
     categoryCount.mockResolvedValue(0);
     categoryCreateMany.mockResolvedValue({ count: 16 });
     categoryFindMany.mockResolvedValue([{ id: "cat-transport", name: "Transport" }]);
 
-    await ensureDefaultCategories(userId);
+    await ensureDefaultCategories(workspaceId, userId);
 
     expect(categoryCreateMany).toHaveBeenCalledOnce();
     expect(categoryRuleCreateMany).toHaveBeenCalledOnce();

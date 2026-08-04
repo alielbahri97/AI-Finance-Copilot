@@ -29,13 +29,14 @@ function toDate(value: string | null): Date | null {
 }
 
 export async function upsertSyncedInvoices(
-  userId: string,
+  scope: { workspaceId: string; userId: string },
   invoices: SyncedInvoice[]
 ): Promise<{ created: number; updated: number }> {
+  const { workspaceId, userId } = scope;
   if (invoices.length === 0) return { created: 0, updated: 0 };
 
   const existing = await prisma.invoice.findMany({
-    where: { userId, externalRef: { in: invoices.map((invoice) => invoice.externalRef) } },
+    where: { workspaceId, externalRef: { in: invoices.map((invoice) => invoice.externalRef) } },
     select: { id: true, externalRef: true, status: true },
   });
   const byRef = new Map(existing.map((row) => [row.externalRef, row]));
@@ -70,6 +71,7 @@ export async function upsertSyncedInvoices(
     } else {
       await prisma.invoice.create({
         data: {
+          workspaceId,
           userId,
           ...common,
           status: invoice.status,

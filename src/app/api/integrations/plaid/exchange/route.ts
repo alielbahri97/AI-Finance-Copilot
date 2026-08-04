@@ -5,6 +5,7 @@ import { saveConnection } from "@/lib/integrations/connections";
 import { requireIntegrationAccess } from "@/lib/integrations/guard";
 import { exchangePlaidPublicToken } from "@/lib/integrations/providers/plaid";
 import { logger, serializeError } from "@/lib/logger";
+import { recordAudit } from "@/lib/workspace/audit";
 
 const exchangeSchema = z.object({
   publicToken: z.string().min(10).max(500),
@@ -24,9 +25,16 @@ export async function POST(request: Request) {
     }
 
     const { accessToken, itemId } = await exchangePlaidPublicToken(parsed.data.publicToken);
-    await saveConnection(access.user.id, "plaid", {
-      accessToken,
-      metadata: { itemId, institution: parsed.data.institution ?? null },
+    await saveConnection(
+      { workspaceId: access.ctx.workspace.id, userId: access.ctx.user.id },
+      "plaid",
+      {
+        accessToken,
+        metadata: { itemId, institution: parsed.data.institution ?? null },
+      }
+    );
+    await recordAudit(access.ctx.workspace.id, access.ctx.user.id, "integration.connected", {
+      provider: "plaid",
     });
 
     return NextResponse.json({ ok: true });

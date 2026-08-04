@@ -27,22 +27,23 @@ export function getStripe(): Stripe | null {
   return cached;
 }
 
-/** Returns the user's Stripe customer id, creating the customer on first use. */
+/** Returns the workspace's Stripe customer id, creating the customer on first use. */
 export async function getOrCreateStripeCustomer(
   stripe: Stripe,
+  workspaceId: string,
   userId: string,
   email: string
 ): Promise<string> {
-  const subscription = await getOrCreateSubscription(userId);
+  const subscription = await getOrCreateSubscription(workspaceId);
   if (subscription.stripeCustomerId) return subscription.stripeCustomerId;
 
   const customer = await stripe.customers.create({
     email,
-    metadata: { userId },
+    metadata: { workspaceId, userId },
   });
   await prisma.subscription.update({
-    where: { userId },
-    data: { stripeCustomerId: customer.id },
+    where: { workspaceId },
+    data: { stripeCustomerId: customer.id, userId },
   });
   return customer.id;
 }

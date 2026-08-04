@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 
 import { suggestMatches } from "@/lib/invoices/match";
 import { prisma } from "@/lib/prisma";
-import { getUser } from "@/lib/supabase/server";
 import { apiError } from "@/lib/api/response";
+import { requireWorkspace } from "@/lib/workspace/context";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -12,14 +12,13 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 /** Suggests bank transactions that likely settle this invoice. */
 export async function GET(_request: Request, context: RouteContext) {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireWorkspace("view_invoices", "view_transactions");
+    if (!auth.ok) return auth.response;
+    const { workspace } = auth.ctx;
 
     const { id } = await context.params;
     const invoice = await prisma.invoice.findFirst({
-      where: { id, userId: user.id },
+      where: { id, workspaceId: workspace.id },
       select: { vendor: true, total: true, invoiceDate: true, dueDate: true, direction: true },
     });
     if (!invoice) {
@@ -42,7 +41,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
     const candidates = await prisma.transaction.findMany({
       where: {
-        userId: user.id,
+        workspaceId: workspace.id,
         // A payable is settled by an expense, a receivable by incoming money.
         type: invoice.direction === "RECEIVABLE" ? "INCOME" : "EXPENSE",
         date: { gte: earliest, lte: latest },

@@ -1,19 +1,18 @@
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
-import { getUser } from "@/lib/supabase/server";
 import { categoryRuleSchema } from "@/lib/validations/category";
 import { apiError } from "@/lib/api/response";
+import { requireWorkspace } from "@/lib/workspace/context";
 
 export async function GET() {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireWorkspace("view_transactions");
+    if (!auth.ok) return auth.response;
+    const { workspace } = auth.ctx;
 
     const rules = await prisma.categoryRule.findMany({
-      where: { userId: user.id },
+      where: { workspaceId: workspace.id },
       orderBy: { createdAt: "desc" },
       include: { category: { select: { name: true, color: true } } },
     });
@@ -26,10 +25,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const user = await getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = await requireWorkspace("edit_transactions");
+    if (!auth.ok) return auth.response;
+    const { user, workspace } = auth.ctx;
 
     const body = await request.json();
     const parsed = categoryRuleSchema.safeParse(body);
@@ -41,7 +39,7 @@ export async function POST(request: Request) {
     }
 
     const category = await prisma.category.findFirst({
-      where: { id: parsed.data.categoryId, userId: user.id },
+      where: { id: parsed.data.categoryId, workspaceId: workspace.id },
       select: { id: true },
     });
     if (!category) {
@@ -49,7 +47,10 @@ export async function POST(request: Request) {
     }
 
     const existing = await prisma.categoryRule.findFirst({
-      where: { userId: user.id, pattern: { equals: parsed.data.pattern, mode: "insensitive" } },
+      where: {
+        workspaceId: workspace.id,
+        pattern: { equals: parsed.data.pattern, mode: "insensitive" },
+      },
       select: { id: true },
     });
     if (existing) {
@@ -57,7 +58,12 @@ export async function POST(request: Request) {
     }
 
     const rule = await prisma.categoryRule.create({
-      data: { userId: user.id, pattern: parsed.data.pattern, categoryId: parsed.data.categoryId },
+      data: {
+        workspaceId: workspace.id,
+        userId: user.id,
+        pattern: parsed.data.pattern,
+        categoryId: parsed.data.categoryId,
+      },
       include: { category: { select: { name: true, color: true } } },
     });
 

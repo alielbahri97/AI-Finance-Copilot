@@ -16,13 +16,13 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: resolved.error }, { status: resolved.status });
     }
 
-    const { userId, currency, period, dataset } = resolved.context;
+    const { workspaceId, userId, currency, period, dataset } = resolved.context;
     const csv =
       dataset === "monthly"
-        ? buildMonthlySummaryCsv(await buildReport(userId, currency, period))
-        : buildTransactionsCsv(await getReportTransactions(userId, period));
+        ? buildMonthlySummaryCsv(await buildReport(workspaceId, currency, period))
+        : buildTransactionsCsv(await getReportTransactions(workspaceId, period));
 
-    await incrementUsage(userId, "exports");
+    await incrementUsage(workspaceId, "exports");
     await trackEvent(userId, "export", { format: "csv", dataset });
 
     const suffix = dataset === "monthly" ? "monthly-summary" : "transactions";
