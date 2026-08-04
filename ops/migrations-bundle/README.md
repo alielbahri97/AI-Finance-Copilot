@@ -1,8 +1,69 @@
 # How to bring production back up
 
-Applying migrations 0013, 0014 and 0015 from any browser (including a phone).
+Applying pending Prisma migrations from any browser (including a phone),
+because the machine that has the repo cannot reach Postgres directly.
 
-## What is wrong
+There have been two rounds. Each has its own file to paste:
+
+| Round | Migrations | File |
+| --- | --- | --- |
+| 1 (done) | `0013`, `0014`, `0015` | [`apply-pending-migrations.sql`](./apply-pending-migrations.sql) |
+| 2 | `0016_multi_bank_connections` | [`apply-0016.sql`](./apply-0016.sql) |
+
+Everything from "Step A" onwards describes round 1, but the mechanics —
+backup, paste the whole file, press Run, read the last result table — are the
+same for both.
+
+---
+
+## Round 2: `0016_multi_bank_connections`
+
+`/api/health` reports `schema: "outdated"` with `missingTables: ["bank_accounts"]`
+and `missingColumns: ["integration_connections.external_id",
+"integration_connections.display_name"]`. The multi-bank code is deployed; its
+schema is not. 0016 adds `external_id` (so a connection is identified by the
+bank rather than by "one per provider"), the labelling columns, the
+`bank_accounts` table, and it migrates the per-account data that used to live in
+the GoCardless connection's `metadata` blob.
+
+File to paste:
+
+```text
+ops/migrations-bundle/apply-0016.sql
+```
+
+What to do:
+
+1. **Back up.** Supabase → **Database → Backups**. Note the latest
+   Point-in-Time Recovery timestamp (or take a snapshot).
+2. **Paste all of it** into Supabase → **SQL Editor → New query**, in the
+   **production** project, and press **Run**. Supabase may warn that the query
+   looks destructive — it contains `ALTER TABLE` and a `DROP INDEX`. Confirm.
+3. **Read the last result table.** It has 19 rows; every one should say `OK` in
+   the `result` column. Scroll up for three more result sets: the migration
+   history (expect 16 rows, `0001`–`0016`), your connections with the accounts
+   now attached to each, and the index list for `integration_connections` and
+   `bank_accounts`.
+4. **Load the site**, and check `https://app.ballastmoney.com/api/health` —
+   it should now report `status: "ok"` and `schema: "ok"` with empty
+   `missingTables`, `missingColumns` and `pendingMigrations`.
+
+The one row worth reading closely is **check 14, "every bank connection got an
+external_id"**. The backfill takes the GoCardless connection's id from
+`metadata.institutionId`, which the old callback did store — so this should say
+`OK`. If it instead reports `1 without one`, the live connection could not be
+keyed to its bank, and the *next* time that bank is connected the app would add
+a second connection next to it rather than updating it (and the cash total would
+count that bank twice). Nothing is broken at that moment, and no data is lost —
+send me the row and the second result set and I will key the row by hand.
+
+If it errors: nothing was changed (single transaction), so send me the full
+error. The script is safe to run again; every statement is idempotent and the
+statements that write rows are skipped once 0016 is recorded as applied.
+
+---
+
+## What is wrong (round 1)
 
 The new code is deployed on Vercel, but the database is still on the old schema.
 The app is asking for tables and columns that do not exist yet (`help_messages`,
@@ -17,7 +78,7 @@ Three migrations are unapplied:
 | `0014_workspaces` | The big one: adds workspaces and moves every business table from per-user to per-workspace scope |
 | `0015_extraction_telemetry` | Adds 6 nullable columns to `invoices` |
 
-## What the fix is
+## What the fix is (round 1)
 
 One file — [`apply-pending-migrations.sql`](./apply-pending-migrations.sql),
 sitting next to this README — contains all three migrations plus the bookkeeping
@@ -260,11 +321,12 @@ backup, which loses everything written since.
 SHA-256, hex, of the exact `migration.sql` file bytes — the same thing
 `scripts/apply-migrations.ts` computes:
 
-| Migration | sha256 |
-| --- | --- |
-| `0013_help_messages` | `c7b474d1fd822f2774a75a3c5fd75ee1bbfec4f0e8d36d80f8677611aa3dbb2d` |
-| `0014_workspaces` | `0648890dda5ff8d916dd674424531264a1da1d9f976a0b75a31aa85f64d1743e` |
-| `0015_extraction_telemetry` | `c7aad200de37b496f33bbe77e2dcffbbd47fa25b4a1f17a2e94ab8aec7e6ff9f` |
+| Migration | sha256 | Recorded by |
+| --- | --- | --- |
+| `0013_help_messages` | `c7b474d1fd822f2774a75a3c5fd75ee1bbfec4f0e8d36d80f8677611aa3dbb2d` | `apply-pending-migrations.sql` |
+| `0014_workspaces` | `0648890dda5ff8d916dd674424531264a1da1d9f976a0b75a31aa85f64d1743e` | `apply-pending-migrations.sql` |
+| `0015_extraction_telemetry` | `c7aad200de37b496f33bbe77e2dcffbbd47fa25b4a1f17a2e94ab8aec7e6ff9f` | `apply-pending-migrations.sql` |
+| `0016_multi_bank_connections` | `f92b0da30a50ac653bd603aa512c1a5fdb3fdd9227cb02218b503ae4d72b5fb8` | `apply-0016.sql` |
 
 **Important:** these checksums describe the migration files as they were when
 this bundle was generated. They were re-verified against the migration files as
@@ -318,3 +380,32 @@ If it had been run halfway by hand, re-running the original file would fail
 (`CREATE TYPE "WorkspaceRole"` would report the type already exists, and the
 `workspaces` INSERT would hit a duplicate primary key). The bundled version
 handles that case and converges instead of failing.
+
+### How `apply-0016.sql` differs from `0016`'s migration file
+
+Same three kinds of guard, none of which changes anything on a clean first run:
+
+- `IF NOT EXISTS` on the four `ADD COLUMN`s, the table and all four indexes, and
+  `DROP CONSTRAINT IF EXISTS` before the foreign key.
+- The `DROP INDEX` of the old provider-wide unique became a `DO` block that
+  drops it as a *constraint* if that is how the database happens to hold it —
+  `DROP INDEX` refuses to touch an index a constraint owns.
+- The backfills only ever fill blanks (`COALESCE`, plus `IS NULL` in the
+  `WHERE`), and every row-touching statement additionally does nothing once
+  0016 is recorded in `_prisma_migrations`. This is the 0014 lesson: a bare
+  `UPDATE ... SET external_id = metadata->>'institutionId'` would, on a second
+  run, overwrite an id the app had since re-keyed and stamp the bank's name back
+  over a label the user had changed.
+
+Verified mechanically rather than by eye, with no database involved: the file
+and the original migration were each replayed into a real PostgreSQL engine
+(PGlite, Postgres compiled to wasm) on top of a database built by replaying
+0001–0015, and the resulting schemas compared — identical, 267 columns, 81
+indexes, 263 constraints, 196 `NOT NULL` columns — as was the resulting data,
+on a seeded copy of production's connection shapes. Also checked: applying it
+three times in a row changes nothing after the first; user edits
+(`display_name`, `include_in_totals`) and rows written by the running app
+survive a re-run; it converges from a half-applied state; a deliberate failure
+injected before the `COMMIT` leaves the database untouched; and the real
+PostgreSQL parser reports one `BEGIN`, one `COMMIT`, read-only `SELECT`s after
+it, and nothing that cannot run inside a transaction.
