@@ -5,10 +5,10 @@
  * reads from here — metadata, the PWA manifest, emails, AI prompts, exports and
  * the help knowledge base — so a future rename is a single-file edit.
  *
- * The per-edition entries exist because a Business / Personal dual edition is
- * planned: both editions ship under the same `Ballast` name and domain, and
- * only the audience-facing copy differs. `personal` is defined ahead of that
- * work and is not referenced by the UI yet.
+ * The per-edition entries exist because Ballast ships as a Business / Personal
+ * dual edition: both editions ship under the same `Ballast` name, domain and
+ * logo, and only the audience-facing copy differs. A workspace's type picks
+ * the entry — see `src/lib/workspace/editions.ts`.
  *
  * Copy constraint: never use the phrase "Your AI finance copilot". It is the
  * verbatim headline of a competitor, and avoiding the collision is the reason
@@ -26,6 +26,18 @@ export interface EditionBranding {
   audience: string;
   /** Long-form copy for landing/marketing surfaces. */
   description: string;
+  /** The landing page's choice button: how a visitor says which they are. */
+  choiceLabel: string;
+  /** One line under the choice, naming the concrete job it does. */
+  choiceDescription: string;
+  /** What this edition gives you, for the landing choice card. */
+  highlights: readonly string[];
+  /**
+   * A subtle accent per edition. Both editions keep one visual identity and
+   * the same logo; this only tints the choice card and the edition badge, so
+   * the two are distinguishable without becoming different products.
+   */
+  accentClassName: string;
 }
 
 /** Edition-agnostic branding. Safe anywhere the edition is unknown. */
@@ -52,6 +64,16 @@ export const EDITIONS: Record<Edition, EditionBranding> = {
     audience: "small and medium-sized businesses",
     description:
       "Your AI copilot for business finances. Track income and expenses, chase invoices, forecast cash flow, and get grounded answers about your numbers.",
+    choiceLabel: "For my business",
+    choiceDescription: "Invoices, VAT, cash flow and a team that shares the numbers.",
+    highlights: [
+      "Invoices in and out, with AI extraction and VAT",
+      "Who owes you, and who you owe",
+      "Cash-flow forecast and runway",
+      "Executive reports with top vendors and customers",
+      "Invite your accountant or co-founder",
+    ],
+    accentClassName: "text-primary",
   },
   personal: {
     name: `${BRAND.name} Personal`,
@@ -59,6 +81,16 @@ export const EDITIONS: Record<Edition, EditionBranding> = {
     audience: "people managing their own money",
     description:
       "Your AI copilot for personal finances. See where your money goes, budget by category, track savings goals, and plan ahead with confidence.",
+    choiceLabel: "For myself",
+    choiceDescription: "Budgets, savings goals and every subscription you forgot about.",
+    highlights: [
+      "Where your money actually went this month",
+      "A monthly budget per category, with rollover",
+      "Savings goals with a real completion date",
+      "Every recurring subscription and what it costs you",
+      "Ask the copilot whether you can afford something",
+    ],
+    accentClassName: "text-success",
   },
 };
 

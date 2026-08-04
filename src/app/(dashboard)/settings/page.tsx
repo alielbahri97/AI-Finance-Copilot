@@ -24,6 +24,7 @@ import { getOrCreatePreferences, serializePreferences } from "@/lib/notification
 import { isPushConfigured } from "@/lib/notifications/push";
 import { prisma } from "@/lib/prisma";
 import { getWorkspaceContext } from "@/lib/workspace/context";
+import { editionHasFeature } from "@/lib/workspace/editions";
 import { parseOverrides, type WorkspaceRoleName } from "@/lib/workspace/permissions";
 import { SUPPORTED_CURRENCIES } from "@/lib/validations/profile";
 
@@ -36,6 +37,7 @@ export default async function SettingsPage() {
   const { user, workspace } = ctx;
   const canManageMembers = ctx.permissions.has("manage_members");
   const canManageSettings = ctx.permissions.has("manage_settings");
+  const sharing = editionHasFeature(workspace.type, "team");
 
   const [profile, preferences, businessProfile, entitlements, members, invitations, auditEntries] =
     await Promise.all([
@@ -113,37 +115,61 @@ export default async function SettingsPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground text-sm">
-          Manage your workspace, team, appearance, AI provider and account security.
+          {sharing
+            ? "Manage your workspace, team, appearance, AI provider and account security."
+            : "Manage your workspace, appearance, AI provider and account security."}
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Team — {workspace.name}</CardTitle>
-          <CardDescription>
-            {canManageMembers
-              ? "Invite people to this workspace and control what each member can access."
-              : "People who share this workspace with you."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-6">
-          {canManageSettings && <WorkspaceNameForm defaultName={workspace.name} />}
-          <TeamSettings
-            currentUserId={user.id}
-            actorRole={ctx.role as WorkspaceRoleName}
-            canManage={canManageMembers}
-            members={memberViews}
-            invitations={invitations.map((invitation) => ({
-              id: invitation.id,
-              email: invitation.email,
-              role: invitation.role as WorkspaceRoleName,
-              expiresAt: invitation.expiresAt.toISOString(),
-            }))}
-            seatLimit={entitlements.plan.limits.seats}
-            planName={entitlements.plan.name}
-          />
-        </CardContent>
-      </Card>
+      {/*
+        A Personal workspace is one person's own money: the workspace model is
+        unchanged underneath, but there is nobody to invite, so the Team card
+        collapses to just renaming the workspace. The member APIs need
+        `manage_members`, which this edition never grants.
+      */}
+      {sharing ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Team — {workspace.name}</CardTitle>
+            <CardDescription>
+              {canManageMembers
+                ? "Invite people to this workspace and control what each member can access."
+                : "People who share this workspace with you."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-6">
+            {canManageSettings && <WorkspaceNameForm defaultName={workspace.name} />}
+            <TeamSettings
+              currentUserId={user.id}
+              actorRole={ctx.role as WorkspaceRoleName}
+              canManage={canManageMembers}
+              members={memberViews}
+              invitations={invitations.map((invitation) => ({
+                id: invitation.id,
+                email: invitation.email,
+                role: invitation.role as WorkspaceRoleName,
+                expiresAt: invitation.expiresAt.toISOString(),
+              }))}
+              seatLimit={entitlements.plan.limits.seats}
+              planName={entitlements.plan.name}
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        canManageSettings && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Workspace</CardTitle>
+              <CardDescription>
+                What this workspace is called in the switcher and in emails.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <WorkspaceNameForm defaultName={workspace.name} />
+            </CardContent>
+          </Card>
+        )
+      )}
 
       {canManageMembers && (
         <Card>

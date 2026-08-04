@@ -36,6 +36,8 @@ function entitlements(planId: "FREE" | "PRO" | "BUSINESS", usage: Partial<Entitl
   return {
     plan: getPlan(planId),
     planId,
+    workspaceType: "BUSINESS",
+    edition: "business",
     isTrial: false,
     trialEndsAt: null,
     subscriptionStatus: "ACTIVE",
@@ -64,6 +66,7 @@ describe("resolvePlanId", () => {
   it("prefers a paid Stripe plan", () => {
     const { planId, isTrial } = resolvePlanId(
       subscription({ plan: "BUSINESS", status: "ACTIVE" }),
+      "business",
       NOW
     );
     expect(planId).toBe("BUSINESS");
@@ -73,6 +76,7 @@ describe("resolvePlanId", () => {
   it("grants the local Pro trial while it lasts", () => {
     const inTrial = resolvePlanId(
       subscription({ trialEndsAt: new Date(NOW.getTime() + 86_400_000) }),
+      "business",
       NOW
     );
     expect(inTrial).toEqual({ planId: "PRO", isTrial: true });
@@ -81,13 +85,18 @@ describe("resolvePlanId", () => {
   it("falls back to Free after the trial expires", () => {
     const expired = resolvePlanId(
       subscription({ trialEndsAt: new Date(NOW.getTime() - 1000) }),
+      "business",
       NOW
     );
     expect(expired).toEqual({ planId: "FREE", isTrial: false });
   });
 
   it("does not honor a canceled paid plan", () => {
-    const { planId } = resolvePlanId(subscription({ plan: "PRO", status: "CANCELED" }), NOW);
+    const { planId } = resolvePlanId(
+      subscription({ plan: "PRO", status: "CANCELED" }),
+      "business",
+      NOW
+    );
     expect(planId).toBe("FREE");
   });
 });

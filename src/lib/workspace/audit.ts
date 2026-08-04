@@ -16,6 +16,7 @@ export type AuditAction =
   | "member.left"
   | "member.role_changed"
   | "member.permissions_changed"
+  | "workspace.created"
   | "workspace.renamed"
   | "billing.checkout_started"
   | "billing.portal_opened"

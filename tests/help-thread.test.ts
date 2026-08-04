@@ -41,6 +41,7 @@ const USER_ID = "123e4567-e89b-12d3-a456-426614174000";
 
 function context(overrides: Partial<HelpUserContext> = {}): HelpUserContext {
   return {
+    edition: "business",
     planName: "Pro",
     integrationsEnabled: true,
     configuredProviders: [],
@@ -162,6 +163,7 @@ describe("help user context", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     entitlements.get.mockResolvedValue({
+      edition: "business",
       plan: { name: "Business", limits: { integrationsEnabled: true } },
     });
     db.findConnections.mockResolvedValue([{ provider: "gocardless", status: "CONNECTED" }]);
@@ -186,6 +188,7 @@ describe("help user context", () => {
     expect(db.countTransactions).toHaveBeenCalledWith({ where: { workspaceId: WORKSPACE_ID } });
     expect(db.countInvoices).toHaveBeenCalledWith({ where: { workspaceId: WORKSPACE_ID } });
 
+    expect(result.edition).toBe("business");
     expect(result.planName).toBe("Business");
     expect(result.transactionCount).toBe(42);
     expect(result.invoiceCount).toBe(7);

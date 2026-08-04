@@ -6,16 +6,22 @@ import { usePathname } from "next/navigation";
 import { MenuIcon } from "lucide-react";
 
 import { BallastBadge } from "@/components/brand/ballast-mark";
-import { ADMIN_NAV_ITEM, NAV_ITEMS } from "@/components/dashboard/nav-items";
+import { navItemsFor } from "@/components/dashboard/nav-items";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { BRAND } from "@/lib/branding";
+import type { WorkspaceType } from "@/lib/workspace/editions";
 import { cn } from "@/lib/utils";
 
-export function MobileNav({ isAdmin = false }: { isAdmin?: boolean }) {
+interface MobileNavProps {
+  isAdmin?: boolean;
+  workspaceType: WorkspaceType;
+}
+
+export function MobileNav({ isAdmin = false, workspaceType }: MobileNavProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const items = isAdmin ? [...NAV_ITEMS, ADMIN_NAV_ITEM] : NAV_ITEMS;
+  const items = navItemsFor(workspaceType, isAdmin);
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>

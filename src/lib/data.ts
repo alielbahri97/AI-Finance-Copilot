@@ -11,6 +11,12 @@ import { currencyFromRequestHeaders } from "@/lib/currency/location";
 import { anchorBalanceHistory, type CashPosition } from "@/lib/finance/cash";
 import { loadCashPosition } from "@/lib/finance/cash-data";
 import { prisma } from "@/lib/prisma";
+import {
+  defaultWorkspaceName,
+  EDITION_METADATA_KEY,
+  parseWorkspaceType,
+  type WorkspaceType,
+} from "@/lib/workspace/editions";
 import { personalMembershipId, personalWorkspaceId } from "@/lib/workspace/ids";
 
 /**
@@ -29,15 +35,21 @@ async function seedDefaultsSafely(workspaceId: string, userId: string) {
 }
 
 /**
- * Creates the user's personal workspace (deterministic id "ws-<userId>")
- * with them as OWNER. Idempotent: existing rows are left untouched.
+ * Creates the user's own workspace (deterministic id "ws-<userId>") with them
+ * as OWNER. Idempotent: existing rows are left untouched, which is what keeps
+ * an existing account's edition from ever being rewritten.
  */
-async function ensurePersonalWorkspace(userId: string, name: string, currency: string) {
+async function ensurePersonalWorkspace(
+  userId: string,
+  name: string,
+  currency: string,
+  type: WorkspaceType
+) {
   const workspaceId = personalWorkspaceId(userId);
   await prisma.workspace.upsert({
     where: { id: workspaceId },
     update: {},
-    create: { id: workspaceId, name, currency },
+    create: { id: workspaceId, name, currency, type },
   });
   await prisma.workspaceMember.upsert({
     where: { workspaceId_userId: { workspaceId, userId } },
@@ -86,9 +98,19 @@ export const getOrCreateProfile = cache(async (user: User) => {
     },
   });
 
-  const workspaceName =
-    profile.fullName?.trim() || profile.email.split("@")[0] || "My workspace";
-  const workspaceId = await ensurePersonalWorkspace(user.id, workspaceName, currency);
+  // The edition chosen on the landing page rode here in the signup metadata.
+  // Anything missing or unrecognised means Business, so every account that
+  // predates the Personal edition keeps the product it signed up for.
+  const workspaceType = parseWorkspaceType(
+    user.user_metadata?.[EDITION_METADATA_KEY] as string | undefined
+  );
+  const workspaceName = defaultWorkspaceName(workspaceType, profile.fullName, profile.email);
+  const workspaceId = await ensurePersonalWorkspace(
+    user.id,
+    workspaceName,
+    currency,
+    workspaceType
+  );
   await seedDefaultsSafely(workspaceId, user.id);
 
   await trackEvent(user.id, "signup");

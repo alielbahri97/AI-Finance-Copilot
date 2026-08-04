@@ -22,6 +22,7 @@ const ACTION_LABELS: Record<string, string> = {
   "member.left": "left the workspace",
   "member.role_changed": "changed a member's role",
   "member.permissions_changed": "changed a member's permissions",
+  "workspace.created": "created the workspace",
   "workspace.renamed": "renamed the workspace",
   "billing.checkout_started": "started a plan upgrade",
   "billing.portal_opened": "opened the billing portal",

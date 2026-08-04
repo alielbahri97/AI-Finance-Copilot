@@ -15,7 +15,7 @@ import { getEntitlements } from "@/lib/billing/entitlements";
 import { isSchemaOutOfDate } from "@/lib/db-errors";
 import { logger, serializeError } from "@/lib/logger";
 import { isEncryptionConfigured } from "@/lib/integrations/crypto";
-import { getProviders, isProviderConfigured } from "@/lib/integrations/registry";
+import { isProviderConfigured, providersForWorkspace } from "@/lib/integrations/registry";
 import { prisma } from "@/lib/prisma";
 import { getWorkspaceContext, type WorkspaceContext } from "@/lib/workspace/context";
 
@@ -257,7 +257,10 @@ async function IntegrationsContent({
   }
   const bankPickerCountry = CURRENCY_TO_COUNTRY[ctx.workspace.currency] ?? "GB";
 
-  const cards: IntegrationCardData[] = getProviders().map((provider) => ({
+  // Accounting systems and mailbox scanning only make sense where invoices do,
+  // so a Personal workspace never sees those tiles — and their connect routes
+  // refuse them too, since a hidden tile is not a guard.
+  const cards: IntegrationCardData[] = providersForWorkspace(ctx.workspace.type).map((provider) => ({
     id: provider.id,
     name: provider.name,
     description: provider.description,

@@ -21,6 +21,12 @@ import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 import { authCallbackUrl } from "@/lib/supabase/redirect";
 import { signupSchema, type SignupValues } from "@/lib/validations/auth";
+import {
+  EDITION_METADATA_KEY,
+  EDITION_PARAM,
+  parseWorkspaceType,
+  workspaceTypeParam,
+} from "@/lib/workspace/editions";
 
 export function SignupForm() {
   const [isLoading, setIsLoading] = useState(false);
@@ -28,9 +34,15 @@ export function SignupForm() {
   const searchParams = useSearchParams();
   // Referral attribution: /signup?ref=CODE travels via signup metadata.
   const referralCode = searchParams.get("ref");
+  // Edition choice from the landing page: /signup?for=personal. It travels the
+  // same way as the referral code, because signup metadata is what survives
+  // the email-confirmation round trip.
+  const workspaceType = parseWorkspaceType(searchParams.get(EDITION_PARAM));
   // Post-confirmation destination (e.g. back to a workspace invitation).
+  // Personal skips the business onboarding wizard entirely.
   const rawNext = searchParams.get("next");
-  const next = rawNext && rawNext.startsWith("/") ? rawNext : "/onboarding";
+  const fallbackNext = workspaceType === "PERSONAL" ? "/dashboard" : "/onboarding";
+  const next = rawNext && rawNext.startsWith("/") ? rawNext : fallbackNext;
 
   const form = useForm<SignupValues>({
     resolver: zodResolver(signupSchema),
@@ -47,6 +59,7 @@ export function SignupForm() {
         options: {
           data: {
             full_name: values.fullName,
+            [EDITION_METADATA_KEY]: workspaceTypeParam(workspaceType),
             ...(referralCode ? { referral_code: referralCode } : {}),
           },
           emailRedirectTo: authCallbackUrl(next),

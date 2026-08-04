@@ -24,9 +24,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getEntitlements } from "@/lib/billing/entitlements";
-import { PLAN_ORDER, PLANS } from "@/lib/billing/plans";
+import { getPlan, planOrder, trialPlan } from "@/lib/billing/plans";
 import { getReferralStats, REFERRAL_REWARD_DAYS } from "@/lib/billing/referrals";
 import { getStripe, isBillingConfigured } from "@/lib/billing/stripe";
+import { editionBranding } from "@/lib/branding";
 import { getAppUrl } from "@/lib/env-url";
 import { logger, serializeError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
@@ -99,7 +100,11 @@ export default async function BillingPage({
     getInvoiceHistory(workspace.id),
   ]);
 
-  const { plan, usage } = entitlements;
+  const { plan, usage, edition } = entitlements;
+  // Only the workspace's own edition is offered: a Personal workspace has no
+  // use for seats and a Business one has no use for a €4.99 single-user tier.
+  const availablePlans = planOrder(edition).map((id) => getPlan(id, edition));
+  const rewardPlanName = getPlan(trialPlan(edition), edition).name;
   const trialDaysLeft = entitlements.trialEndsAt
     ? Math.max(
         0,
@@ -114,7 +119,7 @@ export default async function BillingPage({
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Billing</h1>
           <p className="text-muted-foreground text-sm">
-            Your plan, usage and invoices — all in one place.
+            {editionBranding(edition).name} — your plan, usage and invoices, all in one place.
           </p>
         </div>
         <PortalButton disabled={!billingConfigured || !entitlements.hasStripeCustomer} />
@@ -208,11 +213,16 @@ export default async function BillingPage({
                   used: usage.csvImports,
                   limit: plan.limits.csvImportsPerMonth,
                 },
-                {
-                  label: "Invoice extractions",
-                  used: usage.invoiceExtractions,
-                  limit: plan.limits.invoiceExtractionsPerMonth,
-                },
+                // Personal has no invoices, so the meter would always read 0/0.
+                ...(plan.limits.invoiceExtractionsPerMonth === 0
+                  ? []
+                  : [
+                      {
+                        label: "Invoice extractions",
+                        used: usage.invoiceExtractions,
+                        limit: plan.limits.invoiceExtractionsPerMonth,
+                      },
+                    ]),
                 {
                   label: "Report exports",
                   used: usage.exports,
@@ -225,7 +235,7 @@ export default async function BillingPage({
       </div>
 
       <PlanCards
-        plans={PLAN_ORDER.map((id) => PLANS[id])}
+        plans={availablePlans}
         currentPlanId={entitlements.planId}
         isTrial={entitlements.isTrial}
         billingConfigured={billingConfigured}
@@ -234,7 +244,9 @@ export default async function BillingPage({
       <Card>
         <CardHeader>
           <CardTitle>Refer a friend</CardTitle>
-          <CardDescription>Earn free Pro time for every referral that upgrades.</CardDescription>
+          <CardDescription>
+            Earn free {rewardPlanName} time for every referral that upgrades.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <ReferralCard

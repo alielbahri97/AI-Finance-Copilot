@@ -106,7 +106,7 @@ export async function POST(request: Request) {
 
     const snapshot = await buildFinancialSnapshot(workspace.id, workspace.currency);
     const messages: AiChatMessage[] = [
-      { role: "system", content: buildSystemPrompt(snapshot) },
+      { role: "system", content: buildSystemPrompt(snapshot, entitlements.edition) },
       ...history.map((entry) => ({
         role: entry.role === "USER" ? ("user" as const) : ("assistant" as const),
         content: entry.content,

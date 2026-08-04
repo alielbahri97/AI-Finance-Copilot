@@ -79,7 +79,7 @@ export default async function CopilotPage({
         conversations={conversationItems}
         activeId={activeId}
         initialMessages={initialMessages}
-        suggestions={buildSuggestedQuestions(snapshot)}
+        suggestions={buildSuggestedQuestions(snapshot, entitlements.edition)}
         quotaExhausted={!aiQuota.allowed}
       />
     </div>

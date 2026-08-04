@@ -5,9 +5,15 @@ import { cache } from "react";
 import { logger, serializeError } from "@/lib/logger";
 
 import type { Subscription, UsageRecord } from "@/generated/prisma/client";
+import { DEFAULT_EDITION, type Edition } from "@/lib/branding";
 import { prisma } from "@/lib/prisma";
+import {
+  DEFAULT_WORKSPACE_TYPE,
+  editionForWorkspaceType,
+  type WorkspaceType,
+} from "@/lib/workspace/editions";
 
-import { getPlan, TRIAL_DAYS, TRIAL_PLAN, type Plan, type PlanId } from "./plans";
+import { getPlan, TRIAL_DAYS, trialPlan, type Plan, type PlanId } from "./plans";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -24,10 +30,13 @@ export interface Usage {
 }
 
 export interface Entitlements {
-  /** The effective plan after resolving the local trial. */
+  /** The effective plan after resolving the local trial, for this edition. */
   plan: Plan;
   planId: PlanId;
-  /** True while the card-free signup/referral trial grants Pro. */
+  /** Which edition's tier set applies. */
+  workspaceType: WorkspaceType;
+  edition: Edition;
+  /** True while the card-free signup/referral trial grants the middle tier. */
   isTrial: boolean;
   trialEndsAt: string | null;
   subscriptionStatus: string;
@@ -57,8 +66,17 @@ async function getOrCreateUsage(workspaceId: string, period: string): Promise<Us
   });
 }
 
-/** Resolves the effective plan: paid Stripe plan > local trial > Free. */
-export function resolvePlanId(subscription: Subscription, now = new Date()): {
+/**
+ * Resolves the effective plan: paid Stripe plan > local trial > Free.
+ *
+ * The edition only decides which tier the card-free trial grants (Pro for
+ * Business, Plus for Personal); a paid plan is honoured as stored either way.
+ */
+export function resolvePlanId(
+  subscription: Subscription,
+  edition: Edition = DEFAULT_EDITION,
+  now = new Date()
+): {
   planId: PlanId;
   isTrial: boolean;
 } {
@@ -67,7 +85,7 @@ export function resolvePlanId(subscription: Subscription, now = new Date()): {
     return { planId: subscription.plan, isTrial: subscription.status === "TRIALING" };
   }
   if (subscription.trialEndsAt && subscription.trialEndsAt > now) {
-    return { planId: TRIAL_PLAN, isTrial: true };
+    return { planId: trialPlan(edition), isTrial: true };
   }
   return { planId: "FREE", isTrial: false };
 }
@@ -80,16 +98,21 @@ export function resolvePlanId(subscription: Subscription, now = new Date()): {
  * request-scoped memo never serves stale quota decisions.
  */
 export const getEntitlements = cache(async (workspaceId: string): Promise<Entitlements> => {
-  const [subscription, usage] = await Promise.all([
+  const [subscription, usage, workspace] = await Promise.all([
     getOrCreateSubscription(workspaceId),
     getOrCreateUsage(workspaceId, currentPeriod()),
+    prisma.workspace.findUnique({ where: { id: workspaceId }, select: { type: true } }),
   ]);
   const period = currentPeriod();
-  const { planId, isTrial } = resolvePlanId(subscription);
+  const workspaceType = workspace?.type ?? DEFAULT_WORKSPACE_TYPE;
+  const edition = editionForWorkspaceType(workspaceType);
+  const { planId, isTrial } = resolvePlanId(subscription, edition);
 
   return {
-    plan: getPlan(planId),
+    plan: getPlan(planId, edition),
     planId,
+    workspaceType,
+    edition,
     isTrial,
     trialEndsAt: subscription.trialEndsAt?.toISOString() ?? null,
     subscriptionStatus: subscription.status,
@@ -144,14 +167,18 @@ export function checkLimit(
 }
 
 /** Standard 402 payload for gated features, with an upgrade hint for the UI. */
-export function upgradeError(feature: string, planId: PlanId): {
+export function upgradeError(
+  feature: string,
+  planId: PlanId,
+  edition: Edition = DEFAULT_EDITION
+): {
   error: string;
   code: string;
   feature: string;
   plan: PlanId;
 } {
   return {
-    error: `${feature} is not available on your current plan (${getPlan(planId).name}). Upgrade on the Billing page to continue.`,
+    error: `${feature} is not available on your current plan (${getPlan(planId, edition).name}). Upgrade on the Billing page to continue.`,
     code: "UPGRADE_REQUIRED",
     feature,
     plan: planId,
@@ -159,14 +186,18 @@ export function upgradeError(feature: string, planId: PlanId): {
 }
 
 /** Standard 402 payload for exhausted monthly quotas. */
-export function limitError(feature: string, planId: PlanId): {
+export function limitError(
+  feature: string,
+  planId: PlanId,
+  edition: Edition = DEFAULT_EDITION
+): {
   error: string;
   code: string;
   feature: string;
   plan: PlanId;
 } {
   return {
-    error: `You have reached this month's ${feature} limit on the ${getPlan(planId).name} plan. Upgrade on the Billing page for a higher limit.`,
+    error: `You have reached this month's ${feature} limit on the ${getPlan(planId, edition).name} plan. Upgrade on the Billing page for a higher limit.`,
     code: "LIMIT_REACHED",
     feature,
     plan: planId,

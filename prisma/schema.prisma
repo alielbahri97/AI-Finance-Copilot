@@ -62,11 +62,17 @@ enum SyncRunStatus {
   FAILED
 }
 
+/// Plan tiers across both editions. FREE is shared (its limits differ per
+/// edition); PRO/BUSINESS/ENTERPRISE are Business-edition tiers and
+/// PLUS/PREMIUM are Personal-edition tiers. Which set applies is decided by
+/// the workspace's type — see src/lib/billing/plans.ts.
 enum PlanId {
   FREE
   PRO
   BUSINESS
   ENTERPRISE
+  PLUS
+  PREMIUM
 }
 
 enum SubscriptionStatus {
@@ -93,6 +99,18 @@ enum NotificationType {
   INVOICE_REMINDER
   /// Team events: added to a workspace, role changed, removed.
   WORKSPACE
+}
+
+/// Which edition of the product a workspace is. One codebase, two editions:
+/// the shared core (transactions, categories, banks, forecasts, copilot,
+/// notifications) works for both, and the type decides which surfaces exist.
+enum WorkspaceType {
+  /// Companies: invoices with VAT extraction, AR/AP, vendors and customers,
+  /// executive reports, multi-member team sharing.
+  BUSINESS
+  /// Individuals: budgets, savings goals, subscription tracking. Single-user
+  /// by design — the workspace model is kept, the team UI is not.
+  PERSONAL
 }
 
 enum WorkspaceRole {
@@ -142,7 +160,10 @@ enum EmployeeRange {
 model Workspace {
   id        String   @id @default(cuid())
   name      String
-  /// Business currency for the workspace's shared data.
+  /// Which edition this workspace runs. Every workspace that existed before
+  /// the Personal edition is BUSINESS, which is what the default preserves.
+  type      WorkspaceType @default(BUSINESS)
+  /// Currency for the workspace's shared data.
   currency  String   @default("USD")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -161,8 +182,10 @@ model Workspace {
   assumptions            Assumption[]
   conversations          Conversation[]
   budgets                Budget[]
+  savingsGoals           SavingsGoal[]
   integrationConnections IntegrationConnection[]
 
+  @@index([type])
   @@map("workspaces")
 }
 
@@ -244,6 +267,7 @@ model Profile {
 
   transactions           Transaction[]
   budgets                Budget[]
+  savingsGoals           SavingsGoal[]
   chatMessages           ChatMessage[]
   categories             Category[]
   categoryRules          CategoryRule[]
@@ -392,7 +416,8 @@ model BankAccount {
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
-  connection IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  connection   IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  savingsGoals SavingsGoal[]
 
   @@unique([connectionId, externalAccountId])
   @@map("bank_accounts")
@@ -679,6 +704,8 @@ model Category {
   profile      Profile        @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions Transaction[]
   rules        CategoryRule[]
+  budgets      Budget[]
+  savingsGoals SavingsGoal[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId, type])
@@ -752,22 +779,92 @@ model Transaction {
   @@map("transactions")
 }
 
+/// A spending cap for one category in one calendar month. A Personal-edition
+/// surface (`/budgets`); Business workspaces do not expose it.
+///
+/// `category` holds the category NAME and is the uniqueness key, which works
+/// because category names are unique per workspace (see Category). `categoryId`
+/// is the resolved link, kept in sync by the app so spend can be summed by id
+/// and so deleting a category takes its budgets with it.
 model Budget {
   id          String   @id @default(cuid())
   workspaceId String   @map("workspace_id")
   userId      String   @map("user_id") @db.Uuid
   category    String
+  categoryId  String?  @map("category_id")
   limit       Decimal  @db.Decimal(12, 2)
   month       Int
   year        Int
+  /// Carry an underspend (or overspend) forward into the next month's
+  /// available amount, instead of every month starting from `limit`.
+  rollover    Boolean  @default(false)
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  profile   Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  profile     Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryRef Category? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, category, month, year])
+  @@index([workspaceId, year, month])
   @@map("budgets")
+}
+
+/// A named savings target ("Emergency fund", "Japan trip"). Progress comes
+/// from explicit SavingsContribution rows plus `startingAmount`; a linked
+/// category lets the app suggest contributions from real transactions, and a
+/// linked bank account records where the money actually sits.
+model SavingsGoal {
+  id             String    @id @default(cuid())
+  workspaceId    String    @map("workspace_id")
+  userId         String    @map("user_id") @db.Uuid
+  name           String
+  targetAmount   Decimal   @map("target_amount") @db.Decimal(12, 2)
+  /// When the user wants to get there. Null = no deadline, so the projection
+  /// reports an expected date instead of an on-track/behind verdict.
+  targetDate     DateTime? @map("target_date")
+  /// Money already set aside before tracking started.
+  startingAmount Decimal   @default(0) @map("starting_amount") @db.Decimal(12, 2)
+  /// Optional: transactions in this category are treated as saving towards
+  /// the goal, so contributions can be suggested rather than typed in.
+  categoryId     String?   @map("category_id")
+  /// Optional: the account holding the money.
+  bankAccountId  String?   @map("bank_account_id")
+  note           String?
+  /// Set the first time the goal is fully funded.
+  achievedAt     DateTime? @map("achieved_at")
+  archivedAt     DateTime? @map("archived_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  workspace     Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  profile       Profile               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category      Category?             @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  bankAccount   BankAccount?          @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+  contributions SavingsContribution[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@map("savings_goals")
+}
+
+/// One deposit towards a savings goal. Optionally points at the transaction
+/// it was recognised from, which keeps a bank-fed contribution from being
+/// counted twice.
+model SavingsContribution {
+  id            String   @id @default(cuid())
+  goalId        String   @map("goal_id")
+  amount        Decimal  @db.Decimal(12, 2)
+  date          DateTime
+  note          String?
+  transactionId String?  @map("transaction_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  goal SavingsGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@unique([goalId, transactionId])
+  @@index([goalId, date(sort: Desc)])
+  @@map("savings_contributions")
 }
 
 /// A copilot conversation, shared across the workspace's members.

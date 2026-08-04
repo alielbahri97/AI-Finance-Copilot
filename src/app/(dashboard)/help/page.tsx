@@ -4,8 +4,11 @@ import { redirect } from "next/navigation";
 import { BotIcon } from "lucide-react";
 
 import { HelpChat, type HelpMessageItem } from "@/components/help/help-chat";
+import { DEFAULT_EDITION } from "@/lib/branding";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
+import { getWorkspaceContext } from "@/lib/workspace/context";
+import { editionForWorkspaceType } from "@/lib/workspace/editions";
 
 export const metadata: Metadata = {
   title: "Help & support",
@@ -15,13 +18,17 @@ export default async function HelpPage() {
   const user = await getUser();
   if (!user) redirect("/login");
 
-  const recent = await prisma.helpMessage.findMany({
-    where: { userId: user.id },
-    orderBy: { createdAt: "desc" },
-    take: 50,
-    select: { id: true, role: true, content: true },
-  });
+  const [recent, ctx] = await Promise.all([
+    prisma.helpMessage.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      select: { id: true, role: true, content: true },
+    }),
+    getWorkspaceContext(),
+  ]);
   const messages: HelpMessageItem[] = recent.reverse();
+  const edition = ctx ? editionForWorkspaceType(ctx.workspace.type) : DEFAULT_EDITION;
 
   return (
     <div className="flex h-[calc(100svh-8.5rem)] min-h-[28rem] flex-col gap-4">
@@ -42,7 +49,7 @@ export default async function HelpPage() {
       </div>
 
       <div className="bg-card min-h-0 flex-1 rounded-xl border shadow-sm">
-        <HelpChat initialMessages={messages} />
+        <HelpChat initialMessages={messages} edition={edition} />
       </div>
     </div>
   );

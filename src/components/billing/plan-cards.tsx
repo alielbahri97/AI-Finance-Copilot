@@ -13,7 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import type { Plan, PlanId } from "@/lib/billing/plans";
+import { formatPlanPrice, type Plan, type PlanId } from "@/lib/billing/plans";
 import { BRAND } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 
@@ -52,9 +52,15 @@ export function PlanCards({ plans, currentPlanId, isTrial, billingConfigured }: 
   }
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div
+      className={cn(
+        "grid gap-4 sm:grid-cols-2",
+        plans.length <= 3 ? "xl:grid-cols-3" : "xl:grid-cols-4"
+      )}
+    >
       {plans.map((plan) => {
         const isCurrent = plan.id === currentPlanId;
+        const price = formatPlanPrice(plan);
         return (
           <Card
             key={plan.id}
@@ -69,12 +75,14 @@ export function PlanCards({ plans, currentPlanId, isTrial, billingConfigured }: 
               </div>
               <CardDescription>{plan.description}</CardDescription>
               <p className="pt-1">
-                {plan.monthlyPriceUsd === null ? (
+                {price === null ? (
                   <span className="text-2xl font-bold">Custom</span>
                 ) : (
                   <>
-                    <span className="text-2xl font-bold">${plan.monthlyPriceUsd}</span>
-                    <span className="text-muted-foreground text-sm"> / month</span>
+                    <span className="text-2xl font-bold">{price}</span>
+                    {plan.monthlyPriceEur !== 0 && (
+                      <span className="text-muted-foreground text-sm"> / month</span>
+                    )}
                   </>
                 )}
               </p>

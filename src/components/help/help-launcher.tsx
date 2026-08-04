@@ -13,6 +13,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { DEFAULT_EDITION, type Edition } from "@/lib/branding";
 
 import { HelpChat, type HelpMessageItem } from "./help-chat";
 
@@ -21,7 +22,7 @@ import { HelpChat, type HelpMessageItem } from "./help-chat";
  * the full experience lives on /help. Distinct from the finance copilot —
  * this answers "how do I use the app" questions.
  */
-export function HelpLauncher() {
+export function HelpLauncher({ edition = DEFAULT_EDITION }: { edition?: Edition }) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<HelpMessageItem[] | null>(null);
   const loadingRef = useRef(false);
@@ -88,7 +89,12 @@ export function HelpLauncher() {
               Loading…
             </div>
           ) : (
-            <HelpChat initialMessages={messages} compact className="min-h-0 flex-1" />
+            <HelpChat
+              initialMessages={messages}
+              edition={edition}
+              compact
+              className="min-h-0 flex-1"
+            />
           )}
 
           <div className="text-muted-foreground flex items-center justify-between gap-2 border-t px-3 py-2 text-xs">

@@ -5,9 +5,11 @@ import { buildHelpSystemPrompt, buildUserContextBlock, type HelpUserContext } fr
 import { selectTopics, tokenize } from "@/lib/help/retrieval";
 
 const topics = getHelpTopics();
+const personalTopics = getHelpTopics("personal");
 
 function contextFixture(overrides: Partial<HelpUserContext> = {}): HelpUserContext {
   return {
+    edition: "business",
     planName: "Pro",
     integrationsEnabled: false,
     configuredProviders: ["gocardless", "slack"],
@@ -70,13 +72,74 @@ describe("help knowledge base", () => {
     const knownRoutes = new Set([
       "/dashboard", "/transactions", "/import", "/categories", "/invoices",
       "/forecast", "/reports", "/copilot", "/integrations", "/billing",
-      "/profile", "/settings", "/help",
+      "/profile", "/settings", "/help", "/budgets", "/goals", "/subscriptions",
     ]);
-    for (const topic of topics) {
+    for (const topic of [...topics, ...personalTopics]) {
       for (const match of topic.content.matchAll(/\]\((\/[a-z-]*)\)/g)) {
         expect(knownRoutes.has(match[1]), `${topic.id} links to unknown ${match[1]}`).toBe(true);
       }
     }
+  });
+});
+
+describe("help knowledge base per edition", () => {
+  it("defaults to the Business edition", () => {
+    expect(topics.map((topic) => topic.id)).toEqual(
+      getHelpTopics("business").map((topic) => topic.id)
+    );
+  });
+
+  it("adds the personal topics and drops the business-only ones", () => {
+    const ids = new Set(personalTopics.map((topic) => topic.id));
+    for (const required of ["budgets", "goals", "subscriptions"]) {
+      expect(ids.has(required), `missing personal topic ${required}`).toBe(true);
+    }
+    for (const absent of ["invoices", "team-invitations"]) {
+      expect(ids.has(absent), `personal edition must not document ${absent}`).toBe(false);
+    }
+    // The shared core is documented in both.
+    for (const shared of ["csv-import", "forecast", "reports-exports", "bank-connections"]) {
+      expect(ids.has(shared), `missing shared topic ${shared}`).toBe(true);
+    }
+  });
+
+  it("never mentions a business-only surface to a personal workspace", () => {
+    const forbidden = [/\/invoices/, /\bVAT\b/, /\bvendors?\b/i, /invite/i, /\bseats?\b/i];
+    // The workspaces topic is the one place that names the other edition, so
+    // someone asking "can I also track my company here?" gets a real answer.
+    for (const topic of personalTopics.filter((entry) => entry.id !== "workspaces")) {
+      for (const pattern of forbidden) {
+        expect(pattern.test(topic.content), `${topic.id} mentions ${pattern}`).toBe(false);
+      }
+    }
+  });
+
+  it("generates the personal tier facts from the plans module", () => {
+    const billing = personalTopics.find((topic) => topic.id === "billing-plans")!;
+    expect(billing.content).toContain("**Plus** (€4.99/month)");
+    expect(billing.content).toContain("**Premium** (€8.99/month)");
+    expect(billing.content).toContain("14-day Plus trial");
+    expect(billing.content).not.toContain("**Enterprise**");
+    // Free allows one bank on Personal, and budgets on every tier.
+    expect(billing.content).toContain("1 bank connection");
+    expect(billing.content).toContain("budgets");
+  });
+
+  it("states the real plan gate for goals and subscription insights", () => {
+    const goals = personalTopics.find((topic) => topic.id === "goals")!;
+    const subscriptions = personalTopics.find((topic) => topic.id === "subscriptions")!;
+    expect(goals.content).toContain("the Plus plan or higher");
+    expect(subscriptions.content).toContain("the Plus plan or higher");
+    const budgets = personalTopics.find((topic) => topic.id === "budgets")!;
+    expect(budgets.content).toContain("every plan");
+  });
+
+  it("retrieves the personal topics for personal questions", () => {
+    expect(selectTopics("how do budgets work?", personalTopics)[0].id).toBe("budgets");
+    expect(selectTopics("saving for a house deposit", personalTopics)[0].id).toBe("goals");
+    expect(selectTopics("what subscriptions am I paying for", personalTopics)[0].id).toBe(
+      "subscriptions"
+    );
   });
 });
 

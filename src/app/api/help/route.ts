@@ -115,7 +115,10 @@ export async function POST(request: Request) {
 
     // Retrieval considers the previous user question too, so follow-ups like
     // "and how do I undo it?" keep the right topics in context.
-    const topics = selectTopics(`${previousQuestion(history)} ${message}`, getHelpTopics());
+    const topics = selectTopics(
+      `${previousQuestion(history)} ${message}`,
+      getHelpTopics(context.edition)
+    );
     const messages = buildHelpMessages(topics, context, history, message);
 
     const ai = getAiClient(providerFromProfile(profile.aiProvider));

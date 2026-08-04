@@ -6,7 +6,7 @@ import { AlertTriangleIcon, LifeBuoyIcon, SendIcon, SquareIcon, UserIcon } from 
 import { Markdown } from "@/components/copilot/markdown-lazy";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { BRAND } from "@/lib/branding";
+import { DEFAULT_EDITION, editionBranding, type Edition } from "@/lib/branding";
 import { isConfigurationError } from "@/lib/help/errors";
 import { cn } from "@/lib/utils";
 
@@ -17,13 +17,17 @@ export interface HelpMessageItem {
 }
 
 /** Featured questions, mirrored on /help and in the floating panel. */
-export const COMMON_QUESTIONS = [
-  "How do I connect my bank?",
-  "How do I import a CSV?",
-  "How do forecasts work?",
-  "What does my plan include?",
-  "How do I set up notifications?",
-];
+export function commonQuestions(edition: Edition = DEFAULT_EDITION): string[] {
+  return [
+    "How do I connect my bank?",
+    "How do I import a CSV?",
+    edition === "personal" ? "How do budgets work?" : "How do forecasts work?",
+    "What does my plan include?",
+    edition === "personal"
+      ? "How do I set up a savings goal?"
+      : "How do I set up notifications?",
+  ];
+}
 
 type StreamEvent =
   | { type: "delta"; text: string }
@@ -32,6 +36,8 @@ type StreamEvent =
 
 interface HelpChatProps {
   initialMessages: HelpMessageItem[];
+  /** Tailors the starter questions and copy to the workspace's edition. */
+  edition?: Edition;
   /** Compact styling for the floating panel. */
   compact?: boolean;
   className?: string;
@@ -41,7 +47,14 @@ interface HelpChatProps {
  * The help-agent chat. Unlike the finance copilot this is a single thread,
  * is never plan-gated, and answers "how do I…" questions about the app.
  */
-export function HelpChat({ initialMessages, compact = false, className }: HelpChatProps) {
+export function HelpChat({
+  initialMessages,
+  edition = DEFAULT_EDITION,
+  compact = false,
+  className,
+}: HelpChatProps) {
+  const questions = commonQuestions(edition);
+  const branding = editionBranding(edition);
   const [messages, setMessages] = useState<HelpMessageItem[]>(initialMessages);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -180,7 +193,7 @@ export function HelpChat({ initialMessages, compact = false, className }: HelpCh
   const askedQuestions = new Set(
     messages.filter((message) => message.role === "USER").map((message) => message.content)
   );
-  const followUps = COMMON_QUESTIONS.filter((question) => !askedQuestions.has(question));
+  const followUps = questions.filter((question) => !askedQuestions.has(question));
 
   return (
     <div className={cn("flex h-full min-h-0 flex-col", className)}>
@@ -201,14 +214,14 @@ export function HelpChat({ initialMessages, compact = false, className }: HelpCh
               <LifeBuoyIcon className="size-6" />
             </div>
             <div>
-              <p className="font-medium">How can I help you use {BRAND.name}?</p>
+              <p className="font-medium">How can I help you use {branding.name}?</p>
               <p className="text-muted-foreground mx-auto max-w-sm text-sm">
-                Ask me how to do anything in the app — connecting banks, imports, forecasts,
-                invoices, notifications, billing…
+                Ask me how to do anything in the app — connecting banks, imports, forecasts,{" "}
+                {edition === "personal" ? "budgets, goals" : "invoices, notifications"}, billing…
               </p>
             </div>
             <div className="flex max-w-xl flex-wrap justify-center gap-2">
-              {COMMON_QUESTIONS.map((question) => (
+              {questions.map((question) => (
                 <button
                   key={question}
                   type="button"

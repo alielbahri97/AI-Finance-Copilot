@@ -1,5 +1,7 @@
 import "server-only";
 
+import { editionHasFeature, type WorkspaceType } from "@/lib/workspace/editions";
+
 /**
  * The integration registry: one declaration per provider. Everything else
  * (connect routes, sync orchestrator, UI) is generic and driven by this file.
@@ -273,6 +275,28 @@ export function getProviders(): IntegrationProvider[] {
 
 export function getProvider(id: string): IntegrationProvider | null {
   return getProviders().find((provider) => provider.id === id) ?? null;
+}
+
+/**
+ * Whether an edition has any use for a provider. Bank data and the outgoing
+ * channels serve both; accounting systems and mailbox scanning exist to feed
+ * the invoice module, which a Personal workspace does not have — offering them
+ * there would promise an import that lands nowhere.
+ */
+export function editionAllowsProvider(
+  type: WorkspaceType,
+  provider: IntegrationProvider
+): boolean {
+  if (provider.category === "accounting") return editionHasFeature(type, "accounting");
+  if (provider.capabilities.some((capability) => capability === "invoices" || capability === "email")) {
+    return editionHasFeature(type, "invoices");
+  }
+  return true;
+}
+
+/** Providers worth showing to a workspace of this type. */
+export function providersForWorkspace(type: WorkspaceType): IntegrationProvider[] {
+  return getProviders().filter((provider) => editionAllowsProvider(type, provider));
 }
 
 /** All env vars set (plus the shared encryption key for token-storing flows). */

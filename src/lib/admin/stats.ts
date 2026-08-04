@@ -1,9 +1,11 @@
 import "server-only";
 
 import { currentPeriod, resolvePlanId } from "@/lib/billing/entitlements";
-import { PLANS, type PlanId } from "@/lib/billing/plans";
+import { getPlan, type PlanId } from "@/lib/billing/plans";
+import type { Edition } from "@/lib/branding";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
+import { editionForWorkspaceType } from "@/lib/workspace/editions";
 import { personalWorkspaceId } from "@/lib/workspace/ids";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -22,10 +24,13 @@ export async function requireAdmin(): Promise<string | null> {
 export interface AdminKpis {
   totalUsers: number;
   activeSubscriptions: number;
-  /** Estimated MRR in USD from plan list prices. */
+  /** Estimated MRR in EUR from plan list prices. */
   mrrEstimate: number;
   signupsLast30d: number;
   aiMessagesThisMonth: number;
+  /** Workspaces per edition, which is how adoption of Personal is read. */
+  businessWorkspaces: number;
+  personalWorkspaces: number;
 }
 
 export interface DayPoint {
@@ -49,6 +54,7 @@ export interface AdminUserRow {
   email: string;
   fullName: string | null;
   plan: PlanId;
+  edition: Edition;
   isTrial: boolean;
   subscriptionStatus: string | null;
   aiMessagesThisMonth: number;
@@ -62,8 +68,15 @@ export async function getAdminStats(): Promise<AdminStats> {
   const since30d = new Date(now.getTime() - 30 * MS_PER_DAY);
   const period = currentPeriod(now);
 
-  const [totalUsers, signupsLast30d, paidSubscriptions, usageAggregate, recentProfiles, events] =
-    await Promise.all([
+  const [
+    totalUsers,
+    signupsLast30d,
+    paidSubscriptions,
+    usageAggregate,
+    recentProfiles,
+    events,
+    workspacesByType,
+  ] = await Promise.all([
       prisma.profile.count(),
       prisma.profile.count({ where: { createdAt: { gte: since30d } } }),
       prisma.subscription.findMany({
@@ -71,7 +84,9 @@ export async function getAdminStats(): Promise<AdminStats> {
           plan: { not: "FREE" },
           status: { in: ["ACTIVE", "TRIALING", "PAST_DUE"] },
         },
-        select: { plan: true },
+        // The workspace's edition decides which tier definition — and so which
+        // list price — the stored plan id means.
+        select: { plan: true, workspace: { select: { type: true } } },
       }),
       prisma.usageRecord.aggregate({
         where: { period },
@@ -88,6 +103,7 @@ export async function getAdminStats(): Promise<AdminStats> {
         orderBy: { _count: { name: "desc" } },
         take: 8,
       }),
+      prisma.workspace.groupBy({ by: ["type"], _count: { type: true } }),
     ]);
 
   // Signups per day over the last 30 days (zero-filled).
@@ -103,10 +119,13 @@ export async function getAdminStats(): Promise<AdminStats> {
     }
   }
 
-  const mrrEstimate = paidSubscriptions.reduce(
-    (sum, subscription) => sum + (PLANS[subscription.plan].monthlyPriceUsd ?? 0),
-    0
-  );
+  const mrrEstimate = paidSubscriptions.reduce((sum, subscription) => {
+    const edition = editionForWorkspaceType(subscription.workspace.type);
+    return sum + (getPlan(subscription.plan, edition).monthlyPriceEur ?? 0);
+  }, 0);
+
+  const countOfType = (type: "BUSINESS" | "PERSONAL") =>
+    workspacesByType.find((row) => row.type === type)?._count.type ?? 0;
 
   return {
     kpis: {
@@ -115,6 +134,8 @@ export async function getAdminStats(): Promise<AdminStats> {
       mrrEstimate,
       signupsLast30d,
       aiMessagesThisMonth: usageAggregate._sum.aiMessages ?? 0,
+      businessWorkspaces: countOfType("BUSINESS"),
+      personalWorkspaces: countOfType("PERSONAL"),
     },
     signupsPerDay: [...signupsByDay.entries()].map(([date, count]) => ({ date, count })),
     topEvents: events.map((event) => ({ name: event.name, count: event._count.name })),
@@ -138,18 +159,24 @@ export async function getAdminUsers(limit = 200): Promise<AdminUserRow[]> {
   // Billing is workspace-scoped now; the admin table shows each user's
   // personal-workspace plan and usage.
   const workspaceIds = profiles.map((profile) => personalWorkspaceId(profile.id));
-  const [subscriptions, usageRecords] = await Promise.all([
+  const [subscriptions, usageRecords, workspaces] = await Promise.all([
     prisma.subscription.findMany({ where: { workspaceId: { in: workspaceIds } } }),
     prisma.usageRecord.findMany({ where: { workspaceId: { in: workspaceIds }, period } }),
+    prisma.workspace.findMany({
+      where: { id: { in: workspaceIds } },
+      select: { id: true, type: true },
+    }),
   ]);
   const subscriptionByWorkspace = new Map(subscriptions.map((s) => [s.workspaceId, s]));
   const usageByWorkspace = new Map(usageRecords.map((u) => [u.workspaceId, u]));
+  const typeByWorkspace = new Map(workspaces.map((w) => [w.id, w.type]));
 
   return profiles.map((profile) => {
     const workspaceId = personalWorkspaceId(profile.id);
+    const edition = editionForWorkspaceType(typeByWorkspace.get(workspaceId) ?? "BUSINESS");
     const subscription = subscriptionByWorkspace.get(workspaceId) ?? null;
     const resolved = subscription
-      ? resolvePlanId(subscription)
+      ? resolvePlanId(subscription, edition)
       : { planId: "FREE" as PlanId, isTrial: false };
     const usage = usageByWorkspace.get(workspaceId);
     return {
@@ -157,6 +184,7 @@ export async function getAdminUsers(limit = 200): Promise<AdminUserRow[]> {
       email: profile.email,
       fullName: profile.fullName,
       plan: resolved.planId,
+      edition,
       isTrial: resolved.isTrial,
       subscriptionStatus: subscription?.status ?? null,
       aiMessagesThisMonth: usage?.aiMessages ?? 0,

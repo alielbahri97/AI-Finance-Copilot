@@ -133,7 +133,9 @@ async function syncSubscription(
   const customerId =
     typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
   const priceId = subscription.items.data[0]?.price.id ?? null;
-  const plan = (priceId && planFromPriceId(priceId)) || null;
+  // The price id identifies both the tier and the edition that sells it; only
+  // the tier is stored, because the workspace already knows its edition.
+  const matched = (priceId && planFromPriceId(priceId)) || null;
 
   const data = {
     stripeCustomerId: customerId,
@@ -142,7 +144,7 @@ async function syncSubscription(
     status: mapStripeStatus(subscription.status),
     currentPeriodEnd: subscriptionPeriodEnd(subscription),
     cancelAtPeriodEnd: subscription.cancel_at_period_end,
-    ...(plan ? { plan } : {}),
+    ...(matched ? { plan: matched.planId } : {}),
   };
 
   // Metadata: new checkouts carry workspaceId; pre-workspace subscriptions

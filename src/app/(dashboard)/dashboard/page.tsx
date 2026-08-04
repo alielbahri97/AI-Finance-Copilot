@@ -11,14 +11,9 @@ import {
   TrendingUpIcon,
 } from "lucide-react";
 
-import {
-  BalanceChart,
-  CategoryChart,
-  OverviewChart,
-} from "@/components/dashboard/charts-lazy";
-import { CashCard, CashLegend } from "@/components/dashboard/cash-card";
-import { LargestExpenses } from "@/components/dashboard/largest-expenses";
-import { RecentTransactions } from "@/components/dashboard/recent-transactions";
+import { CashCard } from "@/components/dashboard/cash-card";
+import { ChartsSection } from "@/components/dashboard/charts-section";
+import { PersonalDashboard } from "@/components/dashboard/personal-dashboard";
 import {
   BannerSkeleton,
   ChartRowSkeleton,
@@ -26,18 +21,15 @@ import {
   TableCardSkeleton,
 } from "@/components/dashboard/section-skeletons";
 import { StatCard } from "@/components/dashboard/stat-card";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { getEntitlements } from "@/lib/billing/entitlements";
+import { editionBranding } from "@/lib/branding";
 import { getDashboardData, getOrCreateProfile } from "@/lib/data";
 import { buildForecast } from "@/lib/finance/data";
 import { getInvoiceReminders } from "@/lib/invoices/reminders";
 import { formatCurrency } from "@/lib/utils";
 import { getWorkspaceContext } from "@/lib/workspace/context";
+import { editionForWorkspaceType } from "@/lib/workspace/editions";
 
 export const metadata: Metadata = { title: "Dashboard" };
 export const dynamic = "force-dynamic";
@@ -58,17 +50,42 @@ export default async function DashboardPage() {
   const canViewTransactions = ctx.permissions.has("view_transactions");
   const canViewInvoices = ctx.permissions.has("view_invoices");
   const canViewReports = ctx.permissions.has("view_reports");
+  const edition = editionForWorkspaceType(workspace.type);
+
+  const heading = (
+    <div>
+      <h1 className="text-2xl font-bold tracking-tight">
+        {firstName ? `Welcome back, ${firstName}` : "Dashboard"}
+      </h1>
+      <p className="text-muted-foreground text-sm">
+        {edition === "personal"
+          ? "Your money over the last six months — spending, budgets and what's coming up."
+          : `Built for ${editionBranding("business").audience} — your overview for the last six months.`}
+      </p>
+    </div>
+  );
+
+  if (edition === "personal") {
+    // The plan decides which paid widgets exist, so it is resolved before the
+    // sections stream rather than inside each one.
+    const entitlements = await getEntitlements(workspace.id);
+    return (
+      <div className="flex flex-col gap-6">
+        {heading}
+        <PersonalDashboard
+          workspaceId={workspace.id}
+          currency={workspace.currency}
+          limits={entitlements.plan.limits}
+          canViewTransactions={canViewTransactions}
+          canViewReports={canViewReports}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">
-          {firstName ? `Welcome back, ${firstName}` : "Dashboard"}
-        </h1>
-        <p className="text-muted-foreground text-sm">
-          Built for small and medium-sized businesses — your overview for the last six months.
-        </p>
-      </div>
+      {heading}
 
       {canViewTransactions && (
         <Suspense fallback={<StatRowSkeleton />}>
@@ -215,69 +232,5 @@ async function ForecastTeaserSection({
         </CardContent>
       </Card>
     </Link>
-  );
-}
-
-async function ChartsSection({ workspaceId, currency }: { workspaceId: string; currency: string }) {
-  const data = await getDashboardData(workspaceId);
-  return (
-    <>
-      <div className="grid gap-4 lg:grid-cols-5">
-        <Card className="lg:col-span-3">
-          <CardHeader>
-            <CardTitle>Monthly cashflow</CardTitle>
-            <CardDescription>Income, expenses and net per month</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <OverviewChart data={data.monthlySeries} currency={currency} />
-          </CardContent>
-        </Card>
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Spending by category</CardTitle>
-            <CardDescription>Where your money went (last 6 months)</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <CategoryChart data={data.categoryBreakdown} currency={currency} />
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-5">
-        <Card className="lg:col-span-3">
-          <CardHeader>
-            <CardTitle>Cash balance history</CardTitle>
-            <CardDescription>
-              {data.cash.source === "bank"
-                ? "Running balance, ending at your combined bank balance"
-                : "Running balance across your transactions"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <BalanceChart data={data.balanceHistory} currency={currency} />
-            <CashLegend cash={data.cash} />
-          </CardContent>
-        </Card>
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Largest expenses</CardTitle>
-            <CardDescription>Your biggest outgoings (last 6 months)</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <LargestExpenses expenses={data.largestExpenses} currency={currency} />
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent transactions</CardTitle>
-          <CardDescription>Your latest activity</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <RecentTransactions transactions={data.recentTransactions} currency={currency} />
-        </CardContent>
-      </Card>
-    </>
   );
 }

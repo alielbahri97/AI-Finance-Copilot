@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getEntitlements } from "@/lib/billing/entitlements";
+import { DEFAULT_EDITION, type Edition } from "@/lib/branding";
 import { isEncryptionConfigured } from "@/lib/integrations/crypto";
 import { getProviders, isProviderConfigured } from "@/lib/integrations/registry";
 import { logger, serializeError } from "@/lib/logger";
@@ -10,6 +11,7 @@ import type { HelpUserContext } from "./prompt";
 
 /** Per-workspace figures; null when they cannot be read for this request. */
 interface WorkspaceFacts {
+  edition: Edition;
   planName: string;
   integrationsEnabled: boolean;
   connectionStatuses: Record<string, string>;
@@ -29,6 +31,7 @@ async function readWorkspaceFacts(workspaceId: string): Promise<WorkspaceFacts> 
   ]);
 
   return {
+    edition: entitlements.edition,
     planName: entitlements.plan.name,
     integrationsEnabled: entitlements.plan.limits.integrationsEnabled,
     connectionStatuses: Object.fromEntries(
@@ -76,6 +79,7 @@ export async function buildHelpUserContext(
   }
 
   return {
+    edition: facts?.edition ?? DEFAULT_EDITION,
     planName: facts?.planName ?? "unknown",
     integrationsEnabled: facts?.integrationsEnabled ?? false,
     configuredProviders,

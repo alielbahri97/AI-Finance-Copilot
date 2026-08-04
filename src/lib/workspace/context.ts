@@ -10,6 +10,12 @@ import { getOrCreateProfile } from "@/lib/data";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 
+import {
+  applyEditionPermissions,
+  editionForWorkspaceType,
+  editionHasFeature,
+  type EditionFeature,
+} from "./editions";
 import { personalWorkspaceId } from "./ids";
 import { resolvePermissions, type Permission } from "./permissions";
 
@@ -36,6 +42,12 @@ export interface WorkspaceContext {
   workspace: Workspace;
   role: WorkspaceRole;
   memberId: string;
+  /**
+   * The member's permissions, already narrowed to what the workspace's edition
+   * supports. A Personal workspace never carries `view_invoices` or
+   * `manage_members`, so every existing `requireWorkspace(...)` call became an
+   * edition guard for free.
+   */
   permissions: Set<Permission>;
 }
 
@@ -108,7 +120,10 @@ export const getWorkspaceContext = cache(async (): Promise<WorkspaceContext | nu
     workspace: membership.workspace,
     role: membership.role,
     memberId: membership.id,
-    permissions: resolvePermissions(membership.role, membership.permissions),
+    permissions: applyEditionPermissions(
+      membership.workspace.type,
+      resolvePermissions(membership.role, membership.permissions)
+    ),
   };
 });
 
@@ -152,6 +167,34 @@ export async function requireWorkspace(
   return { ok: true, ctx };
 }
 
+/**
+ * API-route guard for surfaces that only exist in one edition and have no
+ * permission of their own — `/api/budgets` in a Business workspace, for
+ * instance. Returns 404 rather than 403: in the wrong edition the feature does
+ * not exist, and saying "forbidden" would imply it could be granted.
+ */
+export async function requireEditionFeature(
+  feature: EditionFeature,
+  ...required: Permission[]
+): Promise<WorkspaceAuthResult> {
+  const auth = await requireWorkspace(...required);
+  if (!auth.ok) return auth;
+  if (!editionHasFeature(auth.ctx.workspace.type, feature)) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        {
+          error: "This feature is not part of the current workspace's edition.",
+          code: "WRONG_EDITION",
+          feature,
+        },
+        { status: 404 }
+      ),
+    };
+  }
+  return auth;
+}
+
 /** All workspaces the user belongs to, for the workspace switcher. */
 export async function listUserWorkspaces(userId: string) {
   const memberships = await prisma.workspaceMember.findMany({
@@ -159,12 +202,14 @@ export async function listUserWorkspaces(userId: string) {
     orderBy: { joinedAt: "asc" },
     select: {
       role: true,
-      workspace: { select: { id: true, name: true } },
+      workspace: { select: { id: true, name: true, type: true } },
     },
   });
   return memberships.map((m) => ({
     id: m.workspace.id,
     name: m.workspace.name,
+    type: m.workspace.type,
+    edition: editionForWorkspaceType(m.workspace.type),
     role: m.role,
   }));
 }

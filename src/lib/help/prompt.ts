@@ -1,16 +1,56 @@
-import { BRAND, editionBranding } from "@/lib/branding";
+import { BRAND, DEFAULT_EDITION, editionBranding, type Edition } from "@/lib/branding";
 
 import type { HelpTopic } from "./knowledge";
 
 /**
  * System prompt for the help agent. Deliberately distinct from the finance
  * copilot: this assistant knows how the app works, not the user's numbers.
+ *
+ * The prompt is edition-scoped: the app map lists only the pages the user's
+ * workspace actually has, and the retrieved articles are already filtered, so
+ * the agent cannot walk someone through a page their workspace blocks.
  */
 
 /** Compact app map so links and page names are always correct. */
-const APP_MAP = `Pages (sidebar navigation): Dashboard (/dashboard), Transactions (/transactions), Import (/import), Categories (/categories), Invoices (/invoices), Forecast (/forecast), Reports (/reports), Copilot (/copilot), Integrations (/integrations), Billing (/billing), Profile (/profile), Settings (/settings), Help (/help).`;
+const SHARED_PAGES = [
+  "Dashboard (/dashboard)",
+  "Transactions (/transactions)",
+  "Import (/import)",
+  "Categories (/categories)",
+];
+
+const TAIL_PAGES = [
+  "Forecast (/forecast)",
+  "Reports (/reports)",
+  "Copilot (/copilot)",
+  "Integrations (/integrations)",
+  "Billing (/billing)",
+  "Profile (/profile)",
+  "Settings (/settings)",
+  "Help (/help)",
+];
+
+const EDITION_PAGES: Record<Edition, string[]> = {
+  business: ["Invoices (/invoices)"],
+  personal: ["Budgets (/budgets)", "Goals (/goals)", "Subscriptions (/subscriptions)"],
+};
+
+function appMap(edition: Edition): string {
+  const pages = [...SHARED_PAGES, ...EDITION_PAGES[edition], ...TAIL_PAGES];
+  return `Pages (sidebar navigation): ${pages.join(", ")}.`;
+}
+
+/** What this edition does not have, so the agent never offers it. */
+const ABSENT: Record<Edition, string> = {
+  business:
+    "This workspace has no budgets, savings goals or subscription tracking — those are Ballast Personal features. If asked, say a personal workspace has them and can be created from the workspace switcher.",
+  personal:
+    "This is a personal workspace: it has no invoices, no VAT extraction, no vendors/customers or AR/AP reporting, and no team members or invitations — those are Ballast Business features. Never give steps for them. If asked, say they belong to a business workspace, which can be created from the workspace switcher.",
+};
 
 export interface HelpUserContext {
+  /** Which edition the user's current workspace is. */
+  edition: Edition;
   planName: string;
   integrationsEnabled: boolean;
   /** Provider ids configured server-side (credentials present). */
@@ -26,10 +66,13 @@ export interface HelpUserContext {
 export function buildUserContextBlock(context: HelpUserContext): string {
   const connections = Object.entries(context.connectionStatuses);
   return [
+    `- Workspace: ${editionBranding(context.edition).name}`,
     `- Plan: ${context.planName} (integrations ${
       context.integrationsEnabled ? "included" : "NOT included — needs Business plan or higher"
     })`,
-    `- Data so far: ${context.transactionCount} transactions, ${context.invoiceCount} invoices`,
+    context.edition === "personal"
+      ? `- Data so far: ${context.transactionCount} transactions`
+      : `- Data so far: ${context.transactionCount} transactions, ${context.invoiceCount} invoices`,
     `- Integrations configured on this server: ${
       context.configuredProviders.length > 0 ? context.configuredProviders.join(", ") : "none"
     }`,
@@ -52,9 +95,13 @@ export function buildHelpSystemPrompt(
     .map((topic) => `### ${topic.title}\n${topic.content}`)
     .join("\n\n");
 
-  return `You are the friendly in-app support assistant for ${BRAND.name}, a finance app for ${editionBranding().audience}. Your job is to explain HOW TO USE the app — you are not the Finance Copilot and you cannot see the user's financial data or numbers.
+  const edition = context.edition ?? DEFAULT_EDITION;
 
-${APP_MAP}
+  return `You are the friendly in-app support assistant for ${editionBranding(edition).name}, ${BRAND.name} for ${editionBranding(edition).audience}. Your job is to explain HOW TO USE the app — you are not the Finance Copilot and you cannot see the user's financial data or numbers.
+
+${appMap(edition)}
+
+${ABSENT[edition]}
 
 ## This user's situation
 ${buildUserContextBlock(context)}

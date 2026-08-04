@@ -3,6 +3,7 @@ import { UserNav } from "@/components/dashboard/user-nav";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { WorkspaceSwitcher, type WorkspaceOption } from "@/components/team/workspace-switcher";
 import { ThemeToggle } from "@/components/theme-toggle";
+import type { WorkspaceType } from "@/lib/workspace/editions";
 
 interface HeaderProps {
   email: string;
@@ -11,6 +12,7 @@ interface HeaderProps {
   isAdmin?: boolean;
   workspaces: WorkspaceOption[];
   currentWorkspaceId: string;
+  currentWorkspaceType: WorkspaceType;
 }
 
 export function Header({
@@ -20,10 +22,11 @@ export function Header({
   isAdmin,
   workspaces,
   currentWorkspaceId,
+  currentWorkspaceType,
 }: HeaderProps) {
   return (
     <header className="bg-background/80 sticky top-0 z-40 flex h-16 items-center justify-between gap-2 border-b px-4 backdrop-blur sm:px-6">
-      <MobileNav isAdmin={isAdmin} />
+      <MobileNav isAdmin={isAdmin} workspaceType={currentWorkspaceType} />
       <WorkspaceSwitcher workspaces={workspaces} currentId={currentWorkspaceId} />
       <div className="ml-auto flex items-center gap-1.5">
         <NotificationBell />

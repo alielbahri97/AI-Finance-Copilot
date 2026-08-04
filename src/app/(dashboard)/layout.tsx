@@ -12,6 +12,7 @@ import { isOnboardingDone } from "@/lib/onboarding/benchmarks";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 import { getWorkspaceContext, listUserWorkspaces } from "@/lib/workspace/context";
+import { editionForWorkspaceType } from "@/lib/workspace/editions";
 
 // Everything behind login is per-user data; keep it out of search engines.
 export const metadata: Metadata = {
@@ -35,16 +36,19 @@ export default async function DashboardLayout({ children }: { children: React.Re
       getWorkspaceContext(),
       listUserWorkspaces(user.id),
     ]);
-    if (!isOnboardingDone(businessProfile)) {
-      redirect("/onboarding");
-    }
     if (!ctx) {
       redirect("/login");
+    }
+    // The onboarding wizard asks for business type, headcount and rent to pick
+    // industry benchmarks. None of that applies to a person's own money, so a
+    // Personal workspace goes straight to the dashboard.
+    if (ctx.workspace.type !== "PERSONAL" && !isOnboardingDone(businessProfile)) {
+      redirect("/onboarding");
     }
 
     return (
       <div className="flex min-h-svh">
-        <Sidebar isAdmin={profile.isAdmin} />
+        <Sidebar isAdmin={profile.isAdmin} workspaceType={ctx.workspace.type} />
         <div className="flex min-w-0 flex-1 flex-col">
           <Header
             email={profile.email}
@@ -53,12 +57,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
             isAdmin={profile.isAdmin}
             workspaces={workspaces}
             currentWorkspaceId={ctx.workspace.id}
+            currentWorkspaceType={ctx.workspace.type}
           />
           <main id="main-content" tabIndex={-1} className="flex-1 p-4 outline-none sm:p-6">
             {children}
           </main>
         </div>
-        <HelpLauncher />
+        <HelpLauncher edition={editionForWorkspaceType(ctx.workspace.type)} />
       </div>
     );
   } catch (error) {

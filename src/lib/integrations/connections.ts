@@ -1,8 +1,10 @@
 import "server-only";
 
 import type { IntegrationConnection } from "@/generated/prisma/client";
+import { getEntitlements } from "@/lib/billing/entitlements";
 import { prisma } from "@/lib/prisma";
 
+import { bankQuotaRefusal, checkBankConnectionQuota } from "./bank-quota";
 import { decryptSecret, encryptSecret } from "./crypto";
 import { resolveConnectionTarget, type ConnectionTarget } from "./identity";
 import { IntegrationAuthError, IntegrationError, refreshAccessToken, type TokenSet } from "./oauth";
@@ -56,6 +58,23 @@ export async function saveConnection(
   });
   if (target.mode === "rejected") {
     throw new IntegrationError(target.reason);
+  }
+
+  // The plan's bank allowance is checked here rather than only at the entry
+  // points, because this is the one place every bank flow (GoCardless
+  // requisition, Plaid exchange, Tink callback) has to pass through — and
+  // because only a genuinely new connection counts: a reconnect resolves to
+  // "update" and must never be refused, or an expired consent could not be
+  // renewed.
+  if (target.mode === "create" && provider?.category === "banking") {
+    const entitlements = await getEntitlements(scope.workspaceId);
+    const quota = await checkBankConnectionQuota(
+      scope.workspaceId,
+      entitlements.plan.limits.bankConnections
+    );
+    if (!quota.allowed) {
+      throw new IntegrationError(bankQuotaRefusal(quota, entitlements.plan.name));
+    }
   }
 
   const data = {
