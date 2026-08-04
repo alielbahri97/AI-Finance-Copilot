@@ -24,13 +24,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }
 
   try {
-    const profile = await getOrCreateProfile(user);
-
-    // First-run business onboarding — skip once the user completes or dismisses it.
-    const businessProfile = await prisma.businessProfile.findUnique({
-      where: { userId: user.id },
-      select: { completedAt: true, skippedAt: true },
-    });
+    const [profile, businessProfile] = await Promise.all([
+      getOrCreateProfile(user),
+      // First-run business onboarding — skip once the user completes or dismisses it.
+      prisma.businessProfile.findUnique({
+        where: { userId: user.id },
+        select: { completedAt: true, skippedAt: true },
+      }),
+    ]);
     if (!isOnboardingDone(businessProfile)) {
       redirect("/onboarding");
     }

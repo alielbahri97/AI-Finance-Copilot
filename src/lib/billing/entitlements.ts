@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { logger, serializeError } from "@/lib/logger";
 
 import type { Subscription, UsageRecord } from "@/generated/prisma/client";
@@ -70,11 +72,19 @@ export function resolvePlanId(subscription: Subscription, now = new Date()): {
   return { planId: "FREE", isTrial: false };
 }
 
-/** The central entitlements lookup: plan + limits + usage this period. */
-export async function getEntitlements(userId: string): Promise<Entitlements> {
-  const subscription = await getOrCreateSubscription(userId);
+/**
+ * The central entitlements lookup: plan + limits + usage this period.
+ * Per-request memoized with React cache() — layouts, pages and gates in one
+ * request share a single subscription + usage lookup. API routes that
+ * increment usage read entitlements once before incrementing, so the
+ * request-scoped memo never serves stale quota decisions.
+ */
+export const getEntitlements = cache(async (userId: string): Promise<Entitlements> => {
+  const [subscription, usage] = await Promise.all([
+    getOrCreateSubscription(userId),
+    getOrCreateUsage(userId, currentPeriod()),
+  ]);
   const period = currentPeriod();
-  const usage = await getOrCreateUsage(userId, period);
   const { planId, isTrial } = resolvePlanId(subscription);
 
   return {
@@ -94,7 +104,7 @@ export async function getEntitlements(userId: string): Promise<Entitlements> {
       exports: usage.exports,
     },
   };
-}
+});
 
 export type UsageField = "aiMessages" | "csvImports" | "invoiceExtractions" | "exports";
 

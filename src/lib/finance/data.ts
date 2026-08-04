@@ -24,8 +24,16 @@ export function mapAssumptionRow(row: Assumption): AssumptionInput {
   };
 }
 
-/** Loads the user's transactions and assumptions and computes the forecast. */
-export async function buildForecast(userId: string, currency: string): Promise<ForecastResult> {
+/**
+ * Loads the user's transactions and assumptions and computes the forecast.
+ * Pass `preloadedAssumptions` when the caller already fetched the rows
+ * (e.g. the forecast page shows them too) to avoid a duplicate query.
+ */
+export async function buildForecast(
+  userId: string,
+  currency: string,
+  preloadedAssumptions?: Assumption[]
+): Promise<ForecastResult> {
   const now = new Date();
   const windowStart = new Date(now.getTime() - 370 * MS_PER_DAY);
 
@@ -46,7 +54,8 @@ export async function buildForecast(userId: string, currency: string): Promise<F
       where: { userId, date: { lt: windowStart } },
       select: { type: true, amount: true },
     }),
-    prisma.assumption.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
+    preloadedAssumptions ??
+      prisma.assumption.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
   ]);
 
   const transactions: FinanceTransaction[] = rows.map((row) => ({

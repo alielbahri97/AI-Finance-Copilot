@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BotIcon, HistoryIcon, SendIcon, SquareIcon, UserIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -307,7 +308,7 @@ export function CopilotChat({
             You have used this month&apos;s AI messages on your current plan.
           </span>
           <Button asChild size="sm" variant="outline">
-            <a href="/billing">Upgrade</a>
+            <Link href="/billing">Upgrade</Link>
           </Button>
         </div>
       )}

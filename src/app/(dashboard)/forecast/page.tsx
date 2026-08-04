@@ -1,6 +1,8 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import type { User } from "@supabase/supabase-js";
 import {
   CalendarClockIcon,
   FlameIcon,
@@ -10,6 +12,10 @@ import {
   WalletIcon,
 } from "lucide-react";
 
+import {
+  ChartRowSkeleton,
+  StatRowSkeleton,
+} from "@/components/dashboard/section-skeletons";
 import { StatCard } from "@/components/dashboard/stat-card";
 import {
   AssumptionsManager,
@@ -50,14 +56,46 @@ function runwayDisplay(months: number | null): { value: string; hint: string } {
   };
 }
 
+/** Streams: the header paints immediately, the forecast body follows. */
 export default async function ForecastPage() {
   const user = await getUser();
   if (!user) redirect("/login");
 
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Cash flow forecast</h1>
+        <p className="text-muted-foreground text-sm">
+          Deterministic projection from your recurring patterns, spending trend and assumptions.
+        </p>
+      </div>
+
+      <Suspense
+        fallback={
+          <>
+            <StatRowSkeleton />
+            <ChartRowSkeleton />
+          </>
+        }
+      >
+        <ForecastContent user={user} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function ForecastContent({ user }: { user: User }) {
   const profile = await getOrCreateProfile(user);
+
+  // Assumptions are fetched once and shared with the forecast engine
+  // (buildForecast used to fetch its own copy — one duplicate query saved).
+  const assumptionsPromise = prisma.assumption.findMany({
+    where: { userId: user.id },
+    orderBy: { createdAt: "asc" },
+  });
   const [forecast, assumptionRows, entitlements] = await Promise.all([
-    buildForecast(user.id, profile.currency),
-    prisma.assumption.findMany({ where: { userId: user.id }, orderBy: { createdAt: "asc" } }),
+    assumptionsPromise.then((rows) => buildForecast(user.id, profile.currency, rows)),
+    assumptionsPromise,
     getEntitlements(user.id),
   ]);
   const assumptionsUnlocked = entitlements.plan.limits.assumptionsEnabled;
@@ -80,14 +118,7 @@ export default async function ForecastPage() {
   const isBurning = metrics.netBurnRate > 0;
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Cash flow forecast</h1>
-        <p className="text-muted-foreground text-sm">
-          Deterministic projection from your recurring patterns, spending trend and assumptions.
-        </p>
-      </div>
-
+    <>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Cash runway"
@@ -215,6 +246,6 @@ export default async function ForecastPage() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </>
   );
 }

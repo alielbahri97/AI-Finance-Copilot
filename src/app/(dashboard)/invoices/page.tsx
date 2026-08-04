@@ -1,6 +1,8 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import type { User } from "@supabase/supabase-js";
 import {
   AlertTriangleIcon,
   CalendarClockIcon,
@@ -8,6 +10,10 @@ import {
   ReceiptTextIcon,
 } from "lucide-react";
 
+import {
+  StatRowSkeleton,
+  TableCardSkeleton,
+} from "@/components/dashboard/section-skeletons";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { InvoicesTable } from "@/components/invoices/invoices-table";
 import { InvoicesToolbar } from "@/components/invoices/invoices-toolbar";
@@ -28,12 +34,43 @@ interface InvoicesPageProps {
   searchParams: Promise<{ status?: string; vendor?: string; from?: string; to?: string }>;
 }
 
+type InvoiceParams = Awaited<InvoicesPageProps["searchParams"]>;
+
+/** Streams: header and upload action paint first, stats and table follow. */
 export default async function InvoicesPage({ searchParams }: InvoicesPageProps) {
   const user = await getUser();
   if (!user) redirect("/login");
 
-  const profile = await getOrCreateProfile(user);
   const params = await searchParams;
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Invoices</h1>
+          <p className="text-muted-foreground text-sm">
+            Upload documents, review extracted data and track what needs to be paid.
+          </p>
+        </div>
+        <UploadInvoice />
+      </div>
+
+      <Suspense
+        fallback={
+          <>
+            <StatRowSkeleton />
+            <TableCardSkeleton />
+          </>
+        }
+      >
+        <InvoicesContent user={user} params={params} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function InvoicesContent({ user, params }: { user: User; params: InvoiceParams }) {
+  const profile = await getOrCreateProfile(user);
 
   const where: Prisma.InvoiceWhereInput = { userId: user.id };
   if (params.status === "OVERDUE") {
@@ -82,17 +119,7 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
   const outstanding = Number(unpaidAggregate._sum.total ?? 0);
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Invoices</h1>
-          <p className="text-muted-foreground text-sm">
-            Upload documents, review extracted data and track what needs to be paid.
-          </p>
-        </div>
-        <UploadInvoice />
-      </div>
-
+    <>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Outstanding"
@@ -140,6 +167,6 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
           <InvoicesTable invoices={invoices.map(serializeInvoice)} hasFilters={hasFilters} />
         </CardContent>
       </Card>
-    </div>
+    </>
   );
 }

@@ -10,10 +10,24 @@ const globalForPrisma = globalThis as unknown as {
   pgPool?: Pool;
 };
 
+function envInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const value = Number.parseInt(raw, 10);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
 /**
- * Serverless-safe pool: one connection per isolate.
- * Default pg Pool max=10 multiplies across cold starts and exhausts
- * Supabase's transaction pooler (especially on free/small plans).
+ * Connection pool sized for Supabase Pro's dedicated transaction pooler.
+ * A few connections per isolate lets Promise.all page queries actually run
+ * in parallel (max=1 serialized them). Tune via env:
+ *   DB_POOL_MAX               connections per serverless isolate (default 5;
+ *                             set to 1 if you're back on a tiny pooler)
+ *   DB_POOL_IDLE_TIMEOUT_MS   how long idle connections are kept warm
+ *                             (default 30s — avoids reconnect latency between
+ *                             navigations on a warm isolate)
+ *   DB_CONNECT_TIMEOUT_MS     fail fast when the pooler is unreachable
+ *                             (default 5s)
  */
 function createPool(): Pool {
   const connectionString = process.env.DATABASE_URL;
@@ -23,9 +37,9 @@ function createPool(): Pool {
 
   const pool = new Pool({
     connectionString,
-    max: 1,
-    idleTimeoutMillis: 10_000,
-    connectionTimeoutMillis: 5_000,
+    max: envInt("DB_POOL_MAX", 5),
+    idleTimeoutMillis: envInt("DB_POOL_IDLE_TIMEOUT_MS", 30_000),
+    connectionTimeoutMillis: envInt("DB_CONNECT_TIMEOUT_MS", 5_000),
   });
 
   pool.on("error", (err) => {

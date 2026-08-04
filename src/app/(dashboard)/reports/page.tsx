@@ -1,5 +1,7 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import type { User } from "@supabase/supabase-js";
 import {
   BanknoteArrowDownIcon,
   BanknoteArrowUpIcon,
@@ -18,6 +20,10 @@ import {
 import { ExportButtons } from "@/components/reports/export-buttons";
 import { PartyTable } from "@/components/reports/party-table";
 import { PeriodSelector } from "@/components/reports/period-selector";
+import {
+  ChartRowSkeleton,
+  StatRowSkeleton,
+} from "@/components/dashboard/section-skeletons";
 import { StatCard } from "@/components/dashboard/stat-card";
 import {
   Card,
@@ -26,10 +32,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { getOrCreateProfile } from "@/lib/data";
 import { buildReport } from "@/lib/reports/data";
-import { resolvePeriod } from "@/lib/reports/period";
+import { resolvePeriod, type ResolvedPeriod } from "@/lib/reports/period";
 import { getUser } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils";
 
@@ -40,24 +47,13 @@ interface ReportsPageProps {
   searchParams: Promise<{ period?: string; from?: string; to?: string }>;
 }
 
+/** Streams: header + period selector paint first, KPIs/charts follow. */
 export default async function ReportsPage({ searchParams }: ReportsPageProps) {
   const user = await getUser();
   if (!user) redirect("/login");
 
   const params = await searchParams;
-  const profile = await getOrCreateProfile(user);
   const period = resolvePeriod(params.period, params.from, params.to);
-  const [report, entitlements] = await Promise.all([
-    buildReport(user.id, profile.currency, period),
-    getEntitlements(user.id),
-  ]);
-  const { kpis } = report;
-  const currency = profile.currency;
-
-  const marginDelta =
-    kpis.marginPct !== null && kpis.marginPrevPct !== null
-      ? Math.round((kpis.marginPct - kpis.marginPrevPct) * 10) / 10
-      : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -70,10 +66,45 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
         </div>
         <div className="flex flex-wrap items-end gap-4">
           <PeriodSelector />
-          <ExportButtons locked={!entitlements.plan.limits.exportsEnabled} />
+          <Suspense fallback={<Skeleton className="h-9 w-64" />}>
+            <ExportButtonsSection userId={user.id} />
+          </Suspense>
         </div>
       </div>
 
+      <Suspense
+        fallback={
+          <>
+            <StatRowSkeleton />
+            <StatRowSkeleton count={3} />
+            <ChartRowSkeleton />
+          </>
+        }
+      >
+        <ReportBody user={user} period={period} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function ExportButtonsSection({ userId }: { userId: string }) {
+  const entitlements = await getEntitlements(userId);
+  return <ExportButtons locked={!entitlements.plan.limits.exportsEnabled} />;
+}
+
+async function ReportBody({ user, period }: { user: User; period: ResolvedPeriod }) {
+  const profile = await getOrCreateProfile(user);
+  const report = await buildReport(user.id, profile.currency, period);
+  const { kpis } = report;
+  const currency = profile.currency;
+
+  const marginDelta =
+    kpis.marginPct !== null && kpis.marginPrevPct !== null
+      ? Math.round((kpis.marginPct - kpis.marginPrevPct) * 10) / 10
+      : null;
+
+  return (
+    <>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Revenue"
@@ -235,6 +266,6 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </>
   );
 }

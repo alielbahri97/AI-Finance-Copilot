@@ -19,8 +19,16 @@ const PROTECTED_PREFIXES = [
 ];
 const AUTH_ROUTES = ["/login", "/signup", "/forgot-password"];
 
-/** Stay well under Vercel's ~25s middleware invocation limit. */
-const SUPABASE_FETCH_TIMEOUT_MS = 8_000;
+/**
+ * Auth-server timeout. On a paid Supabase project (no cold pauses) responses
+ * are fast, so fail fast at 5s instead of dragging a bad request toward
+ * Vercel's ~25s middleware limit. Tune with SUPABASE_AUTH_TIMEOUT_MS if your
+ * auth region is far from the Vercel function region.
+ */
+const SUPABASE_FETCH_TIMEOUT_MS = (() => {
+  const raw = Number.parseInt(process.env.SUPABASE_AUTH_TIMEOUT_MS ?? "", 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : 5_000;
+})();
 
 function fetchWithTimeout(
   input: RequestInfo | URL,
@@ -57,6 +65,13 @@ function isTransientAuthFailure(error: { name?: string; status?: number } | null
   return error.name === "AuthRetryableFetchError" || error.status === 0;
 }
 
+/** True when the request carries a Supabase auth session cookie. */
+function hasAuthCookie(request: NextRequest): boolean {
+  return request.cookies
+    .getAll()
+    .some((cookie) => cookie.name.startsWith("sb-") && cookie.name.includes("-auth-token"));
+}
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -69,6 +84,16 @@ export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isProtected = PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix));
   const isAuthRoute = AUTH_ROUTES.some((route) => pathname.startsWith(route));
+
+  // Fast path: no session cookie means there is nothing to refresh and no
+  // user to resolve — skip building the Supabase client entirely. This keeps
+  // anonymous traffic (landing page, crawlers, auth pages) at ~0ms overhead.
+  if (!hasAuthCookie(request)) {
+    if (isProtected) {
+      return redirectToLogin(request, pathname);
+    }
+    return supabaseResponse;
+  }
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {

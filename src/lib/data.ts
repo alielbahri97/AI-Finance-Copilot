@@ -1,4 +1,6 @@
 import "server-only";
+import { cache } from "react";
+
 import type { User } from "@supabase/supabase-js";
 import { headers } from "next/headers";
 
@@ -23,11 +25,25 @@ async function seedDefaultsSafely(userId: string) {
   }
 }
 
-export async function getOrCreateProfile(user: User) {
+/**
+ * The DEFAULT_CATEGORY_RULES backfill only matters when a deploy ships new
+ * patterns, so running it once per user per warm isolate is enough — fresh
+ * isolates after a deploy re-run it. Without this memo every page view paid
+ * three extra queries including a 27-row INSERT.
+ */
+const seededThisIsolate = new Set<string>();
+
+async function backfillDefaultsOncePerIsolate(userId: string) {
+  if (seededThisIsolate.has(userId)) return;
+  seededThisIsolate.add(userId);
+  await seedDefaultsSafely(userId);
+}
+
+export const getOrCreateProfile = cache(async (user: User) => {
   const existing = await prisma.profile.findUnique({ where: { id: user.id } });
   if (existing) {
     // Backfill any DEFAULT_CATEGORY_RULES patterns added after the account was seeded.
-    await seedDefaultsSafely(existing.id);
+    await backfillDefaultsOncePerIsolate(existing.id);
     return existing;
   }
 
@@ -56,7 +72,7 @@ export async function getOrCreateProfile(user: User) {
   }
 
   return profile;
-}
+});
 
 export interface MonthlyPoint {
   month: string;
@@ -113,8 +129,12 @@ function percentChange(current: number, previous: number): number | null {
   return Math.round(((current - previous) / previous) * 100);
 }
 
-/** Aggregates the last six months of transactions for the dashboard. */
-export async function getDashboardData(userId: string): Promise<DashboardData> {
+/**
+ * Aggregates the last six months of transactions for the dashboard.
+ * cache()-wrapped so the streamed stats and charts sections of the dashboard
+ * page share one query set per request.
+ */
+export const getDashboardData = cache(async (userId: string): Promise<DashboardData> => {
   const now = new Date();
   const since = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1));
 
@@ -240,4 +260,4 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
     recentTransactions: transactions.slice(0, 8).map(toSummary),
     transactionCount: transactions.length,
   };
-}
+});

@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
@@ -27,11 +29,17 @@ export async function createClient() {
   );
 }
 
-/** Returns the authenticated Supabase user, or null. */
-export async function getUser() {
+/**
+ * Returns the authenticated Supabase user, or null.
+ *
+ * Wrapped in React cache() so the layout, page and nested server components
+ * of a single request share one auth-server round trip instead of each
+ * paying ~50-150ms for their own getUser() call.
+ */
+export const getUser = cache(async () => {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   return user;
-}
+});

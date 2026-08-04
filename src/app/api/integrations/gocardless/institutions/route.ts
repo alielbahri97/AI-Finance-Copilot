@@ -14,6 +14,27 @@ const querySchema = z.object({
     .regex(/^[a-zA-Z]{2}$/, "country must be a two-letter ISO code"),
 });
 
+/**
+ * Server-side per-country cache. The bank list changes on the order of
+ * weeks, and fetching it costs a GoCardless token round trip — without this
+ * every user opening the picker paid that latency (and burned GoCardless
+ * rate limit) even though the answer is identical for everyone.
+ */
+const INSTITUTIONS_TTL_MS = 6 * 60 * 60 * 1000;
+const institutionsCache = new Map<
+  string,
+  { expires: number; institutions: Awaited<ReturnType<typeof listInstitutions>> }
+>();
+
+async function cachedInstitutions(country: string) {
+  const key = country.toUpperCase();
+  const hit = institutionsCache.get(key);
+  if (hit && hit.expires > Date.now()) return hit.institutions;
+  const institutions = await listInstitutions(country);
+  institutionsCache.set(key, { expires: Date.now() + INSTITUTIONS_TTL_MS, institutions });
+  return institutions;
+}
+
 /** Banks available in a country, for the GoCardless connect picker. */
 export async function GET(request: NextRequest) {
   try {
@@ -41,7 +62,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const institutions = await listInstitutions(parsed.data.country);
+    const institutions = await cachedInstitutions(parsed.data.country);
     return NextResponse.json(
       { institutions },
       // The bank list changes rarely; let the browser cache per-user for an hour.

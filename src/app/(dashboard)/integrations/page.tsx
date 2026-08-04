@@ -1,8 +1,11 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import type { User } from "@supabase/supabase-js";
 import { CheckCircle2Icon, LockIcon, TriangleAlertIcon } from "lucide-react";
 
+import { Skeleton } from "@/components/ui/skeleton";
 import { FirstSyncBanner } from "@/components/integrations/first-sync-banner";
 import { IntegrationsGrid } from "@/components/integrations/integrations-grid";
 import type { IntegrationCardData } from "@/components/integrations/types";
@@ -93,19 +96,63 @@ function rateLimitedUntil(metadata: Record<string, unknown>): string | null {
   return new Date(Math.max(...future)).toISOString();
 }
 
+type IntegrationsParams = { connected?: string; error?: string };
+
+function IntegrationsGridSkeleton() {
+  return (
+    <div className="space-y-8">
+      {Array.from({ length: 2 }).map((_, group) => (
+        <div key={group} className="space-y-3">
+          <Skeleton className="h-5 w-32" />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, tile) => (
+              <Skeleton key={tile} className="h-28 rounded-xl" />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Streams: the header paints immediately; the grid + status banners follow. */
 export default async function IntegrationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ connected?: string; error?: string }>;
+  searchParams: Promise<IntegrationsParams>;
 }) {
   const user = await getUser();
   if (!user) redirect("/login");
 
-  const [entitlements, params] = await Promise.all([getEntitlements(user.id), searchParams]);
-  const locked = !entitlements.plan.limits.integrationsEnabled;
+  const params = await searchParams;
 
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Integrations</h1>
+        <p className="text-muted-foreground text-sm">
+          Pick a tool to see what it does and how to connect it. Connected sources sync
+          automatically every few hours.
+        </p>
+      </div>
+
+      <Suspense fallback={<IntegrationsGridSkeleton />}>
+        <IntegrationsContent user={user} params={params} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function IntegrationsContent({
+  user,
+  params,
+}: {
+  user: User;
+  params: IntegrationsParams;
+}) {
   const encryptionReady = isEncryptionConfigured();
-  const [connections, profile] = await Promise.all([
+  const [entitlements, connections, profile] = await Promise.all([
+    getEntitlements(user.id),
     prisma.integrationConnection.findMany({
       where: { userId: user.id },
       include: {
@@ -114,6 +161,7 @@ export default async function IntegrationsPage({
     }),
     prisma.profile.findUnique({ where: { id: user.id }, select: { currency: true } }),
   ]);
+  const locked = !entitlements.plan.limits.integrationsEnabled;
   const byProvider = new Map(connections.map((connection) => [connection.provider, connection]));
   const bankPickerCountry = CURRENCY_TO_COUNTRY[profile?.currency ?? ""] ?? "GB";
 
@@ -168,15 +216,7 @@ export default async function IntegrationsPage({
     : null;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Integrations</h1>
-        <p className="text-muted-foreground text-sm">
-          Pick a tool to see what it does and how to connect it. Connected sources sync
-          automatically every few hours.
-        </p>
-      </div>
-
+    <>
       {locked ? (
         <Alert>
           <LockIcon className="size-4" />
@@ -233,6 +273,6 @@ export default async function IntegrationsPage({
       ) : null}
 
       <IntegrationsGrid cards={cards} locked={locked} />
-    </div>
+    </>
   );
 }

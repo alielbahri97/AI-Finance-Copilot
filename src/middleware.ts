@@ -8,9 +8,13 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Match all request paths except static assets, images, and health checks.
-     * /api/health must stay outside middleware so probes don't hang on auth.
+     * Match all request paths except:
+     * - static assets, images, PWA files (no auth needed)
+     * - /api/health (probes must not hang on auth)
+     * - /api/webhooks and /api/cron (authenticated by signature/secret, not
+     *   cookies — running session refresh there is pure overhead)
+     * - robots.txt / sitemap.xml (crawler traffic)
      */
-    "/((?!_next/static|_next/image|favicon.ico|sw.js|manifest.webmanifest|icons/|api/health|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sw.js|manifest.webmanifest|icons/|robots.txt|sitemap.xml|api/health|api/webhooks|api/cron|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };
