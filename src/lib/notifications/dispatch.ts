@@ -1,5 +1,6 @@
 import "server-only";
 
+import { getAppUrl } from "@/lib/env-url";
 import { logger, serializeError } from "@/lib/logger";
 
 import type { NotificationPreference, NotificationType } from "@/generated/prisma/client";
@@ -90,7 +91,7 @@ export async function dispatchNotification(
   }
 }
 
-const APP_URL = () => (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+const APP_URL = () => getAppUrl();
 
 /**
  * Slack/Teams act as additional outgoing channels: being connected on the

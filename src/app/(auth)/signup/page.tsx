@@ -11,11 +11,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { BRAND } from "@/lib/branding";
 
 export const metadata: Metadata = {
   title: "Create account",
-  description:
-    "Create a free FinPilot account: import bank statements, forecast cash flow, and get AI insights.",
+  description: `Create a free ${BRAND.name} account: import bank statements, forecast cash flow, and get AI insights.`,
 };
 
 export default function SignupPage() {

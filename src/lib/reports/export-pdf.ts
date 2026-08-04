@@ -1,5 +1,7 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 
+import { BRAND } from "@/lib/branding";
+
 import type { ReportData } from "./data";
 
 /**
@@ -158,14 +160,14 @@ function pct(value: number | null): string {
 
 export async function buildPdfReport(report: ReportData): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
-  doc.setTitle(`FinPilot report — ${report.period.label}`);
+  doc.setTitle(`${BRAND.name} report — ${report.period.label}`);
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
   const writer = new PdfWriter(doc, font, bold);
   const currency = report.currency;
 
   /* Header */
-  writer.text("FinPilot", { size: 20, bold: true });
+  writer.text(BRAND.name, { size: 20, bold: true });
   writer.text("Executive financial report", { size: 11, color: MUTED });
   writer.gap(2);
   writer.text(

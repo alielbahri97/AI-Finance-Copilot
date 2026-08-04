@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { AiError, getAiClient, providerFromProfile, type AiChatMessage } from "@/lib/ai";
+import { BRAND } from "@/lib/branding";
 import { getOrCreateProfile } from "@/lib/data";
 import { buildForecast, mapAssumptionRow } from "@/lib/finance/data";
 import { renderForecastText } from "@/lib/finance/render";
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
     const messages: AiChatMessage[] = [
       {
         role: "system",
-        content: `You are FinPilot's forecasting analyst. You explain a deterministic cash-flow forecast to the user in plain language.
+        content: `You are ${BRAND.name}'s forecasting analyst. You explain a deterministic cash-flow forecast to the user in plain language.
 
 Rules:
 - All amounts are in ${workspace.currency}; format them with thousands separators.

@@ -1,5 +1,6 @@
 import { getProviderGuide } from "@/components/integrations/provider-guide";
 import { PLANS, type PlanId } from "@/lib/billing/plans";
+import { BRAND } from "@/lib/branding";
 
 /**
  * The help agent's knowledge base: concise how-to topics written from the
@@ -96,7 +97,7 @@ export function getHelpTopics(): HelpTopic[] {
         "start", "begin", "new", "setup", "onboarding", "first", "empty", "demo",
         "tour", "overview", "welcome",
       ],
-      content: `The fastest way to get value out of FinPilot:
+      content: `The fastest way to get value out of ${BRAND.name}:
 
 1. After signup, the onboarding wizard asks about your business — it tailors benchmarks and recommendations; you can skip it and revisit later.
 2. Get your transactions in: either import a CSV bank statement on the [Import](/import) page or connect a bank on the [Integrations](/integrations) page (Business plan).

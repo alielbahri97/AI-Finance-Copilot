@@ -19,7 +19,7 @@ function resendDomains(rows: unknown[]) {
 
 describe("parseFromAddress", () => {
   it("extracts the domain from a display-name form", () => {
-    expect(parseFromAddress("FinPilot <notifications@send.ballastmoney.com>")).toEqual({
+    expect(parseFromAddress("Ballast <notifications@send.ballastmoney.com>")).toEqual({
       valid: true,
       domain: "send.ballastmoney.com",
     });
@@ -33,7 +33,7 @@ describe("parseFromAddress", () => {
   });
 
   it("tolerates a quoted display name and surrounding whitespace", () => {
-    expect(parseFromAddress('  "FinPilot, Billing" <hi@example.co.uk>  ')).toEqual({
+    expect(parseFromAddress('  "Ballast, Billing" <hi@example.co.uk>  ')).toEqual({
       valid: true,
       domain: "example.co.uk",
     });
@@ -96,7 +96,7 @@ describe("email health reporting", () => {
 
   it("reports presence and the from-domain, never the key or the mailbox", async () => {
     process.env.RESEND_API_KEY = SECRET_KEY;
-    process.env.EMAIL_FROM = "FinPilot <notifications@send.ballastmoney.com>";
+    process.env.EMAIL_FROM = "Ballast <notifications@send.ballastmoney.com>";
 
     const health = await getEmailHealth();
     expect(health).toEqual({
@@ -122,7 +122,7 @@ describe("email health reporting", () => {
 
   it("flags a present-but-malformed EMAIL_FROM without quoting it", async () => {
     process.env.RESEND_API_KEY = SECRET_KEY;
-    process.env.EMAIL_FROM = "FinPilot notifications at ballastmoney";
+    process.env.EMAIL_FROM = "Ballast notifications at ballastmoney";
 
     const health = await getEmailHealth();
     expect(health.fromPresent).toBe(true);
@@ -171,7 +171,7 @@ describe("email health reporting", () => {
 
   it("lists the verified domains and confirms the from-domain matches", async () => {
     process.env.RESEND_API_KEY = SECRET_KEY;
-    process.env.EMAIL_FROM = "FinPilot <notifications@send.ballastmoney.com>";
+    process.env.EMAIL_FROM = "Ballast <notifications@send.ballastmoney.com>";
     const fetchMock = vi.fn().mockResolvedValue(
       resendDomains([
         { name: "send.ballastmoney.com", status: "verified" },

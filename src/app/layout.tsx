@@ -4,24 +4,29 @@ import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 import { PwaRegister } from "@/components/pwa-register";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { BRAND, BRAND_TITLE, BRAND_TITLE_TEMPLATE } from "@/lib/branding";
+import { getAppUrl } from "@/lib/env-url";
 
 import "./globals.css";
 
-const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+// getAppUrl() falls back sanely when NEXT_PUBLIC_APP_URL is unset and throws a
+// message naming the variable when it is set to something unparseable, so a
+// typo here can no longer surface as a bare "TypeError: Invalid URL" while
+// Next collects page data.
+const appUrl = getAppUrl();
 
 export const metadata: Metadata = {
   metadataBase: new URL(appUrl),
   title: {
-    default: "FinPilot — AI Finance Copilot",
-    template: "%s | FinPilot",
+    default: BRAND_TITLE,
+    template: BRAND_TITLE_TEMPLATE,
   },
-  description:
-    "AI finance copilot for small and medium-sized businesses. Track income and expenses, visualize spending, and get grounded insights.",
-  applicationName: "FinPilot",
+  description: BRAND.description,
+  applicationName: BRAND.name,
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "FinPilot",
+    title: BRAND.name,
   },
   formatDetection: {
     telephone: false,
@@ -35,10 +40,9 @@ export const metadata: Metadata = {
   },
   openGraph: {
     type: "website",
-    siteName: "FinPilot",
-    title: "FinPilot — AI Finance Copilot",
-    description:
-      "AI finance copilot for small and medium-sized businesses. Track income and expenses, visualize spending, and get grounded insights.",
+    siteName: BRAND.name,
+    title: BRAND_TITLE,
+    description: BRAND.description,
     url: appUrl,
   },
 };

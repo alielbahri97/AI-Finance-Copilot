@@ -71,7 +71,7 @@ before going live.
    ```
 
    Compose overrides `DATABASE_URL` to the bundled Postgres
-   (`postgresql://finpilot:finpilot@db:5432/finpilot`) — change the credentials in
+   (`postgresql://ballast:ballast@db:5432/ballast`) — change the credentials in
    `docker-compose.yml` for anything internet-facing. To use Supabase's database instead,
    remove the override and the `db` service.
 
@@ -85,7 +85,7 @@ before going live.
    terminate TLS there (HSTS is already emitted by the app). Example Caddyfile:
 
    ```
-   finpilot.example.com {
+   ballast.example.com {
      reverse_proxy localhost:3000
    }
    ```
@@ -94,13 +94,13 @@ before going live.
    entries (or a Kubernetes CronJob) hitting them hourly:
 
    ```cron
-   0 * * * *  curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://finpilot.example.com/api/cron/notifications
-   30 * * * * curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://finpilot.example.com/api/cron/sync
+   0 * * * *  curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://ballast.example.com/api/cron/notifications
+   30 * * * * curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://ballast.example.com/api/cron/sync
    ```
 
 6. **Health & restarts** — both services use `restart: unless-stopped`; point your
    monitor at `/api/health`. Postgres data persists in the `db-data` volume — back it up
-   (e.g. `docker compose exec db pg_dump -U finpilot finpilot > backup.sql`).
+   (e.g. `docker compose exec db pg_dump -U ballast ballast > backup.sql`).
 
 7. **Scaling out** — if you run more than one app container, set
    `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` so rate limits are shared, and make

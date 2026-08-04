@@ -1,5 +1,7 @@
 import "server-only";
 
+import { BRAND } from "@/lib/branding";
+
 import { IntegrationError } from "../oauth";
 
 import type { ProviderHooks } from "./types";
@@ -36,7 +38,7 @@ export async function sendTeamsMessage(
           potentialAction: [
             {
               "@type": "OpenUri",
-              name: "Open in FinPilot",
+              name: `Open in ${BRAND.name}`,
               targets: [{ os: "default", uri: message.link }],
             },
           ],

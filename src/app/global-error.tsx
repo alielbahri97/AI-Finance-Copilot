@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 
+import { BRAND } from "@/lib/branding";
+
 /**
  * Last-resort boundary: catches errors thrown by the root layout itself,
  * where the regular error.tsx cannot render. Must provide its own <html>.
@@ -48,7 +50,7 @@ export default function GlobalError({
             Try again
           </button>
           <a
-            href={`mailto:support@finpilot.app?subject=${encodeURIComponent("FinPilot issue report")}&body=${encodeURIComponent(
+            href={`mailto:${BRAND.supportEmail}?subject=${encodeURIComponent(`${BRAND.name} issue report`)}&body=${encodeURIComponent(
               `Page: ${typeof window !== "undefined" ? window.location.href : "unknown"}\nError: ${error.message}\nReference: ${error.digest ?? "n/a"}`
             )}`}
             style={{

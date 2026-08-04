@@ -1,3 +1,5 @@
+import { BRAND } from "@/lib/branding";
+
 export interface ReportIssueContext {
   pageUrl?: string;
   userAgent?: string;
@@ -37,7 +39,7 @@ export function openReportIssue(context: ReportIssueContext = {}): void {
   const body = buildReportIssueBody(context);
   const title = context.errorMessage
     ? `Bug: ${context.errorMessage.slice(0, 80)}`
-    : "FinPilot issue report";
+    : `${BRAND.name} issue report`;
 
   const issuesUrl = process.env.NEXT_PUBLIC_ISSUES_URL?.trim();
   if (issuesUrl) {
@@ -52,7 +54,7 @@ export function openReportIssue(context: ReportIssueContext = {}): void {
     return;
   }
 
-  const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() ?? "support@finpilot.app";
+  const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() || BRAND.supportEmail;
   const mailto = new URL(`mailto:${supportEmail}`);
   mailto.searchParams.set("subject", title);
   mailto.searchParams.set("body", body);

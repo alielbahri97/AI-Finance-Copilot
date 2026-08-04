@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { getAppUrl } from "@/lib/env-url";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/workspace/audit";
 import { requireWorkspace } from "@/lib/workspace/context";
@@ -7,8 +8,7 @@ import { isPendingInvitation, planInvitationRegeneration } from "@/lib/workspace
 import { sendInvitationEmail } from "@/lib/workspace/team";
 
 function appUrl(path: string): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  return `${base.replace(/\/$/, "")}${path}`;
+  return `${getAppUrl()}${path}`;
 }
 
 /**

@@ -3,6 +3,8 @@
  * gates a feature or renders pricing reads from this file.
  */
 
+import { BRAND } from "@/lib/branding";
+
 export type PlanId = "FREE" | "PRO" | "BUSINESS" | "ENTERPRISE";
 
 export interface PlanLimits {
@@ -40,7 +42,7 @@ export const PLANS: Record<PlanId, Plan> = {
   FREE: {
     id: "FREE",
     name: "Free",
-    description: "Get a feel for FinPilot with your own data.",
+    description: `Get a feel for ${BRAND.name} with your own data.`,
     monthlyPriceUsd: 0,
     limits: {
       csvImportsPerMonth: 1,

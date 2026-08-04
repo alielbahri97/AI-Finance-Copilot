@@ -1,5 +1,7 @@
 import ExcelJS from "exceljs";
 
+import { BRAND } from "@/lib/branding";
+
 import type { ReportData, ReportTransaction } from "./data";
 
 const HEADER_FILL: ExcelJS.Fill = {
@@ -39,7 +41,7 @@ export async function buildExcelReport(
   transactions: ReportTransaction[]
 ): Promise<Uint8Array> {
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = "FinPilot";
+  workbook.creator = BRAND.name;
   workbook.created = new Date();
   const currency = report.currency;
 

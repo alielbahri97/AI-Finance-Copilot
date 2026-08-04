@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getEntitlements } from "@/lib/billing/entitlements";
+import { getAppUrl } from "@/lib/env-url";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/workspace/audit";
 import { requireWorkspace } from "@/lib/workspace/context";
@@ -20,8 +21,7 @@ const inviteSchema = z.object({
 });
 
 function appUrl(path: string): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  return `${base.replace(/\/$/, "")}${path}`;
+  return `${getAppUrl()}${path}`;
 }
 
 /** Invites someone by email. Seats are enforced against the workspace plan. */

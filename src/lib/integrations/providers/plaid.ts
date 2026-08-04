@@ -1,5 +1,6 @@
 import "server-only";
 
+import { BRAND } from "@/lib/branding";
 import { logger, serializeError } from "@/lib/logger";
 
 import { recordBankAccounts } from "../bank-accounts";
@@ -50,7 +51,7 @@ async function plaidPost<T>(path: string, body: Record<string, unknown>): Promis
 export async function createPlaidLinkToken(userId: string): Promise<string> {
   const result = await plaidPost<{ link_token: string }>("/link/token/create", {
     user: { client_user_id: userId },
-    client_name: "FinPilot",
+    client_name: BRAND.name,
     products: ["transactions"],
     country_codes: (process.env.PLAID_COUNTRY_CODES || "US").split(",").map((c) => c.trim()),
     language: "en",

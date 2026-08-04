@@ -17,6 +17,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { getEntitlements } from "@/lib/billing/entitlements";
+import { BRAND } from "@/lib/branding";
 import { getOrCreateProfile } from "@/lib/data";
 import { isEmailConfigured } from "@/lib/notifications/email";
 import { getOrCreatePreferences, serializePreferences } from "@/lib/notifications/preferences";
@@ -179,7 +180,7 @@ export default async function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Appearance</CardTitle>
-          <CardDescription>Choose how FinPilot looks on this device.</CardDescription>
+          <CardDescription>Choose how {BRAND.name} looks on this device.</CardDescription>
         </CardHeader>
         <CardContent>
           <AppearanceForm />

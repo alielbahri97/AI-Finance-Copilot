@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+import { assertValidUrlEnv } from "@/lib/env-url";
+
+export { EnvUrlError, getAppUrl, URL_ENV_VARS, validateUrlEnv } from "@/lib/env-url";
+
 /**
  * Server-side environment validation. Called lazily (at request time, not at
  * build time) so the app can be built without secrets present.
@@ -21,6 +25,9 @@ let cached: ServerEnv | null = null;
 
 export function getServerEnv(): ServerEnv {
   if (cached) return cached;
+  // The URL pass runs first: `DATABASE_URL is not a valid URL: "<value>"` is a
+  // far more actionable message than zod's "invalid or missing" list.
+  assertValidUrlEnv(process.env);
   const parsed = serverEnvSchema.safeParse(process.env);
   if (!parsed.success) {
     const missing = parsed.error.issues.map((issue) => issue.path.join(".")).join(", ");

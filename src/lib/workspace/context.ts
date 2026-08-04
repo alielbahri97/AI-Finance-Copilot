@@ -20,7 +20,13 @@ export { personalWorkspaceId };
  * hint only — membership is re-verified against the database on every request
  * (a removed member instantly loses access, and a forged cookie is useless).
  */
-export const WORKSPACE_COOKIE = "fp_workspace";
+export const WORKSPACE_COOKIE = "ballast_workspace";
+
+/**
+ * The pre-rebrand cookie name. Still read (never written) so a session that
+ * started before the rename keeps the workspace it had selected.
+ */
+export const LEGACY_WORKSPACE_COOKIE = "fp_workspace";
 
 /** Cookie ids are attacker-controlled input; cap before hitting the DB. */
 const MAX_WORKSPACE_ID_LENGTH = 64;
@@ -82,7 +88,9 @@ export const getWorkspaceContext = cache(async (): Promise<WorkspaceContext | nu
   if (!user) return null;
 
   const store = await cookies();
-  const requested = sanitizeWorkspaceId(store.get(WORKSPACE_COOKIE)?.value);
+  const requested = sanitizeWorkspaceId(
+    store.get(WORKSPACE_COOKIE)?.value ?? store.get(LEGACY_WORKSPACE_COOKIE)?.value
+  );
 
   let membership = requested ? await findMembership(user.id, requested) : null;
   if (!membership) membership = await findDefaultMembership(user.id);

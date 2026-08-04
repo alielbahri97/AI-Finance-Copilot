@@ -12,10 +12,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { BRAND } from "@/lib/branding";
 
 export const metadata: Metadata = {
   title: "Sign in",
-  description: "Sign in to your FinPilot account to manage your finances.",
+  description: `Sign in to your ${BRAND.name} account to manage your finances.`,
 };
 
 export default function LoginPage() {
@@ -23,7 +24,7 @@ export default function LoginPage() {
     <Card>
       <CardHeader className="text-center">
         <CardTitle className="text-xl">Welcome back</CardTitle>
-        <CardDescription>Sign in to your FinPilot account</CardDescription>
+        <CardDescription>Sign in to your {BRAND.name} account</CardDescription>
       </CardHeader>
       <CardContent>
         <Suspense fallback={<Skeleton className="h-56 w-full" />}>

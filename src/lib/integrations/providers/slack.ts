@@ -1,5 +1,7 @@
 import "server-only";
 
+import { BRAND } from "@/lib/branding";
+
 import { IntegrationError, type TokenSet } from "../oauth";
 
 import type { ProviderHooks } from "./types";
@@ -38,7 +40,7 @@ export async function sendSlackMessage(
 ): Promise<void> {
   const lines = [`*${message.title}*`, message.body];
   if (message.link) {
-    lines.push(`<${message.link}|Open in FinPilot>`);
+    lines.push(`<${message.link}|Open in ${BRAND.name}>`);
   }
   const response = await fetch(webhookUrl, {
     method: "POST",

@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { WalletIcon } from "lucide-react";
 
+import { BallastLogo } from "@/components/brand/ballast-mark";
 import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard";
 import { ReportIssueButton } from "@/components/report-issue/report-issue-button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { BRAND } from "@/lib/branding";
 import { getOrCreateProfile } from "@/lib/data";
 import { isOnboardingDone } from "@/lib/onboarding/benchmarks";
 import { prisma } from "@/lib/prisma";
@@ -13,7 +14,7 @@ import { getUser } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
   title: "Business setup",
-  description: "Tell FinPilot about your business to get financial ratio guidelines.",
+  description: `Tell ${BRAND.name} about your business to get financial ratio guidelines.`,
   robots: { index: false, follow: false },
 };
 
@@ -44,11 +45,8 @@ export default async function OnboardingPage({
       <div className="absolute top-4 right-4">
         <ThemeToggle />
       </div>
-      <Link href="/" className="mb-8 flex items-center gap-2 font-semibold">
-        <div className="bg-primary text-primary-foreground flex size-8 items-center justify-center rounded-lg">
-          <WalletIcon className="size-4.5" />
-        </div>
-        FinPilot
+      <Link href="/" className="mb-8">
+        <BallastLogo />
       </Link>
       <main id="main-content" tabIndex={-1} className="w-full outline-none">
         <OnboardingWizard

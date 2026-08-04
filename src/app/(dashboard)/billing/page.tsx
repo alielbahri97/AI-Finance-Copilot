@@ -27,6 +27,7 @@ import { getEntitlements } from "@/lib/billing/entitlements";
 import { PLAN_ORDER, PLANS } from "@/lib/billing/plans";
 import { getReferralStats, REFERRAL_REWARD_DAYS } from "@/lib/billing/referrals";
 import { getStripe, isBillingConfigured } from "@/lib/billing/stripe";
+import { getAppUrl } from "@/lib/env-url";
 import { logger, serializeError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { getWorkspaceContext } from "@/lib/workspace/context";
@@ -105,8 +106,7 @@ export default async function BillingPage({
         Math.ceil((new Date(entitlements.trialEndsAt).getTime() - Date.now()) / 86_400_000)
       )
     : 0;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const referralLink = `${appUrl}/signup?ref=${referralStats.code}`;
+  const referralLink = `${getAppUrl()}/signup?ref=${referralStats.code}`;
 
   return (
     <div className="flex flex-col gap-6">

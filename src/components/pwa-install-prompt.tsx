@@ -4,13 +4,14 @@ import { useEffect, useState } from "react";
 import { DownloadIcon, XIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { BRAND, BRAND_SLUG } from "@/lib/branding";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
-const DISMISS_KEY = "finpilot-pwa-install-dismissed";
+const DISMISS_KEY = `${BRAND_SLUG}-pwa-install-dismissed`;
 
 /**
  * Lightweight Install App prompt for Chromium (Android / desktop Windows/Edge).
@@ -62,7 +63,7 @@ export function PwaInstallPrompt() {
         <DownloadIcon className="size-5" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium">Install FinPilot</p>
+        <p className="text-sm font-medium">Install {BRAND.name}</p>
         <p className="text-muted-foreground text-xs">Add the app to your home screen or Start menu.</p>
       </div>
       <Button size="sm" onClick={() => void install()}>

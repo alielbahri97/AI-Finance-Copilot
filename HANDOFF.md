@@ -9,12 +9,14 @@
 
 ## Start here (the 10 things that matter most)
 
-1. **What this is**: a production-deployed AI finance copilot for small
-   businesses, live at <https://app.ballastmoney.com>. Next.js 15 + Supabase +
-   Prisma. Built end to end over the previous conversation; it is not a toy.
-2. **The app is still named "FinPilot" in the code and UI.** A rebrand to
-   **Ballast** is decided and queued but not yet done. See
-   [Pending work queue](#9-pending-work-queue--all-decisions-already-made).
+1. **What this is**: **Ballast** — a production-deployed AI finance app for
+   small businesses, live at <https://app.ballastmoney.com>. Next.js 15 +
+   Supabase + Prisma. Built end to end over the previous conversation; it is not
+   a toy.
+2. **The Ballast rebrand is done.** Product name, taglines and marketing copy
+   all read from `src/lib/branding.ts` — edit that file, not the call sites.
+   Never write "Your AI finance copilot"; it is a competitor's exact headline
+   and the reason the app stopped being called FinPilot.
 3. **The user's machine is behind a corporate (Optiver) proxy** that blocks npm,
    Prisma engine downloads, Postgres ports, and the Supabase / Vercel / Resend
    dashboards and APIs. You must set two env vars in every shell or nothing
@@ -117,16 +119,20 @@ src/
     notifications/         # dispatch, email, email-health, summaries, schedule
     invoices/              # extraction, extraction-core, ingest, storage
     currency/              # location detection + parsing
+    branding.ts            # ← PRODUCT NAME / TAGLINES, per edition
+    brand/mark.ts          # logo geometry, shared with the icon generator
     db-errors.ts           # outage vs schema-drift classification
-    logger.ts, prisma.ts, env.ts, rate-limit.ts, data.ts
-tests/                     # 25 Vitest files, pure-logic coverage
+    logger.ts, prisma.ts, env.ts, env-url.ts, rate-limit.ts, data.ts
+scripts/generate-icons.ts  # `npm run icons` — rebuilds PNGs + favicon from the mark
+tests/                     # 26 Vitest files, pure-logic coverage
 ```
 
 ### Key architectural rules
 
 - **`src/lib/workspace/context.ts`** — `getWorkspaceContext()` authenticates the
-  user, validates the `fp_workspace` cookie **against database membership on
-  every request**, and returns `{ user, workspace, role, permissions }`.
+  user, validates the `ballast_workspace` cookie (the pre-rebrand `fp_workspace`
+  is still read as a fallback) **against database membership on every request**,
+  and returns `{ user, workspace, role, permissions }`.
   `requireWorkspace(...perms)` is the API guard (401/403). *Never* trust the
   cookie alone; *never* query business tables without a workspace scope.
 - **`src/lib/workspace/permissions.ts`** — 12 permissions, role defaults,
@@ -318,6 +324,7 @@ Commit history (most recent first), each verified green before pushing:
 
 | Commit | Delivered |
 | --- | --- |
+| *(this one)* | **Ballast rebrand** — `src/lib/branding.ts` as the single source of product copy, a keel/ballast logo mark with regenerated icons and favicon, `src/lib/env-url.ts` URL env validation, `ballast_workspace` cookie with a legacy fallback, service-worker cache bumped to `ballast-shell-v3` |
 | `9137717` | `/api/health` reports email configuration (diagnostic for the current email issue) |
 | `db0a502` | Rollback warning after 0016 |
 | `f3c7833` | Paste-into-Supabase bundle for 0016 |
@@ -381,20 +388,22 @@ final two agents added `email-delivery`, `email-health`, `ai-config`,
 
 Do not re-ask the user these; they have been decided.
 
-### 1. Ballast rebrand *(next up)*
+### 1. Ballast rebrand ✅ *done*
 
-- Name: **Ballast**. Domain `ballastmoney.com`.
-- Scope: **name/text + a new keel-inspired logo mark and regenerated app icons**,
-  keeping the existing colour scheme (the user chose this over a full visual
-  refresh).
-- Tagline: the user picked *"Your AI finance copilot"*, but that is **verbatim
-  the headline of competitor `finpilotsai.com`** — the reason for leaving the
-  FinPilot name in the first place. The proposed safe variant is
-  **"Your AI copilot for business finances"**; use it unless the user objects.
-- Must sweep: UI strings, page metadata/titles, landing page, email templates and
-  sender name, **AI prompts** (both copilot and help agent introduce themselves
-  by name), PWA manifest and icons, Windows packaging config, all docs, service
-  worker cache names, test fixtures. Grep for `finpilot` case-insensitively.
+Delivered: every user-visible and semantic occurrence of "FinPilot" renamed, a
+new keel/ballast logo mark with regenerated icons, `src/lib/branding.ts` as the
+single source of truth, and URL-typed env validation. The existing colour
+palette was kept deliberately.
+
+Two names were left alone on purpose: the npm package (`ai-finance-copilot`) and
+the GitHub repository. Neither is user-visible; changing the repo name would
+break the Vercel link and every existing clone.
+
+**Copy rule that outlives the rebrand**: `"Your AI finance copilot"` is the
+verbatim headline of competitor `finpilotsai.com`. Business copy is *"Your AI
+copilot for business finances"*; the neutral, edition-agnostic tagline used by
+metadata, the manifest and emails is *"AI-powered clarity on your money"*.
+`EDITIONS.personal` is already written for the dual-edition work below.
 
 ### 2. Export everywhere
 
@@ -417,8 +426,9 @@ instructed to answer in the user's language. Machine translation is acceptable;
 the user has been told to get a native speaker to review financial terminology
 per language before marketing in it.
 
-Sequenced **after** the rebrand and exports so those strings are translated in
-the same pass.
+Sequenced **after** exports so those strings are translated in the same pass.
+The rebrand is already done; `src/lib/branding.ts` is the natural place to hang
+per-locale product copy.
 
 ### 4. Login improvements
 
@@ -426,9 +436,10 @@ the same pass.
 - **Passkeys / WebAuthn** for Face ID and fingerprint sign-in, with password
   fallback always available. **SMS/phone OTP was explicitly declined** (per-message
   cost, SIM-swap risk).
-- **Validate `NEXT_PUBLIC_*` env values** with clear startup errors. A stray
-  space caused both a cryptic `Failed to execute 'fetch' on 'Window': Invalid
-  value` at login and a `/_not-found` build failure — neither named the variable.
+- ~~**Validate `NEXT_PUBLIC_*` env values** with clear startup errors.~~ Done in
+  the rebrand: `src/lib/env-url.ts` validates every URL-typed variable and fails
+  with `NEXT_PUBLIC_APP_URL is not a valid URL: "<value>"`. Any remaining
+  non-URL `NEXT_PUBLIC_*` validation can be added to the same module.
 
 ### 5. Business / Personal dual edition *(largest item)*
 
@@ -441,7 +452,9 @@ the same pass.
   recurring-subscription detection, personal-flavoured AI prompts ("Can I afford
   this?" rather than "Can I hire?").
   **Personal hides**: invoices/VAT, AR/AP, vendors and customers, team sharing.
-- Branding: **Ballast Business** / **Ballast Personal** under one domain.
+- Branding: **Ballast Business** / **Ballast Personal** under one domain — both
+  already defined in `EDITIONS` in `src/lib/branding.ts`, with `personal` unused
+  until this lands.
 - **Proposed personal pricing — not yet confirmed by the user**: Free €0
   (1 bank, 50 AI messages) · Plus €4.99/mo (unlimited banks, 500 AI messages,
   budgets, goals, exports) · Premium €8.99/mo (unlimited AI, assumptions,
@@ -461,7 +474,10 @@ button. Merging them into a **two-action FAB** was offered and is undecided.
 - **Hand-written migrations only**, next number in sequence, never edit an
   applied one.
 - **Every data query scoped by `workspaceId`** through the workspace context
-  helper. Never trust the `fp_workspace` cookie without a membership check.
+  helper. Never trust the workspace cookie without a membership check.
+- **Never hardcode the product name or a tagline** — import from
+  `src/lib/branding.ts`. Same for the public origin: use `getAppUrl()` from
+  `src/lib/env-url.ts`, never `process.env.NEXT_PUBLIC_APP_URL` directly.
 - **Zod validation on every API route**; ownership/permission checks server-side;
   the shared `apiError()` shape and structured logger (`src/lib/logger.ts`) for
   failures.

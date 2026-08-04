@@ -1,6 +1,8 @@
 import type { MetadataRoute } from "next";
 
-const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+import { getAppUrl } from "@/lib/env-url";
+
+const appUrl = getAppUrl();
 
 /** Only the public marketing/auth pages; the app itself is behind login. */
 export default function sitemap(): MetadataRoute.Sitemap {

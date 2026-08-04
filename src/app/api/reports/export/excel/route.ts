@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { trackEvent } from "@/lib/analytics";
 import { incrementUsage } from "@/lib/billing/entitlements";
+import { BRAND_SLUG } from "@/lib/branding";
 import { buildReport, getReportTransactions } from "@/lib/reports/data";
 import { buildExcelReport } from "@/lib/reports/export-excel";
 import { periodSlug, resolveReportRequest } from "@/lib/reports/query";
@@ -28,7 +29,7 @@ export async function GET(request: Request) {
     return new NextResponse(Buffer.from(bytes), {
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="finpilot-report-${periodSlug(period)}.xlsx"`,
+        "Content-Disposition": `attachment; filename="${BRAND_SLUG}-report-${periodSlug(period)}.xlsx"`,
         "Cache-Control": "no-store",
       },
     });

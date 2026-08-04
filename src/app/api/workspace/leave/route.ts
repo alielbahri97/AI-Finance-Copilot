@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/workspace/audit";
-import { getWorkspaceContext, WORKSPACE_COOKIE } from "@/lib/workspace/context";
+import {
+  getWorkspaceContext,
+  LEGACY_WORKSPACE_COOKIE,
+  WORKSPACE_COOKIE,
+} from "@/lib/workspace/context";
 
 /** Leaves the current workspace. Owners can't leave their own workspace. */
 export async function POST() {
@@ -23,7 +27,9 @@ export async function POST() {
   });
 
   // Drop the cookie so the next request falls back to the personal workspace.
+  // The pre-rebrand cookie goes too, or it would resurrect the selection.
   const response = NextResponse.json({ ok: true });
   response.cookies.delete(WORKSPACE_COOKIE);
+  response.cookies.delete(LEGACY_WORKSPACE_COOKIE);
   return response;
 }

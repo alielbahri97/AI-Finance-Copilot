@@ -6,6 +6,7 @@ import { AlertTriangleIcon, LifeBuoyIcon, SendIcon, SquareIcon, UserIcon } from 
 import { Markdown } from "@/components/copilot/markdown-lazy";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { BRAND } from "@/lib/branding";
 import { isConfigurationError } from "@/lib/help/errors";
 import { cn } from "@/lib/utils";
 
@@ -200,7 +201,7 @@ export function HelpChat({ initialMessages, compact = false, className }: HelpCh
               <LifeBuoyIcon className="size-6" />
             </div>
             <div>
-              <p className="font-medium">How can I help you use FinPilot?</p>
+              <p className="font-medium">How can I help you use {BRAND.name}?</p>
               <p className="text-muted-foreground mx-auto max-w-sm text-sm">
                 Ask me how to do anything in the app — connecting banks, imports, forecasts,
                 invoices, notifications, billing…

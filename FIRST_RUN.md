@@ -29,7 +29,7 @@ API key.
 
 1. Go to [supabase.com](https://supabase.com), sign in, and click
    **New project**.
-2. Pick any name (e.g. `finpilot`), choose a region near you, and set a
+2. Pick any name (e.g. `ballast`), choose a region near you, and set a
    **database password** — save it, you need it in step 2.
 3. Wait ~2 minutes for provisioning to finish.
 
@@ -105,7 +105,7 @@ invites to land in an inbox.
 
    ```powershell
    RESEND_API_KEY="re_..."
-   EMAIL_FROM="FinPilot <notifications@send.yourdomain.com>"
+   EMAIL_FROM="Ballast <notifications@send.yourdomain.com>"
    ```
 
    If either is missing, the app reports "email delivery isn't set up" instead

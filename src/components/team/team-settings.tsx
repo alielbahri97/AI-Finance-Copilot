@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { BRAND } from "@/lib/branding";
 import type { EmailDeliveryResult } from "@/lib/notifications/email";
 import {
   ALL_PERMISSIONS,
@@ -198,8 +199,8 @@ function InviteLinkPanel({ result }: { result: InviteResult }) {
   async function share() {
     try {
       await navigator.share({
-        title: "Join my FinPilot workspace",
-        text: `Join my FinPilot workspace — sign in with ${email}.`,
+        title: `Join my ${BRAND.name} workspace`,
+        text: `Join my ${BRAND.name} workspace — sign in with ${email}.`,
         url: result.inviteLink,
       });
     } catch {

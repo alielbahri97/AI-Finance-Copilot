@@ -12,6 +12,7 @@
     "test:smoke": "node scripts/smoke-test.mjs",
     "test:features": "node scripts/smoke-test.mjs && node scripts/feature-test-auth.mjs",
     "typecheck": "tsc --noEmit",
+    "icons": "tsx scripts/generate-icons.ts",
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",

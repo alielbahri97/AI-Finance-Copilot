@@ -3,6 +3,7 @@ import "server-only";
 import type { AiProvider, NotificationType } from "@/generated/prisma/client";
 import { getAiClient, providerFromProfile } from "@/lib/ai";
 import { buildFinancialSnapshot, renderSnapshot } from "@/lib/ai/context";
+import { BRAND } from "@/lib/branding";
 import { buildForecast } from "@/lib/finance/data";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
@@ -168,7 +169,7 @@ async function generateAiBody(
         {
           role: "system",
           content:
-            `You are FinPilot, an AI finance copilot. Write the body of a ${kind} financial digest notification. ` +
+            `You are ${BRAND.name}, an AI finance assistant. Write the body of a ${kind} financial digest notification. ` +
             "Cover: what happened in the period, notable changes, upcoming bills, and the forecast outlook. " +
             "Use 2-4 short paragraphs and at most one simple list with '-' bullets. Plain text only - no markdown headers, bold, or tables. " +
             "Be specific with amounts, honest about uncertainty, and keep it under 170 words. Do not invent numbers.",

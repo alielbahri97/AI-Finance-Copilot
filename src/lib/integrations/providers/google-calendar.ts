@@ -2,6 +2,7 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 
+import { BRAND } from "@/lib/branding";
 import { buildForecast } from "@/lib/finance/data";
 import { prisma } from "@/lib/prisma";
 
@@ -99,7 +100,7 @@ async function sync(ctx: SyncContext): Promise<SyncStats> {
       key: `bill:${bill.label}:${bill.dueDate}`,
       date: bill.dueDate,
       title: `Bill due: ${bill.label} (${ctx.currency} ${bill.amount.toFixed(2)})`,
-      description: `Recurring ${bill.cadence} payment detected by FinPilot.`,
+      description: `Recurring ${bill.cadence} payment detected by ${BRAND.name}.`,
     });
   }
 

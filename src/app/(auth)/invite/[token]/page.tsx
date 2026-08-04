@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { BRAND } from "@/lib/branding";
 import { classifyDatabaseFailure, describeDatabaseError } from "@/lib/db-errors";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
@@ -20,7 +21,7 @@ import { assessInvitation, hashInviteToken } from "@/lib/workspace/invitations";
 
 export const metadata: Metadata = {
   title: "Workspace invitation",
-  description: "Join a shared FinPilot workspace.",
+  description: `Join a shared ${BRAND.name} workspace.`,
   robots: { index: false, follow: false },
 };
 export const dynamic = "force-dynamic";
@@ -95,14 +96,14 @@ export default async function InvitePage({
           <MailQuestionIcon className="text-muted-foreground mx-auto size-8" aria-hidden />
           <CardTitle className="text-xl">We can&apos;t check this invitation</CardTitle>
           <CardDescription>
-            FinPilot is having trouble reading its database, so we can&apos;t confirm whether
+            {BRAND.name} is having trouble reading its database, so we can&apos;t confirm whether
             this invitation is still valid. Your link is not used up — try again in a few
             minutes.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex justify-center">
           <Button asChild variant="outline">
-            <Link href="/">Back to FinPilot</Link>
+            <Link href="/">Back to {BRAND.name}</Link>
           </Button>
         </CardContent>
       </Card>
@@ -124,7 +125,7 @@ export default async function InvitePage({
         </CardHeader>
         <CardContent className="flex justify-center">
           <Button asChild variant="outline">
-            <Link href="/">Back to FinPilot</Link>
+            <Link href="/">Back to {BRAND.name}</Link>
           </Button>
         </CardContent>
       </Card>
@@ -147,7 +148,7 @@ export default async function InvitePage({
         </CardHeader>
         <CardContent className="flex justify-center">
           <Button asChild variant="outline">
-            <Link href="/">Back to FinPilot</Link>
+            <Link href="/">Back to {BRAND.name}</Link>
           </Button>
         </CardContent>
       </Card>

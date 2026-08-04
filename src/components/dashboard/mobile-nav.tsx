@@ -3,11 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MenuIcon, WalletIcon } from "lucide-react";
+import { MenuIcon } from "lucide-react";
 
+import { BallastBadge } from "@/components/brand/ballast-mark";
 import { ADMIN_NAV_ITEM, NAV_ITEMS } from "@/components/dashboard/nav-items";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { BRAND } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 
 export function MobileNav({ isAdmin = false }: { isAdmin?: boolean }) {
@@ -25,10 +27,8 @@ export function MobileNav({ isAdmin = false }: { isAdmin?: boolean }) {
       <SheetContent side="left" className="w-64 p-0">
         <SheetHeader className="border-b">
           <SheetTitle className="flex items-center gap-2">
-            <div className="bg-primary text-primary-foreground flex size-7 items-center justify-center rounded-lg">
-              <WalletIcon className="size-4" />
-            </div>
-            FinPilot
+            <BallastBadge className="size-7" markClassName="size-4" />
+            {BRAND.name}
           </SheetTitle>
         </SheetHeader>
         <nav className="flex flex-col gap-1 p-3">

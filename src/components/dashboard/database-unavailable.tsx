@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { ReportIssueButton } from "@/components/report-issue/report-issue-button";
+import { BRAND } from "@/lib/branding";
 
 /**
  * Why the dashboard has no data:
@@ -36,7 +37,9 @@ export function DatabaseUnavailable({
         )}
       </div>
       <h1 className="text-2xl font-semibold">
-        {outdated ? "FinPilot is mid-update" : "FinPilot is temporarily unavailable"}
+        {outdated
+          ? `${BRAND.name} is mid-update`
+          : `${BRAND.name} is temporarily unavailable`}
       </h1>
       {outdated ? (
         <p className="text-muted-foreground max-w-md text-sm">

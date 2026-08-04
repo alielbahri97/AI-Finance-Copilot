@@ -1,7 +1,11 @@
-# FinPilot — AI Finance Copilot
+# Ballast — AI-powered clarity on your money
 
-A production-quality personal finance dashboard with an AI copilot, built with Next.js 15,
-Supabase, Prisma and OpenAI/Anthropic.
+Your AI copilot for business finances: a production-quality finance dashboard built with
+Next.js 15, Supabase, Prisma and Groq/OpenAI/Anthropic. Live at
+<https://app.ballastmoney.com>.
+
+> The npm package name (`ai-finance-copilot`) and the GitHub repository name are unchanged;
+> only the product name is Ballast.
 
 ## Features
 
@@ -103,7 +107,7 @@ Supabase, Prisma and OpenAI/Anthropic.
 - **UI** — responsive layout, dark mode, toast notifications, loading skeletons, error
   boundaries, shadcn/ui component library on Tailwind CSS v4
 - **Installable app (PWA)** — web manifest, icons, service worker, and install prompt so
-  FinPilot can be added to phone home screens and the Windows Start menu. Optional MSIX /
+  Ballast can be added to phone home screens and the Windows Start menu. Optional MSIX /
   WebView2 packaging notes in **[WINDOWS_APP.md](WINDOWS_APP.md)** (closest practical path
   to a UWP-style mobile/desktop app without a C# rewrite)
 
@@ -333,7 +337,7 @@ local 14-day Pro trial) and `/billing` shows a "billing not configured" notice. 
 paid plans:
 
 1. **Create the products/prices** — in the [Stripe dashboard](https://dashboard.stripe.com)
-   create two products, *FinPilot Pro* and *FinPilot Business*, each with a monthly
+   create two products, *Ballast Pro* and *Ballast Business*, each with a monthly
    recurring price ($19 and $49 to match `src/lib/billing/plans.ts`, or adjust the file).
    Copy the two `price_...` ids.
 2. **Configure the webhook** — add an endpoint pointing at
@@ -415,7 +419,7 @@ a partner with no mail setup at all.
 
 ```bash
 RESEND_API_KEY="re_..."
-EMAIL_FROM="FinPilot <notifications@send.yourdomain.com>"
+EMAIL_FROM="Ballast <notifications@send.yourdomain.com>"
 NEXT_PUBLIC_APP_URL="https://yourapp.vercel.app"   # used for links inside emails
 ```
 
@@ -669,7 +673,7 @@ recorded per workspace (`AuditLog`) and visible to owners/admins in *Settings �
   can go live against an older database. `/api/health` then answers `503` with
   `schema:"outdated"` plus `missingTables`, `missingColumns` and `pendingMigrations`; fix it
   with `npm run db:apply`. Meanwhile the app degrades instead of crashing: public pages never
-  query business tables, and dashboard routes render a "FinPilot is mid-update" page. The
+  query business tables, and dashboard routes render a "Ballast is mid-update" page. The
   expected tables/columns live in `src/lib/db/schema-expectations.ts` — extend it whenever a
   migration adds something the app queries on a hot path.
 - Error boundaries: `src/app/error.tsx` (route errors) and `src/app/global-error.tsx`
@@ -720,7 +724,7 @@ and **[PRODUCTION_CHECKLIST.md](PRODUCTION_CHECKLIST.md)** before going live.
 
 ## Install as an app (phone / Windows)
 
-FinPilot is a Progressive Web App. Users can install it from the browser (Android Chrome,
+Ballast is a Progressive Web App. Users can install it from the browser (Android Chrome,
 iOS Safari “Add to Home Screen”, Windows Edge “Install app”). For MSIX / Store packaging
 via PWABuilder or an optional WebView2 host, see **[WINDOWS_APP.md](WINDOWS_APP.md)**.
 

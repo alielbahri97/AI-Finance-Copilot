@@ -1,28 +1,28 @@
 {
   "$schema": "https://json.schemastore.org/pwabuilder-manifest.json",
-  "name": "FinPilot — AI Finance Copilot",
-  "short_name": "FinPilot",
-  "description": "AI finance copilot for small and medium-sized businesses.",
-  "start_url": "https://ali-finpilot.vercel.app/dashboard",
-  "scope": "https://ali-finpilot.vercel.app/",
+  "name": "Ballast — AI-powered clarity on your money",
+  "short_name": "Ballast",
+  "description": "AI-powered clarity on your money, for small and medium-sized businesses.",
+  "start_url": "https://app.ballastmoney.com/dashboard",
+  "scope": "https://app.ballastmoney.com/",
   "display": "standalone",
   "background_color": "#EEF2FF",
   "theme_color": "#4F46E5",
   "icons": [
     {
-      "src": "https://ali-finpilot.vercel.app/icons/icon-192.png",
+      "src": "https://app.ballastmoney.com/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "https://ali-finpilot.vercel.app/icons/icon-512.png",
+      "src": "https://app.ballastmoney.com/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "https://ali-finpilot.vercel.app/icons/icon-512-maskable.png",
+      "src": "https://app.ballastmoney.com/icons/icon-512-maskable.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
@@ -30,14 +30,14 @@
   ],
   "pwabuilder": {
     "windowsPackageOptions": {
-      "packageId": "com.finpilot.app",
-      "name": "FinPilot",
+      "packageId": "com.ballastmoney.app",
+      "name": "Ballast",
       "publisher": {
-        "displayName": "FinPilot",
-        "commonName": "CN=FinPilot"
+        "displayName": "Ballast",
+        "commonName": "CN=Ballast"
       },
       "version": "1.0.0.0",
-      "url": "https://ali-finpilot.vercel.app"
+      "url": "https://app.ballastmoney.com"
     }
   }
 }

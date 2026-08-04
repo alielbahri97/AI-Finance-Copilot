@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { WalletIcon } from "lucide-react";
 
+import { BallastLogo } from "@/components/brand/ballast-mark";
 import { ReportIssueButton } from "@/components/report-issue/report-issue-button";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -10,11 +10,8 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       <div className="absolute top-4 right-4">
         <ThemeToggle />
       </div>
-      <Link href="/" className="flex items-center gap-2 font-semibold">
-        <div className="bg-primary text-primary-foreground flex size-8 items-center justify-center rounded-lg">
-          <WalletIcon className="size-4.5" />
-        </div>
-        FinPilot
+      <Link href="/">
+        <BallastLogo />
       </Link>
       <main id="main-content" tabIndex={-1} className="w-full max-w-sm outline-none">
         {children}

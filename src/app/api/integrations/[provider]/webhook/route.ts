@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { BRAND } from "@/lib/branding";
 import { saveConnection } from "@/lib/integrations/connections";
 import { requireIntegrationAccess } from "@/lib/integrations/guard";
 import { sendTeamsMessage, validateTeamsWebhookUrl } from "@/lib/integrations/providers/teams";
@@ -47,7 +48,7 @@ export async function POST(
 
     try {
       await sendTeamsMessage(parsed.data.url, {
-        title: "FinPilot connected",
+        title: `${BRAND.name} connected`,
         body: "Finance alerts and digests will be posted to this channel.",
       });
     } catch {

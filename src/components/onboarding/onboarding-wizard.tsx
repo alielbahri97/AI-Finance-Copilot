@@ -40,6 +40,7 @@ import {
   getRecommendations,
   type RecommendationResult,
 } from "@/lib/onboarding/benchmarks";
+import { BRAND } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 import { onboardingSchema, type OnboardingValues } from "@/lib/validations/onboarding";
 
@@ -203,8 +204,8 @@ export function OnboardingWizard({
                 <div>
                   <h1 className="text-2xl font-bold tracking-tight">Tell us about your business</h1>
                   <p className="text-muted-foreground mt-1 text-sm">
-                    A few questions help FinPilot suggest financial ratio guidelines for SMBs like
-                    yours.
+                    A few questions help {BRAND.name} suggest financial ratio guidelines for SMBs
+                    like yours.
                   </p>
                 </div>
                 <FormField

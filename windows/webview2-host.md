@@ -1,4 +1,4 @@
-# Optional WebView2 / WinUI host for FinPilot
+# Optional WebView2 / WinUI host for Ballast
 
 Use this only if you need a custom Windows `.exe`/MSIX shell. Most users should install the
 PWA from Edge (see `WINDOWS_APP.md`).
@@ -12,15 +12,15 @@ PWA from Edge (see `WINDOWS_APP.md`).
 
 ## Minimal host
 
-1. Create a **Blank App, Packaged (WinUI 3 in Desktop)** project named `FinPilot.Windows`.
+1. Create a **Blank App, Packaged (WinUI 3 in Desktop)** project named `Ballast.Windows`.
 2. In `MainWindow.xaml`:
 
 ```xml
 <Window
-    x:Class="FinPilot.Windows.MainWindow"
+    x:Class="Ballast.Windows.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="FinPilot">
+    Title="Ballast">
   <Grid>
     <WebView2 x:Name="WebView" />
   </Grid>
@@ -33,7 +33,7 @@ PWA from Edge (see `WINDOWS_APP.md`).
 private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
 {
     await WebView.EnsureCoreWebView2Async();
-    WebView.CoreWebView2.Navigate("https://ali-finpilot.vercel.app/dashboard");
+    WebView.CoreWebView2.Navigate("https://app.ballastmoney.com/dashboard");
 }
 ```
 

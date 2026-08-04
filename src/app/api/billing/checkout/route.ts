@@ -5,6 +5,7 @@ import { getEntitlements } from "@/lib/billing/entitlements";
 import { getPlanPriceId, TRIAL_DAYS } from "@/lib/billing/plans";
 import { getOrCreateStripeCustomer, getStripe } from "@/lib/billing/stripe";
 import { getOrCreateProfile } from "@/lib/data";
+import { getAppUrl } from "@/lib/env-url";
 import { enforceRateLimit } from "@/lib/api/rate-limit-guard";
 import { apiError } from "@/lib/api/response";
 import { recordAudit } from "@/lib/workspace/audit";
@@ -63,7 +64,9 @@ export async function POST(request: Request) {
       profile.email
     );
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin;
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim()
+      ? getAppUrl()
+      : new URL(request.url).origin;
     const metadata = { workspaceId: workspace.id, userId: user.id };
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",

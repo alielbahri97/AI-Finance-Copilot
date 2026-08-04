@@ -5,6 +5,7 @@ import { DatabaseZapIcon, AlertTriangleIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ReportIssueButton } from "@/components/report-issue/report-issue-button";
+import { BRAND } from "@/lib/branding";
 
 function looksLikeDbOutage(message: string): boolean {
   return /database|postgres|prisma|ECONN|ETIMEDOUT|P1001|P1002|P1017|too many clients|connection/i.test(
@@ -41,7 +42,7 @@ export default function DashboardError({
         )}
       </div>
       <h1 className="text-2xl font-semibold">
-        {dbDown ? "FinPilot is temporarily unavailable" : "Something went wrong"}
+        {dbDown ? `${BRAND.name} is temporarily unavailable` : "Something went wrong"}
       </h1>
       <p className="text-muted-foreground max-w-md text-sm">
         {dbDown

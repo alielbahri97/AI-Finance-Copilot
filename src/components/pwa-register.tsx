@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 
 /**
- * Registers the FinPilot service worker for installability (PWA) and Web Push.
+ * Registers the Ballast service worker for installability (PWA) and Web Push.
  * Safe to mount on every page; browsers no-op when already registered.
  */
 export function PwaRegister() {

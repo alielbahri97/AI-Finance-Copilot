@@ -6,7 +6,7 @@ const MAX_AMOUNT = 1_000_000_000;
 export interface NormalizeOptions {
   /**
    * When a Currency column is mapped, rows whose currency differs from this
-   * code are skipped (FinPilot stores amounts in a single profile currency
+   * code are skipped (Ballast stores amounts in a single profile currency
    * without FX conversion).
    */
   expectedCurrency?: string | null;

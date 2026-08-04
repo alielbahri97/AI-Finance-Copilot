@@ -1,4 +1,4 @@
-// Prisma schema for the AI Finance Copilot.
+// Prisma schema for Ballast.
 // The database lives in Supabase PostgreSQL; auth users are managed by
 // Supabase Auth and mirrored here via the Profile model (same UUID).
 
@@ -285,7 +285,7 @@ model HelpMessage {
   @@map("help_messages")
 }
 
-/// Captures light business context from post-signup onboarding so FinPilot
+/// Captures light business context from post-signup onboarding so Ballast
 /// can surface industry-typical financial ratio guidelines.
 model BusinessProfile {
   id              String         @id @default(cuid())

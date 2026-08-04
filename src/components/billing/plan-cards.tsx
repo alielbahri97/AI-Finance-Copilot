@@ -14,6 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import type { Plan, PlanId } from "@/lib/billing/plans";
+import { BRAND } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 
 interface PlanCardsProps {
@@ -89,7 +90,11 @@ export function PlanCards({ plans, currentPlanId, isTrial, billingConfigured }: 
               </ul>
               {plan.id === "ENTERPRISE" ? (
                 <Button variant="outline" asChild>
-                  <a href="mailto:sales@finpilot.app?subject=FinPilot%20Enterprise">
+                  <a
+                    href={`mailto:${BRAND.salesEmail}?subject=${encodeURIComponent(
+                      `${BRAND.name} Enterprise`
+                    )}`}
+                  >
                     Contact sales
                   </a>
                 </Button>

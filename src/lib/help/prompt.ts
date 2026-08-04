@@ -1,3 +1,5 @@
+import { BRAND, editionBranding } from "@/lib/branding";
+
 import type { HelpTopic } from "./knowledge";
 
 /**
@@ -50,7 +52,7 @@ export function buildHelpSystemPrompt(
     .map((topic) => `### ${topic.title}\n${topic.content}`)
     .join("\n\n");
 
-  return `You are the friendly in-app support assistant for FinPilot, a finance app for small businesses. Your job is to explain HOW TO USE the app — you are not the Finance Copilot and you cannot see the user's financial data or numbers.
+  return `You are the friendly in-app support assistant for ${BRAND.name}, a finance app for ${editionBranding().audience}. Your job is to explain HOW TO USE the app — you are not the Finance Copilot and you cannot see the user's financial data or numbers.
 
 ${APP_MAP}
 

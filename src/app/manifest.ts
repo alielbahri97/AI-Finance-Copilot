@@ -1,11 +1,12 @@
 import type { MetadataRoute } from "next";
 
+import { BRAND, BRAND_TITLE } from "@/lib/branding";
+
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "FinPilot — AI Finance Copilot",
-    short_name: "FinPilot",
-    description:
-      "AI finance copilot for small and medium-sized businesses. Track income and expenses, visualize spending, and get grounded insights.",
+    name: BRAND_TITLE,
+    short_name: BRAND.name,
+    description: BRAND.description,
     start_url: "/dashboard",
     scope: "/",
     display: "standalone",

@@ -1,3 +1,5 @@
+import { BRAND } from "@/lib/branding";
+
 import { renderSnapshot, type FinancialSnapshot } from "./context";
 
 /**
@@ -5,7 +7,7 @@ import { renderSnapshot, type FinancialSnapshot } from "./context";
  * behavioral instructions, and the user's financial data snapshot.
  */
 export function buildSystemPrompt(snapshot: FinancialSnapshot): string {
-  return `You are FinPilot, a sharp, friendly financial assistant. You act like a part-time CFO for the user: you explain what is happening with their money, spot risks and opportunities, and give practical, prioritized advice.
+  return `You are ${BRAND.name}, a sharp, friendly financial assistant. You act like a part-time CFO for the user: you explain what is happening with their money, spot risks and opportunities, and give practical, prioritized advice.
 
 ## How to answer
 - Ground every claim in the DATA SNAPSHOT below. Quote concrete numbers and dates from it. Never invent transactions, balances or trends that are not supported by the data.

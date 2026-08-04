@@ -28,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { BRAND_SLUG } from "@/lib/branding";
 
 /** Countries covered by GoCardless Bank Account Data (EEA + UK). */
 const COUNTRIES: Array<{ code: string; name: string }> = [
@@ -64,7 +65,7 @@ const COUNTRIES: Array<{ code: string; name: string }> = [
   { code: "GB", name: "United Kingdom" },
 ];
 
-const COUNTRY_STORAGE_KEY = "finpilot.gocardless.country";
+const COUNTRY_STORAGE_KEY = `${BRAND_SLUG}.gocardless.country`;
 
 interface InstitutionOption {
   id: string;

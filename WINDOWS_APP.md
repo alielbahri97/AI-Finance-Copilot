@@ -1,15 +1,15 @@
-# FinPilot as a Windows / mobile app
+# Ballast as a Windows / mobile app
 
-FinPilot is a Next.js web app. A full native UWP (C#/XAML) rewrite is out of scope.
-Instead, FinPilot ships as a **Progressive Web App (PWA)** that installs like a native app
+Ballast is a Next.js web app. A full native UWP (C#/XAML) rewrite is out of scope.
+Instead, Ballast ships as a **Progressive Web App (PWA)** that installs like a native app
 on phones and Windows, plus an optional **MSIX / PWABuilder** packaging path for Store or
 sideload distribution.
 
-Live site: https://ali-finpilot.vercel.app
+Live site: https://app.ballastmoney.com
 
 ## What you get vs true native UWP
 
-| Capability | FinPilot PWA / packaged PWA | Classic UWP (C#) |
+| Capability | Ballast PWA / packaged PWA | Classic UWP (C#) |
 | --- | --- | --- |
 | Home screen / Start menu icon | Yes | Yes |
 | Standalone window (no browser chrome) | Yes | Yes |
@@ -27,16 +27,16 @@ product as the website inside an installable shell.
 
 ### Android (Chrome)
 
-1. Open https://ali-finpilot.vercel.app in Chrome.
+1. Open https://app.ballastmoney.com in Chrome.
 2. Sign in (optional before install).
-3. Tap the **Install FinPilot** banner, or menu → **Install app** / **Add to Home screen**.
-4. Launch FinPilot from the home screen — it opens fullscreen (standalone).
+3. Tap the **Install Ballast** banner, or menu → **Install app** / **Add to Home screen**.
+4. Launch Ballast from the home screen — it opens fullscreen (standalone).
 
 ### iPhone / iPad (Safari)
 
-1. Open https://ali-finpilot.vercel.app in Safari (not Chrome-in-app).
+1. Open https://app.ballastmoney.com in Safari (not Chrome-in-app).
 2. Tap the Share button → **Add to Home Screen**.
-3. Confirm the name **FinPilot** and add.
+3. Confirm the name **Ballast** and add.
 4. Open from the home screen for the standalone experience.
 
 ---
@@ -45,9 +45,9 @@ product as the website inside an installable shell.
 
 ### Option A — Install from Edge / Chrome (fastest)
 
-1. Open https://ali-finpilot.vercel.app in Microsoft Edge (recommended) or Chrome.
-2. Click the install icon in the address bar, or use the **Install FinPilot** banner.
-3. FinPilot appears in Start under your apps and can be pinned to the taskbar.
+1. Open https://app.ballastmoney.com in Microsoft Edge (recommended) or Chrome.
+2. Click the install icon in the address bar, or use the **Install Ballast** banner.
+3. Ballast appears in Start under your apps and can be pinned to the taskbar.
 
 This is a Chromium PWA (same app package model Edge uses for installed web apps).
 
@@ -56,7 +56,7 @@ This is a Chromium PWA (same app package model Edge uses for installed web apps)
 Use this when you want a classic Windows package (`.msix`) similar to UWP distribution.
 
 1. Go to [PWABuilder](https://www.pwabuilder.com/).
-2. Enter `https://ali-finpilot.vercel.app` and start.
+2. Enter `https://app.ballastmoney.com` and start.
 3. Confirm the manifest scores well (name, icons 512px, `display: standalone`, service worker).
 4. Under **Package for stores** → choose **Windows** → generate the MSIX / APPX package.
 5. Sideload:
@@ -73,8 +73,8 @@ If you prefer a thin native shell that always loads the live site:
 1. On a Windows machine with Visual Studio 2022 + **Windows App SDK / WinUI 3** and
    **WebView2** runtime installed.
 2. Create a blank WinUI 3 Desktop app.
-3. Host a `WebView2` control and navigate to `https://ali-finpilot.vercel.app`.
-4. Set the window title to **FinPilot** and use icons from `public/icons/`.
+3. Host a `WebView2` control and navigate to `https://app.ballastmoney.com`.
+4. Set the window title to **Ballast** and use icons from `public/icons/`.
 
 A starter pointer lives in `windows/webview2-host.md`. This is optional — Option A or B is
 enough for most users.
@@ -85,9 +85,9 @@ enough for most users.
 
 After deploy:
 
-- Manifest: https://ali-finpilot.vercel.app/manifest.webmanifest
-- Service worker: https://ali-finpilot.vercel.app/sw.js
-- Chrome DevTools → Application → Manifest / Service Workers should show FinPilot as installable.
+- Manifest: https://app.ballastmoney.com/manifest.webmanifest
+- Service worker: https://app.ballastmoney.com/sw.js
+- Chrome DevTools → Application → Manifest / Service Workers should show Ballast as installable.
 
 ---
 

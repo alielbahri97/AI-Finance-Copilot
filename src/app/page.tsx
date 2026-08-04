@@ -2,10 +2,12 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowRightIcon, BotIcon, LineChartIcon, ShieldCheckIcon, WalletIcon } from "lucide-react";
 
+import { BallastBadge } from "@/components/brand/ballast-mark";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ReportIssueButton } from "@/components/report-issue/report-issue-button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { BRAND, editionBranding } from "@/lib/branding";
 import { isSupabaseConfigured } from "@/lib/env";
 import { getUser } from "@/lib/supabase/server";
 
@@ -55,10 +57,8 @@ export default async function LandingPage() {
       <header className="border-b">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-2 font-semibold">
-            <div className="bg-primary text-primary-foreground flex size-8 items-center justify-center rounded-lg">
-              <WalletIcon className="size-4.5" />
-            </div>
-            FinPilot
+            <BallastBadge />
+            {BRAND.name}
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
@@ -75,14 +75,14 @@ export default async function LandingPage() {
       <main id="main-content" tabIndex={-1} className="flex-1 outline-none">
         <section className="mx-auto flex w-full max-w-6xl flex-col items-center gap-6 px-4 py-24 text-center sm:px-6">
           <span className="bg-accent text-accent-foreground rounded-full px-3 py-1 text-xs font-medium">
-            For small and medium-sized businesses
+            For {editionBranding().audience}
           </span>
           <h1 className="max-w-3xl text-4xl font-bold tracking-tight text-balance sm:text-6xl">
-            Understand your money with an AI copilot by your side
+            {editionBranding().tagline}
           </h1>
           <p className="text-muted-foreground max-w-2xl text-lg text-balance">
-            FinPilot tracks income and expenses, turns them into clear insights, and answers your
-            financial questions with AI grounded in real data.
+            {BRAND.name} tracks income and expenses, turns them into clear insights, and answers
+            your financial questions with AI grounded in real data.
           </p>
           <div className="flex flex-col gap-3 sm:flex-row">
             <Button size="lg" asChild>
@@ -114,7 +114,7 @@ export default async function LandingPage() {
 
       <footer className="border-t">
         <div className="text-muted-foreground mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-3 px-4 text-sm sm:px-6">
-          <span>FinPilot</span>
+          <span>{BRAND.name}</span>
           <span className="hidden sm:inline">Built with Next.js, Supabase &amp; AI</span>
         </div>
       </footer>

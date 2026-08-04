@@ -1,5 +1,6 @@
 import "server-only";
 
+import { BRAND } from "@/lib/branding";
 import { logger, serializeError } from "@/lib/logger";
 import {
   appUrl,
@@ -23,7 +24,7 @@ export async function sendInvitationEmail(options: {
   const title = `${options.inviterName} invited you to ${options.workspaceName}`;
   const html = renderAlertEmail({
     title,
-    bodyText: `${options.inviterName} invited you to join the "${options.workspaceName}" workspace on FinPilot.\n\nAccept the invitation with the button below. The link is personal, single-use and expires in 7 days.`,
+    bodyText: `${options.inviterName} invited you to join the "${options.workspaceName}" workspace on ${BRAND.name}.\n\nAccept the invitation with the button below. The link is personal, single-use and expires in 7 days.`,
     ctaLabel: "Accept invitation",
     ctaPath: options.inviteLink.replace(appUrl(), ""),
   });

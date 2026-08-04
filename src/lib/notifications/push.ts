@@ -1,5 +1,6 @@
 import "server-only";
 
+import { BRAND } from "@/lib/branding";
 import { logger, serializeError } from "@/lib/logger";
 
 import webpush from "web-push";
@@ -33,7 +34,7 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
   if (subscriptions.length === 0) return 0;
 
   webpush.setVapidDetails(
-    process.env.VAPID_SUBJECT ?? "mailto:notifications@finpilot.local",
+    process.env.VAPID_SUBJECT || `mailto:notifications@${BRAND.domain}`,
     publicKey,
     privateKey
   );

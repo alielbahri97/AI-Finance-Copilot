@@ -1,4 +1,4 @@
-/** Currencies FinPilot can label amounts with (matches profile + invoice settings). */
+/** Currencies Ballast can label amounts with (matches profile + invoice settings). */
 export const KNOWN_CURRENCY_CODES = new Set([
   "USD",
   "EUR",

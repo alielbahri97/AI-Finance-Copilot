@@ -11,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { BRAND } from "@/lib/branding";
 import { prisma } from "@/lib/prisma";
 import { getWorkspaceContext } from "@/lib/workspace/context";
 
@@ -86,8 +87,8 @@ export default async function CategoriesPage() {
             <CardTitle>Auto-categorization rules</CardTitle>
             <CardDescription>
               Applied on import and when you add transactions. Matching description or
-              counterparty text gets that category. Manual category changes also teach FinPilot
-              new rules for similar merchants.
+              counterparty text gets that category. Manual category changes also teach{" "}
+              {BRAND.name} new rules for similar merchants.
             </CardDescription>
           </CardHeader>
           <CardContent>

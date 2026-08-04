@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { WalletIcon } from "lucide-react";
 
+import { BallastBadge } from "@/components/brand/ballast-mark";
 import { ADMIN_NAV_ITEM, NAV_ITEMS } from "@/components/dashboard/nav-items";
 import { ReportIssueButton } from "@/components/report-issue/report-issue-button";
+import { BRAND, editionBranding } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 
 export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
@@ -15,10 +16,8 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
   return (
     <aside className="bg-sidebar text-sidebar-foreground border-sidebar-border hidden w-60 shrink-0 flex-col border-r lg:flex">
       <div className="flex h-16 items-center gap-2 border-b px-5 font-semibold">
-        <div className="bg-primary text-primary-foreground flex size-8 items-center justify-center rounded-lg">
-          <WalletIcon className="size-4.5" />
-        </div>
-        FinPilot
+        <BallastBadge />
+        {BRAND.name}
       </div>
       <nav className="flex flex-1 flex-col gap-1 p-3">
         {items.map((item) => {
@@ -41,7 +40,7 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
         })}
       </nav>
       <div className="text-muted-foreground border-t p-4 text-xs">
-        <p>Built for small and medium-sized businesses</p>
+        <p>Built for {editionBranding().audience}</p>
         <ReportIssueButton
           variant="inline"
           className="mt-2 h-8 w-full justify-start px-2 text-xs"

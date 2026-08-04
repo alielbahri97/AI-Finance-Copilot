@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getOrCreateStripeCustomer, getStripe } from "@/lib/billing/stripe";
 import { getOrCreateProfile } from "@/lib/data";
+import { getAppUrl } from "@/lib/env-url";
 import { enforceRateLimit } from "@/lib/api/rate-limit-guard";
 import { apiError } from "@/lib/api/response";
 import { recordAudit } from "@/lib/workspace/audit";
@@ -39,7 +40,9 @@ export async function POST(request: Request) {
       user.id,
       profile.email
     );
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin;
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim()
+      ? getAppUrl()
+      : new URL(request.url).origin;
 
     const session = await stripe.billingPortal.sessions.create({
       customer: customerId,

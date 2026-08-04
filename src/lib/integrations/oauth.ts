@@ -1,5 +1,7 @@
 import "server-only";
 
+import { getAppUrl } from "@/lib/env-url";
+
 import type { IntegrationProvider, OAuthConfig } from "./registry";
 
 /** Normalized token endpoint response. */
@@ -18,7 +20,7 @@ export class IntegrationError extends Error {}
 export class IntegrationAuthError extends IntegrationError {}
 
 export function appUrl(): string {
-  return (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+  return getAppUrl();
 }
 
 export function redirectUri(providerId: string): string {

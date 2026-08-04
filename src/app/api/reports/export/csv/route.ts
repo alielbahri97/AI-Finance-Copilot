@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { trackEvent } from "@/lib/analytics";
 import { incrementUsage } from "@/lib/billing/entitlements";
+import { BRAND_SLUG } from "@/lib/branding";
 import { buildReport, getReportTransactions } from "@/lib/reports/data";
 import { buildMonthlySummaryCsv, buildTransactionsCsv } from "@/lib/reports/export-csv";
 import { periodSlug, resolveReportRequest } from "@/lib/reports/query";
@@ -29,7 +30,7 @@ export async function GET(request: Request) {
     return new NextResponse(`\uFEFF${csv}`, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="finpilot-${suffix}-${periodSlug(period)}.csv"`,
+        "Content-Disposition": `attachment; filename="${BRAND_SLUG}-${suffix}-${periodSlug(period)}.csv"`,
         "Cache-Control": "no-store",
       },
     });

@@ -114,7 +114,7 @@ describe("sendEmail", () => {
 
   it("reports sent on a 2xx response", async () => {
     process.env.RESEND_API_KEY = "re_test_key";
-    process.env.EMAIL_FROM = "FinPilot <hi@example.com>";
+    process.env.EMAIL_FROM = "Ballast <hi@example.com>";
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ id: "abc" }), { status: 200 })
     );
@@ -142,7 +142,7 @@ describe("sendEmail", () => {
 
   it("never throws when the network call blows up", async () => {
     process.env.RESEND_API_KEY = "re_test_key";
-    process.env.EMAIL_FROM = "FinPilot <hi@example.com>";
+    process.env.EMAIL_FROM = "Ballast <hi@example.com>";
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("fetch failed"));
 
     expect(await sendEmail("partner@example.com", "Hi", "<p>Hi</p>")).toEqual({

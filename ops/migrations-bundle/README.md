@@ -256,13 +256,19 @@ You can also check without changing anything:
 npm run db:apply -- --dry-run
 ```
 
-**Windows caveat.** The migration files are stored with LF line endings, and the
-checksums below are the LF checksums. Git on Windows with `core.autocrlf=true`
-rewrites text files to CRLF on checkout, which changes their bytes and therefore
-their SHA-256. If you run `db:apply` from a fresh Windows clone after applying
-this bundle, it may print a "checksum mismatch" warning for 0013/0014/0015. That
-warning is cosmetic — it does not re-run or fail anything. To avoid it, clone
-with `git -c core.autocrlf=false clone …` or run the route from WSL/macOS/Linux.
+**Line-ending caveat.** `db:apply` hashes the migration file's bytes as they sit
+on disk, and Git on Windows with `core.autocrlf=true` rewrites LF to CRLF on
+checkout — so the same file hashes differently on different machines. The
+bundles were generated on Windows, and three files (`0010`, `0011`, `0012`) were
+checked out CRLF there, so it is their **CRLF** checksums that the baseline
+block records. On Linux/macOS, `db:apply` will therefore print a "checksum
+mismatch" warning for those three. `0013`–`0016` are LF everywhere and match on
+any platform.
+
+The warning is cosmetic either way: `db:apply` neither re-runs the migration nor
+fails on it. It only ever appears at all if the baseline block ran, which
+happens only on a database with no migration history — production's rows came
+from round 1, so this does not apply there.
 
 ---
 

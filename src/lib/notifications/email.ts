@@ -1,5 +1,7 @@
 import "server-only";
 
+import { BRAND } from "@/lib/branding";
+import { getAppUrl } from "@/lib/env-url";
 import { logger, serializeError } from "@/lib/logger";
 
 /**
@@ -138,8 +140,7 @@ export async function sendEmail(
 /* ------------------------------------------------------------------ */
 
 export function appUrl(path = ""): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  return `${base.replace(/\/$/, "")}${path}`;
+  return `${getAppUrl()}${path}`;
 }
 
 function escapeHtml(value: string): string {
@@ -180,7 +181,7 @@ function emailShell(title: string, contentHtml: string): string {
           <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;">
             <tr>
               <td style="background-color:#0f172a;padding:20px 32px;">
-                <span style="color:#ffffff;font-size:18px;font-weight:700;">FinPilot</span>
+                <span style="color:#ffffff;font-size:18px;font-weight:700;">${escapeHtml(BRAND.name)}</span>
               </td>
             </tr>
             <tr>
@@ -193,7 +194,7 @@ function emailShell(title: string, contentHtml: string): string {
               <td style="padding:16px 32px;border-top:1px solid #e2e8f0;">
                 <p style="margin:0;color:#94a3b8;font-size:12px;line-height:1.5;">
                   You are receiving this because email notifications are enabled in your
-                  <a href="${appUrl("/settings")}" style="color:#64748b;">FinPilot settings</a>.
+                  <a href="${appUrl("/settings")}" style="color:#64748b;">${escapeHtml(BRAND.name)} settings</a>.
                 </p>
               </td>
             </tr>

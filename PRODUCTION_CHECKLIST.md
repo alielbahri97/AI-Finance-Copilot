@@ -21,9 +21,11 @@ apply if you enable that feature.
 ## Supabase
 
 - [ ] Production site URL and `https://<domain>/auth/callback` configured under
-      Authentication → URL Configuration. For ali-finpilot:
-      Site URL = `https://ali-finpilot.vercel.app`, Redirect URLs include
-      `https://ali-finpilot.vercel.app/auth/callback` (and `/auth/confirm` if used).
+      Authentication → URL Configuration. For this deployment:
+      Site URL = `https://app.ballastmoney.com`, Redirect URLs include
+      `https://app.ballastmoney.com/auth/callback` (and `/auth/confirm` if used).
+      Keep the `https://ali-finpilot.vercel.app/**` entry — that is still the
+      Vercel project's own hostname and preview builds sign in through it.
       Remove or demote `http://localhost:3000` as Site URL once production is live.
 - [ ] Email confirmations enabled and email templates reviewed (sender name, links)
 - [ ] Private `invoices` storage bucket created with the per-user RLS policy from the README

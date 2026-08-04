@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { trackEvent } from "@/lib/analytics";
 import { incrementUsage } from "@/lib/billing/entitlements";
+import { BRAND_SLUG } from "@/lib/branding";
 import { buildReport } from "@/lib/reports/data";
 import { buildPdfReport } from "@/lib/reports/export-pdf";
 import { periodSlug, resolveReportRequest } from "@/lib/reports/query";
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
     return new NextResponse(Buffer.from(bytes), {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="finpilot-report-${periodSlug(period)}.pdf"`,
+        "Content-Disposition": `attachment; filename="${BRAND_SLUG}-report-${periodSlug(period)}.pdf"`,
         "Cache-Control": "no-store",
       },
     });

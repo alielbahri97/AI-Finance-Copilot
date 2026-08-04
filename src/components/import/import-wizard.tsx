@@ -33,6 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { BRAND } from "@/lib/branding";
 import { normalizeRows } from "@/lib/csv/normalize";
 import type { ColumnMapping, ColumnRole, NormalizedRow, RowError, StatementCurrencyInfo } from "@/lib/csv/types";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -321,9 +322,9 @@ export function ImportWizard({ currency }: ImportWizardProps) {
             {parseResult.currencyMismatch ? (
               <p>
                 Your profile is set to <strong>{parseResult.profileCurrency}</strong>, but this
-                file looks like <strong>{parseResult.statementCurrency.code}</strong>. FinPilot
-                does not convert FX — amounts are labeled with your profile currency unless you
-                update it.
+                file looks like <strong>{parseResult.statementCurrency.code}</strong>.{" "}
+                {BRAND.name} does not convert FX — amounts are labeled with your profile currency
+                unless you update it.
               </p>
             ) : (
               <p>
