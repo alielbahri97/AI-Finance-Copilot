@@ -50,8 +50,10 @@ export async function GET(
     if (provider.flow === "redirect" && provider.id === "gocardless") {
       const institution =
         new URL(request.url).searchParams.get("institution") ||
-        process.env.GOCARDLESS_INSTITUTION_ID ||
-        "SANDBOXFINANCE_SFIN0000";
+        process.env.GOCARDLESS_INSTITUTION_ID;
+      if (!institution) {
+        return backToIntegrations("Pick a bank first, then connect.");
+      }
       const reference = `${user.id}:${randomBytes(8).toString("hex")}`;
       const { requisitionId, link } = await createRequisition(institution, reference);
       const response = NextResponse.redirect(link);

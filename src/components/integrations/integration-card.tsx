@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangleIcon,
+  CalendarClockIcon,
+  HourglassIcon,
   Loader2Icon,
   PlugIcon,
   RefreshCwIcon,
@@ -34,8 +36,31 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 
+import { GoCardlessConnectButton } from "./gocardless-connect";
 import { PlaidConnectButton } from "./plaid-connect";
 import { CAPABILITY_LABELS, type IntegrationCardData } from "./types";
+
+/** Days before consent expiry at which the renew warning appears. */
+const CONSENT_WARNING_DAYS = 14;
+
+function consentDaysLeft(iso: string | null): number | null {
+  if (!iso) return null;
+  const expires = Date.parse(iso);
+  if (!Number.isFinite(expires)) return null;
+  return Math.floor((expires - Date.now()) / (24 * 60 * 60 * 1000));
+}
+
+function rateLimitedUntilLabel(iso: string | null): string | null {
+  if (!iso) return null;
+  const until = Date.parse(iso);
+  if (!Number.isFinite(until) || until <= Date.now()) return null;
+  return new Date(until).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 function StatusBadge({ data }: { data: IntegrationCardData }) {
   if (!data.configured) return <Badge variant="secondary">Not configured</Badge>;
@@ -199,6 +224,14 @@ export function IntegrationCard({ data }: { data: IntegrationCardData }) {
   };
 
   const connection = data.connection;
+  const daysLeft = consentDaysLeft(connection?.consentExpiresAt ?? null);
+  const consentExpiring =
+    connection?.status === "CONNECTED" &&
+    daysLeft !== null &&
+    daysLeft >= 0 &&
+    daysLeft <= CONSENT_WARNING_DAYS;
+  const rateLimitLabel = rateLimitedUntilLabel(connection?.rateLimitedUntil ?? null);
+  const pickerCountry = data.bankPickerCountry ?? "GB";
 
   return (
     <Card className="flex flex-col">
@@ -239,12 +272,30 @@ export function IntegrationCard({ data }: { data: IntegrationCardData }) {
             {data.syncable ? (
               <p className="text-muted-foreground">{formatLastSync(connection.lastSyncAt)}</p>
             ) : null}
+            {consentExpiring ? (
+              <p className="flex items-start gap-1.5 text-amber-600 dark:text-amber-400">
+                <CalendarClockIcon className="mt-0.5 size-3.5 shrink-0" />
+                <span>
+                  Bank consent expires {daysLeft === 0 ? "today" : `in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`}{" "}
+                  — renew it to keep syncing without interruption.
+                </span>
+              </p>
+            ) : null}
+            {rateLimitLabel ? (
+              <p className="text-muted-foreground flex items-start gap-1.5">
+                <HourglassIcon className="mt-0.5 size-3.5 shrink-0" />
+                <span>
+                  Your bank&apos;s daily data limit was reached — syncing resumes automatically
+                  after {rateLimitLabel}.
+                </span>
+              </p>
+            ) : null}
             {connection.lastError ? (
               <p className="text-destructive flex items-start gap-1.5">
                 <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" />
                 <span className="line-clamp-3">
                   {connection.status === "EXPIRED"
-                    ? "Access expired — reconnect to resume syncing."
+                    ? "Access expired — reconnect to resume syncing. Your imported data is unaffected."
                     : connection.lastError}
                 </span>
               </p>
@@ -271,6 +322,8 @@ export function IntegrationCard({ data }: { data: IntegrationCardData }) {
             <PlaidConnectButton />
           ) : data.flow === "webhook" ? (
             <WebhookConnectDialog data={data} />
+          ) : data.id === "gocardless" ? (
+            <GoCardlessConnectButton defaultCountry={pickerCountry} />
           ) : (
             <Button size="sm" asChild>
               <a href={`/api/integrations/${data.id}/connect`}>
@@ -284,6 +337,8 @@ export function IntegrationCard({ data }: { data: IntegrationCardData }) {
         {connection?.status === "EXPIRED" && data.configured ? (
           data.flow === "plaid" ? (
             <PlaidConnectButton />
+          ) : data.id === "gocardless" ? (
+            <GoCardlessConnectButton defaultCountry={pickerCountry} variant="reconnect" />
           ) : data.flow === "oauth2" || data.flow === "redirect" ? (
             <Button size="sm" asChild>
               <a href={`/api/integrations/${data.id}/connect`}>
@@ -292,6 +347,10 @@ export function IntegrationCard({ data }: { data: IntegrationCardData }) {
               </a>
             </Button>
           ) : null
+        ) : null}
+
+        {consentExpiring && data.configured && data.id === "gocardless" ? (
+          <GoCardlessConnectButton defaultCountry={pickerCountry} variant="renew" />
         ) : null}
 
         {connection && data.syncable && connection.status !== "EXPIRED" ? (

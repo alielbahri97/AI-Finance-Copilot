@@ -15,7 +15,8 @@ const csp = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""} https://cdn.plaid.com`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' blob: data: https://*.supabase.co",
+  // GoCardless institution logos are served from their CDN / GCS buckets.
+  "img-src 'self' blob: data: https://*.supabase.co https://cdn-logos.gocardless.com https://storage.googleapis.com",
   "font-src 'self' data:",
   "connect-src 'self' https://*.supabase.co https://sandbox.plaid.com https://production.plaid.com wss://*.supabase.co",
   "frame-src https://cdn.plaid.com https://*.supabase.co",

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CheckCircle2Icon, LockIcon, TriangleAlertIcon } from "lucide-react";
 
+import { FirstSyncBanner } from "@/components/integrations/first-sync-banner";
 import { IntegrationCard } from "@/components/integrations/integration-card";
 import type { IntegrationCardData } from "@/components/integrations/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -25,6 +26,51 @@ export const metadata: Metadata = {
 
 const CATEGORY_ORDER: IntegrationCategory[] = ["banking", "accounting", "productivity"];
 
+/** Default bank-picker country from the profile currency (GoCardless covers EEA + UK). */
+const CURRENCY_TO_COUNTRY: Record<string, string> = {
+  GBP: "GB",
+  EUR: "NL",
+  SEK: "SE",
+  NOK: "NO",
+  DKK: "DK",
+  PLN: "PL",
+  CZK: "CZ",
+  HUF: "HU",
+  RON: "RO",
+  BGN: "BG",
+  ISK: "IS",
+};
+
+function gocardlessLabel(metadata: Record<string, unknown>): string | null {
+  const accounts = metadata.accounts as string[] | undefined;
+  if (!accounts?.length) return null;
+
+  const parts: string[] = [];
+  if (typeof metadata.institutionName === "string" && metadata.institutionName) {
+    parts.push(metadata.institutionName);
+  }
+  parts.push(`${accounts.length} account${accounts.length > 1 ? "s" : ""}`);
+
+  // Balance summary when every account reports the same currency.
+  const balances = metadata.balances as
+    | Record<string, { amount: number; currency: string }>
+    | undefined;
+  const entries = accounts.map((id) => balances?.[id]).filter(Boolean) as Array<{
+    amount: number;
+    currency: string;
+  }>;
+  if (entries.length > 0 && entries.every((entry) => entry.currency === entries[0].currency)) {
+    const total = entries.reduce((sum, entry) => sum + entry.amount, 0);
+    parts.push(
+      `${new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency: entries[0].currency,
+      }).format(total)} available`
+    );
+  }
+  return parts.join(" · ");
+}
+
 function accountLabel(provider: string, metadata: Record<string, unknown>): string | null {
   switch (provider) {
     case "slack":
@@ -37,15 +83,22 @@ function accountLabel(provider: string, metadata: Record<string, unknown>): stri
       return metadata.realmId ? `Company ${metadata.realmId}` : null;
     case "exact":
       return metadata.division ? `Division ${metadata.division}` : null;
-    case "gocardless": {
-      const accounts = metadata.accounts as string[] | undefined;
-      return accounts?.length
-        ? `${accounts.length} bank account${accounts.length > 1 ? "s" : ""} linked`
-        : null;
-    }
+    case "gocardless":
+      return gocardlessLabel(metadata);
     default:
       return null;
   }
+}
+
+/** Latest still-active per-account rate-limit window, for the card note. */
+function rateLimitedUntil(metadata: Record<string, unknown>): string | null {
+  const map = metadata.rateLimitedUntil as Record<string, string> | undefined;
+  if (!map) return null;
+  const future = Object.values(map)
+    .map((value) => Date.parse(value))
+    .filter((time) => Number.isFinite(time) && time > Date.now());
+  if (future.length === 0) return null;
+  return new Date(Math.max(...future)).toISOString();
 }
 
 export default async function IntegrationsPage({
@@ -87,13 +140,17 @@ export default async function IntegrationsPage({
   }
 
   const encryptionReady = isEncryptionConfigured();
-  const connections = await prisma.integrationConnection.findMany({
-    where: { userId: user.id },
-    include: {
-      syncRuns: { orderBy: { startedAt: "desc" }, take: 1 },
-    },
-  });
+  const [connections, profile] = await Promise.all([
+    prisma.integrationConnection.findMany({
+      where: { userId: user.id },
+      include: {
+        syncRuns: { orderBy: { startedAt: "desc" }, take: 1 },
+      },
+    }),
+    prisma.profile.findUnique({ where: { id: user.id }, select: { currency: true } }),
+  ]);
   const byProvider = new Map(connections.map((connection) => [connection.provider, connection]));
+  const bankPickerCountry = CURRENCY_TO_COUNTRY[profile?.currency ?? ""] ?? "GB";
 
   const cards: IntegrationCardData[] = getProviders().map((provider) => {
     const connection = byProvider.get(provider.id);
@@ -112,6 +169,7 @@ export default async function IntegrationsPage({
         ...provider.envVars.filter((envVar) => !process.env[envVar]),
       ],
       syncable: provider.syncIntervalHours !== null,
+      bankPickerCountry,
       connection: connection
         ? {
             status: connection.status,
@@ -120,10 +178,27 @@ export default async function IntegrationsPage({
             accountLabel: accountLabel(provider.id, metadata),
             calendarEnabled: metadata.calendarEnabled === true,
             lastRunStats: (lastRun?.stats as Record<string, number> | null) ?? null,
+            consentExpiresAt:
+              typeof metadata.consentExpiresAt === "string" ? metadata.consentExpiresAt : null,
+            rateLimitedUntil: rateLimitedUntil(metadata),
           }
         : null,
     };
   });
+
+  const connectedCard = params.connected
+    ? cards.find((card) => card.id === params.connected)
+    : undefined;
+  const firstSyncEligible = Boolean(
+    connectedCard?.connection &&
+      connectedCard.syncable &&
+      connectedCard.capabilities.includes("transactions")
+  );
+  const connectedMetadata =
+    (byProvider.get(connectedCard?.id ?? "")?.metadata as Record<string, unknown> | null) ?? {};
+  const connectedAccountCount = Array.isArray(connectedMetadata.accounts)
+    ? connectedMetadata.accounts.length
+    : null;
 
   return (
     <div className="space-y-6">
@@ -135,13 +210,21 @@ export default async function IntegrationsPage({
         </p>
       </div>
 
-      {params.connected ? (
+      {connectedCard && firstSyncEligible ? (
+        <FirstSyncBanner
+          providerId={connectedCard.id}
+          providerName={connectedCard.name}
+          accountCount={connectedAccountCount}
+        />
+      ) : params.connected ? (
         <Alert>
           <CheckCircle2Icon className="size-4" />
           <AlertTitle>Connected</AlertTitle>
           <AlertDescription>
-            {cards.find((card) => card.id === params.connected)?.name ?? params.connected} was
-            connected successfully. The first sync will run automatically, or use Sync now.
+            {connectedCard?.name ?? params.connected} was connected successfully.
+            {connectedCard?.syncable
+              ? " The first sync will run automatically, or use Sync now."
+              : ""}
           </AlertDescription>
         </Alert>
       ) : null}

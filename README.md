@@ -385,7 +385,7 @@ as the redirect URI (`<id>` = `tink`, `quickbooks`, `xero`, `exact`, `gmail`, `o
 | --- | --- | --- |
 | Plaid | [dashboard.plaid.com](https://dashboard.plaid.com) | Copy client id + secret; `PLAID_ENV=sandbox` to start. Uses Plaid Link, no redirect URI needed. |
 | Tink | [console.tink.com](https://console.tink.com) | Create an app, add the redirect URI, set `TINK_MARKET`. |
-| GoCardless | [bankaccountdata.gocardless.com](https://bankaccountdata.gocardless.com) | Create *user secrets* (`GOCARDLESS_SECRET_ID`/`_KEY`). Uses requisitions, not OAuth; set `GOCARDLESS_INSTITUTION_ID` or pass `?institution=` when connecting. |
+| GoCardless | [bankaccountdata.gocardless.com](https://bankaccountdata.gocardless.com) | Create *user secrets* (`GOCARDLESS_SECRET_ID`/`_KEY`). Uses requisitions, not OAuth: the connect dialog shows a searchable bank picker per country and creates an end-user agreement sized to the bank (up to 180 days consent, full history). Set `GOCARDLESS_INSTITUTION_ID=SANDBOXFINANCE_SFIN0000` to surface the sandbox bank in the picker. Bank rate limits (as low as 4 calls/account/day) are respected: throttled accounts are skipped and retried after the bank's reset window. |
 | QuickBooks | [developer.intuit.com](https://developer.intuit.com) | App with the *Accounting* scope; add the redirect URI. `QUICKBOOKS_ENV=sandbox` for test companies. |
 | Xero | [developer.xero.com](https://developer.xero.com) | Web app; scopes `offline_access accounting.transactions.read accounting.contacts.read`. |
 | Exact Online | [apps.exactonline.com](https://apps.exactonline.com) | Register an app in your region and set `EXACT_REGION` (e.g. `start.exactonline.nl`). |

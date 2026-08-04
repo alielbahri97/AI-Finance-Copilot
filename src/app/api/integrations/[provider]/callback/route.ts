@@ -44,7 +44,8 @@ export async function GET(
     const query = Object.fromEntries(request.nextUrl.searchParams.entries());
 
     if (query.error) {
-      return finish(`${provider.name}: ${query.error_description || query.error}`);
+      // GoCardless sends error + details; OAuth providers error_description.
+      return finish(`${provider.name}: ${query.error_description || query.details || query.error}`);
     }
 
     if (provider.flow === "redirect" && provider.id === "gocardless") {
@@ -52,9 +53,17 @@ export async function GET(
       if (!requisitionId) {
         return finish("The connection session expired. Try again.");
       }
-      const { accounts, institutionId } = await finalizeRequisition(requisitionId);
+      const finalized = await finalizeRequisition(requisitionId);
       await saveConnection(user.id, provider.id, {
-        metadata: { requisitionId, accounts, institutionId },
+        metadata: {
+          requisitionId,
+          accounts: finalized.accounts,
+          accountLabels: finalized.accountLabels,
+          institutionId: finalized.institutionId,
+          institutionName: finalized.institutionName,
+          consentExpiresAt: finalized.consentExpiresAt,
+          maxHistoricalDays: finalized.maxHistoricalDays,
+        },
       });
       return finish(undefined, provider.id);
     }

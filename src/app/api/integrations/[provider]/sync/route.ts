@@ -46,7 +46,19 @@ export async function POST(
         { status: 502 }
       );
     }
-    return NextResponse.json({ ok: true, status: outcome.status, stats: outcome.stats ?? {} });
+
+    // Bank providers record the ImportBatch of the sync so the UI can link
+    // straight to the imported transactions.
+    const refreshed = await getConnection(access.user.id, provider.id);
+    const batchId =
+      (refreshed?.metadata as Record<string, unknown> | null)?.lastBatchId ?? null;
+
+    return NextResponse.json({
+      ok: true,
+      status: outcome.status,
+      stats: outcome.stats ?? {},
+      batchId: typeof batchId === "string" ? batchId : null,
+    });
   } catch (error) {
     return apiError(`POST /api/integrations/${providerId}/sync`, "Sync failed", error);
   }

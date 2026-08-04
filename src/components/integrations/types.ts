@@ -10,14 +10,20 @@ export interface IntegrationCardData {
   missingEnvVars: string[];
   /** Whether the provider has something to sync (vs. outgoing-only). */
   syncable: boolean;
+  /** Default country for the GoCardless bank picker (from the profile). */
+  bankPickerCountry?: string;
   connection: {
     status: "CONNECTED" | "ERROR" | "EXPIRED";
     lastSyncAt: string | null;
     lastError: string | null;
-    /** Slack channel / Xero tenant / Plaid institution, when known. */
+    /** Slack channel / Xero tenant / bank + account summary, when known. */
     accountLabel: string | null;
     calendarEnabled: boolean;
     lastRunStats: Record<string, number> | null;
+    /** End-user agreement expiry (GoCardless consent), when known. */
+    consentExpiresAt: string | null;
+    /** Latest future per-account rate-limit window, when the bank throttled us. */
+    rateLimitedUntil: string | null;
   } | null;
 }
 
