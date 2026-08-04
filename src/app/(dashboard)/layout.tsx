@@ -6,7 +6,7 @@ import { Header } from "@/components/dashboard/header";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { HelpLauncher } from "@/components/help/help-launcher";
 import { getOrCreateProfile } from "@/lib/data";
-import { describeDatabaseError, isDatabaseUnavailable } from "@/lib/db-errors";
+import { classifyDatabaseFailure, describeDatabaseError } from "@/lib/db-errors";
 import { logger } from "@/lib/logger";
 import { isOnboardingDone } from "@/lib/onboarding/benchmarks";
 import { prisma } from "@/lib/prisma";
@@ -64,11 +64,20 @@ export default async function DashboardLayout({ children }: { children: React.Re
   } catch (error) {
     unstable_rethrow(error);
 
-    if (isDatabaseUnavailable(error)) {
-      logger.error("dashboard_db_unavailable", {
-        error: describeDatabaseError(error),
-      });
-      return <DatabaseUnavailable email={user.email} />;
+    // Data access still fails closed — we only render a clearer explanation
+    // than an unhandled 500, never any workspace content.
+    const failure = classifyDatabaseFailure(error);
+    if (failure) {
+      logger.error(
+        failure === "schema_outdated" ? "dashboard_schema_outdated" : "dashboard_db_unavailable",
+        { error: describeDatabaseError(error) }
+      );
+      return (
+        <DatabaseUnavailable
+          email={user.email}
+          reason={failure === "schema_outdated" ? "schema-outdated" : "unreachable"}
+        />
+      );
     }
 
     throw error;

@@ -35,11 +35,19 @@ const FEATURES = [
 ];
 
 export default async function LandingPage() {
+  // The public page must render even when auth is unreachable, so a signed-in
+  // visitor is only bounced to the dashboard when we positively know who they
+  // are. redirect() throws, so it has to happen outside the try.
+  let user = null;
   if (isSupabaseConfigured()) {
-    const user = await getUser();
-    if (user) {
-      redirect("/dashboard");
+    try {
+      user = await getUser();
+    } catch {
+      // Treat an unresolvable session as anonymous and show the marketing page.
     }
+  }
+  if (user) {
+    redirect("/dashboard");
   }
 
   return (

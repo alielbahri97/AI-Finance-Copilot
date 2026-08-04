@@ -5,7 +5,9 @@
  * - Network-first for navigations; cache-first for same-origin static assets
  */
 
-const CACHE_NAME = "finpilot-shell-v1";
+// Bumping the version evicts the previous cache on activate — including any
+// error page a broken deploy left behind as the offline shell.
+const CACHE_NAME = "finpilot-shell-v2";
 const PRECACHE_URLS = ["/", "/dashboard", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -38,13 +40,17 @@ self.addEventListener("fetch", (event) => {
   // Never cache API or auth flows.
   if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/")) return;
 
-  // Navigations: network-first, fall back to cached shell.
+  // Navigations: network-first, fall back to cached shell. Only successful
+  // responses are cached — caching a 500 would keep serving the failure long
+  // after the server recovered.
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const copy = response.clone();
-          void caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          if (response.ok) {
+            const copy = response.clone();
+            void caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          }
           return response;
         })
         .catch(() =>
@@ -67,8 +73,10 @@ self.addEventListener("fetch", (event) => {
         (cached) =>
           cached ||
           fetch(request).then((response) => {
-            const copy = response.clone();
-            void caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+            if (response.ok) {
+              const copy = response.clone();
+              void caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+            }
             return response;
           })
       )

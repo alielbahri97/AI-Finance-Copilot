@@ -577,9 +577,17 @@ recorded per workspace (`AuditLog`) and visible to owners/admins in *Settings �
 - `src/lib/logger.ts` emits one JSON line per event (`level`, `time`, `msg`, plus fields
   like `route`, `userId`, `durationMs`, serialized `error`) from every API route, cron job
   and background lib — parseable by Vercel Log Drains, Datadog, Loki, CloudWatch, etc.
-- `GET /api/health` checks database connectivity and the private `invoices` Storage bucket
-  (`storage.buckets`), returning `200 {status:"ok",db:"up",storage:"up"}` or `503` with
-  `db` / `storage` set to `"down"` — point your uptime monitor or container healthcheck at it.
+- `GET /api/health` checks database connectivity, that the schema matches the deployed code,
+  and the private `invoices` Storage bucket (`storage.buckets`). It returns
+  `200 {status:"ok",db:"up",schema:"ok",storage:"up"}`, or `503` with `db` / `storage` set to
+  `"down"` — point your uptime monitor or container healthcheck at it.
+- **Schema drift** — Vercel deploys on push, but migrations are applied by hand, so new code
+  can go live against an older database. `/api/health` then answers `503` with
+  `schema:"outdated"` plus `missingTables`, `missingColumns` and `pendingMigrations`; fix it
+  with `npm run db:apply`. Meanwhile the app degrades instead of crashing: public pages never
+  query business tables, and dashboard routes render a "FinPilot is mid-update" page. The
+  expected tables/columns live in `src/lib/db/schema-expectations.ts` — extend it whenever a
+  migration adds something the app queries on a hot path.
 - Error boundaries: `src/app/error.tsx` (route errors) and `src/app/global-error.tsx`
   (root-layout errors) log the error digest, which correlates with the server-side log line.
 - **Sentry (optional)** — `@sentry/nextjs` is not bundled (keeps the corporate-registry

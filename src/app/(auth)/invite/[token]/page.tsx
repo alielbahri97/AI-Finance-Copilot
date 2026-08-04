@@ -12,6 +12,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { classifyDatabaseFailure, describeDatabaseError } from "@/lib/db-errors";
+import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 import { assessInvitation, hashInviteToken } from "@/lib/workspace/invitations";
@@ -38,27 +40,76 @@ const INVALID_MESSAGES: Record<string, { title: string; body: string }> = {
   },
 };
 
+type InvitationRow = Awaited<ReturnType<typeof findInvitation>>;
+
+function findInvitation(token: string) {
+  return prisma.workspaceInvitation.findUnique({
+    where: { tokenHash: hashInviteToken(token) },
+    select: {
+      email: true,
+      role: true,
+      expiresAt: true,
+      acceptedAt: true,
+      revokedAt: true,
+      workspace: { select: { name: true } },
+      invitedBy: { select: { fullName: true, email: true } },
+    },
+  });
+}
+
+/**
+ * This is a public page, so a database problem must not turn into a 500 on an
+ * unauthenticated route. "unavailable" is distinct from "not found": we cannot
+ * tell whether the invitation is valid, so nothing is offered — fail closed.
+ */
+async function loadInvitation(
+  token: string
+): Promise<{ ok: true; invitation: InvitationRow } | { ok: false }> {
+  try {
+    return { ok: true, invitation: await findInvitation(token) };
+  } catch (error) {
+    logger.error("invite_lookup_failed", {
+      failure: classifyDatabaseFailure(error) ?? "unknown",
+      error: describeDatabaseError(error),
+    });
+    return { ok: false };
+  }
+}
+
 export default async function InvitePage({
   params,
 }: {
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
-  const [user, invitation] = await Promise.all([
-    getUser(),
-    prisma.workspaceInvitation.findUnique({
-      where: { tokenHash: hashInviteToken(token) },
-      select: {
-        email: true,
-        role: true,
-        expiresAt: true,
-        acceptedAt: true,
-        revokedAt: true,
-        workspace: { select: { name: true } },
-        invitedBy: { select: { fullName: true, email: true } },
-      },
-    }),
+  const [user, lookup] = await Promise.all([
+    // An unresolvable session just means "not signed in yet" here.
+    getUser().catch(() => null),
+    loadInvitation(token),
   ]);
+
+  if (!lookup.ok) {
+    return (
+      <Card>
+        <CardHeader className="text-center">
+          <MailQuestionIcon className="text-muted-foreground mx-auto size-8" aria-hidden />
+          <CardTitle className="text-xl">We can&apos;t check this invitation</CardTitle>
+          <CardDescription>
+            FinPilot is having trouble reading its database, so we can&apos;t confirm whether
+            this invitation is still valid. Your link is not used up — try again in a few
+            minutes.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex justify-center">
+          <Button asChild variant="outline">
+            <Link href="/">Back to FinPilot</Link>
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const invitation = lookup.invitation;
 
   if (!invitation) {
     return (

@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { Client } from "pg";
 
+import {
+  expectedColumns,
+  expectedTables,
+  findSchemaDrift,
+  isSchemaUpToDate,
+  type SchemaDrift,
+} from "@/lib/db/schema-expectations";
 import { describeDatabaseError } from "@/lib/db-errors";
 import { INVOICE_BUCKET } from "@/lib/invoices/storage";
 import { logger } from "@/lib/logger";
@@ -28,11 +35,41 @@ async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 /**
+ * Two catalog lookups (index-backed, sub-millisecond) telling us whether the
+ * database has everything the deployed code queries. Catches the window where
+ * Vercel has shipped new code but the migrations have not been applied yet.
+ */
+async function checkSchema(client: Client): Promise<SchemaDrift> {
+  const tables = await client.query<{ table_name: string }>(
+    `SELECT table_name
+       FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name = ANY($1::text[])`,
+    [expectedTables()]
+  );
+
+  const columns = await client.query<{ table_name: string; column_name: string }>(
+    `SELECT table_name, column_name
+       FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = ANY($1::text[])
+        AND column_name = ANY($2::text[])`,
+    [expectedTables(), expectedColumns()]
+  );
+
+  return findSchemaDrift(
+    tables.rows.map((row) => row.table_name),
+    columns.rows.map((row) => `${row.table_name}.${row.column_name}`)
+  );
+}
+
+/**
  * Liveness/readiness probe for load balancers and uptime monitors.
  * Uses a short-lived dedicated Client (not the shared Prisma pool) so the
- * check never holds pooled connections open. Verifies DB connectivity and
- * that the private `invoices` Storage bucket exists. Unauthenticated by
- * design — exposes only up/down status fields (no secrets).
+ * check never holds pooled connections open. Verifies DB connectivity, that
+ * the schema matches the deployed code, and that the private `invoices`
+ * Storage bucket exists. Unauthenticated by design — exposes only up/down
+ * status fields and the names of missing tables/columns (no secrets).
  */
 export async function GET() {
   const startedAt = Date.now();
@@ -57,6 +94,7 @@ export async function GET() {
 
   const status = { db: false, storage: false };
   let reason: string | undefined;
+  let drift: SchemaDrift | undefined;
 
   const client = new Client({
     connectionString,
@@ -69,6 +107,15 @@ export async function GET() {
         await client.connect();
         await client.query("SELECT 1");
         status.db = true;
+
+        drift = await checkSchema(client);
+        if (!isSchemaUpToDate(drift)) {
+          logger.error("health_schema_outdated", {
+            missingTables: drift.missingTables,
+            missingColumns: drift.missingColumns,
+            pendingMigrations: drift.pendingMigrations,
+          });
+        }
 
         // Parameterized id; public=false matches README §5 setup.
         const rows = await client.query<{ id: string }>(
@@ -108,14 +155,26 @@ export async function GET() {
 
   const db = status.db ? "up" : "down";
   const storage = status.storage ? "up" : "down";
-  const ok = status.db && status.storage;
+  // Unknown when the connection failed before the catalog lookups ran.
+  const schemaOk = drift ? isSchemaUpToDate(drift) : false;
+  const schema = !drift ? "unknown" : schemaOk ? "ok" : "outdated";
+  const ok = status.db && status.storage && schemaOk;
 
   return NextResponse.json(
     {
       status: ok ? "ok" : "degraded",
       db,
       storage,
+      schema,
       ...(!status.db && reason ? { reason } : {}),
+      ...(drift && !schemaOk
+        ? {
+            missingTables: drift.missingTables,
+            missingColumns: drift.missingColumns,
+            pendingMigrations: drift.pendingMigrations,
+            hint: "Run `npm run db:apply` against production to apply pending migrations.",
+          }
+        : {}),
       latencyMs: Date.now() - startedAt,
     },
     {
