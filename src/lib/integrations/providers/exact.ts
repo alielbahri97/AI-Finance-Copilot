@@ -48,7 +48,7 @@ async function afterConnect({ tokens }: { userId: string; tokens: TokenSet }) {
   if (!division) {
     throw new IntegrationError("Could not determine the Exact Online division");
   }
-  return { metadata: { division } };
+  return { externalId: String(division), metadata: { division } };
 }
 
 interface ExactSalesInvoice {

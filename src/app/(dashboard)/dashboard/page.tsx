@@ -9,7 +9,6 @@ import {
   ReceiptTextIcon,
   TrendingDownIcon,
   TrendingUpIcon,
-  WalletIcon,
 } from "lucide-react";
 
 import {
@@ -17,6 +16,7 @@ import {
   CategoryChart,
   OverviewChart,
 } from "@/components/dashboard/charts-lazy";
+import { CashCard, CashLegend } from "@/components/dashboard/cash-card";
 import { LargestExpenses } from "@/components/dashboard/largest-expenses";
 import { RecentTransactions } from "@/components/dashboard/recent-transactions";
 import {
@@ -125,13 +125,7 @@ async function StatsSection({ workspaceId, currency }: { workspaceId: string; cu
         changePct={data.expensesChangePct}
         increaseIsGood={false}
       />
-      <StatCard
-        title="Total balance"
-        value={formatCurrency(data.totalBalance, currency)}
-        hint="Across all recorded transactions"
-        icon={WalletIcon}
-        tone={data.totalBalance >= 0 ? "positive" : "negative"}
-      />
+      <CashCard cash={data.cash} />
       <StatCard
         title="Savings rate"
         value={`${data.savingsRate}%`}
@@ -253,10 +247,15 @@ async function ChartsSection({ workspaceId, currency }: { workspaceId: string; c
         <Card className="lg:col-span-3">
           <CardHeader>
             <CardTitle>Cash balance history</CardTitle>
-            <CardDescription>Running balance across your transactions</CardDescription>
+            <CardDescription>
+              {data.cash.source === "bank"
+                ? "Running balance, ending at your combined bank balance"
+                : "Running balance across your transactions"}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <BalanceChart data={data.balanceHistory} currency={currency} />
+            <CashLegend cash={data.cash} />
           </CardContent>
         </Card>
         <Card className="lg:col-span-2">

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { loadCashPosition } from "@/lib/finance/cash-data";
 import { mapAssumptionRow } from "@/lib/finance/data";
 import { computeForecast, type AssumptionInput, type ForecastResult } from "@/lib/finance/forecast";
 import { detectRecurring, type FinanceTransaction, type RecurringItem } from "@/lib/finance/recurrence";
@@ -145,7 +146,20 @@ export async function buildFinancialSnapshot(
 
   const assumptions: AssumptionInput[] = assumptionRows.map(mapAssumptionRow);
 
-  const forecast = computeForecast({ transactions, priorNet, assumptions, currency, now });
+  const windowNet = transactions.reduce(
+    (sum, tx) => sum + (tx.type === "INCOME" ? tx.amount : -tx.amount),
+    0
+  );
+  const cash = await loadCashPosition(workspaceId, currency, priorNet + windowNet);
+
+  const forecast = computeForecast({
+    transactions,
+    priorNet,
+    assumptions,
+    currency,
+    now,
+    startingBalance: cash.source === "bank" ? cash.total : null,
+  });
 
   /* ---- Monthly summaries (full 12-month axis) ---- */
   const currentKey = monthKeyOf(now);

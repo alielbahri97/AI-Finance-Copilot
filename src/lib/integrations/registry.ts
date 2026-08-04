@@ -47,6 +47,18 @@ export interface IntegrationProvider {
   oauth?: OAuthConfig;
   /** Hours between automatic syncs; null = nothing to sync (outgoing only). */
   syncIntervalHours: number | null;
+  /**
+   * Whether a workspace may hold several connections to this provider. True
+   * only where one connection means one distinct source with an identifier to
+   * key it by — a bank, essentially:
+   *   - gocardless: one requisition per institution
+   *   - plaid:      one Item per institution
+   * It is false for outgoing channels and mailboxes (a second Slack workspace
+   * or Gmail account is not a second set of books), and false for the
+   * accounting providers because their invoice `externalRef`s are namespaced
+   * per provider, not per connection, so two companies could collide.
+   */
+  multiInstance: boolean;
 }
 
 function exactBase(): string {
@@ -65,6 +77,8 @@ export function getProviders(): IntegrationProvider[] {
       flow: "plaid",
       envVars: ["PLAID_CLIENT_ID", "PLAID_SECRET"],
       syncIntervalHours: 6,
+      // One Plaid Item per bank, keyed by item id.
+      multiInstance: true,
     },
     {
       id: "tink",
@@ -84,6 +98,10 @@ export function getProviders(): IntegrationProvider[] {
         extraAuthParams: { market: process.env.TINK_MARKET || "GB", locale: "en_US" },
       },
       syncIntervalHours: 6,
+      // Tink aggregates several banks behind one consent and hands back no
+      // stable per-bank id, so a second connection would be indistinguishable
+      // from a re-authorization of the first.
+      multiInstance: false,
     },
     {
       id: "gocardless",
@@ -94,6 +112,8 @@ export function getProviders(): IntegrationProvider[] {
       flow: "redirect",
       envVars: ["GOCARDLESS_SECRET_ID", "GOCARDLESS_SECRET_KEY"],
       syncIntervalHours: 6,
+      // One requisition per institution: connect ING and Rabobank side by side.
+      multiInstance: true,
     },
     // ------------------------------------------------------- accounting
     {
@@ -113,6 +133,7 @@ export function getProviders(): IntegrationProvider[] {
         tokenAuth: "basic",
       },
       syncIntervalHours: 6,
+      multiInstance: false,
     },
     {
       id: "xero",
@@ -135,6 +156,7 @@ export function getProviders(): IntegrationProvider[] {
         tokenAuth: "basic",
       },
       syncIntervalHours: 6,
+      multiInstance: false,
     },
     {
       id: "exact",
@@ -154,6 +176,7 @@ export function getProviders(): IntegrationProvider[] {
         extraAuthParams: { force_login: "0" },
       },
       syncIntervalHours: 6,
+      multiInstance: false,
     },
     // ----------------------------------------------------- productivity
     {
@@ -174,6 +197,7 @@ export function getProviders(): IntegrationProvider[] {
         extraAuthParams: { access_type: "offline", prompt: "consent" },
       },
       syncIntervalHours: 6,
+      multiInstance: false,
     },
     {
       id: "outlook",
@@ -192,6 +216,7 @@ export function getProviders(): IntegrationProvider[] {
         tokenAuth: "body",
       },
       syncIntervalHours: 6,
+      multiInstance: false,
     },
     {
       id: "slack",
@@ -210,6 +235,7 @@ export function getProviders(): IntegrationProvider[] {
         tokenAuth: "body",
       },
       syncIntervalHours: null,
+      multiInstance: false,
     },
     {
       id: "teams",
@@ -220,6 +246,7 @@ export function getProviders(): IntegrationProvider[] {
       flow: "webhook",
       envVars: [],
       syncIntervalHours: null,
+      multiInstance: false,
     },
     {
       id: "google-calendar",
@@ -239,6 +266,7 @@ export function getProviders(): IntegrationProvider[] {
         extraAuthParams: { access_type: "offline", prompt: "consent" },
       },
       syncIntervalHours: 24,
+      multiInstance: false,
     },
   ];
 }

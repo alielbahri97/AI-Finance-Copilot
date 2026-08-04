@@ -23,18 +23,30 @@ interface TileStatus {
   dotClass: string;
 }
 
+/**
+ * The tile summarises every connection to the provider: the worst status wins
+ * (a broken bank must not hide behind a healthy one) and the count is shown
+ * once a workspace has more than one.
+ */
 function tileStatus(data: IntegrationCardData, locked: boolean): TileStatus {
   if (locked) return { label: "Business plan", dotClass: "bg-muted-foreground/40" };
   if (!data.configured) return { label: "Needs setup", dotClass: "bg-muted-foreground/40" };
-  if (!data.connection) return { label: "Available", dotClass: "bg-sky-500" };
-  switch (data.connection.status) {
-    case "CONNECTED":
-      return { label: "Connected", dotClass: "bg-emerald-500" };
-    case "ERROR":
-      return { label: "Error", dotClass: "bg-destructive" };
-    case "EXPIRED":
-      return { label: "Reconnect", dotClass: "bg-amber-500" };
+
+  const connections = data.connections;
+  if (connections.length === 0) return { label: "Available", dotClass: "bg-sky-500" };
+
+  const count = connections.length;
+  const suffix = count > 1 ? ` · ${count} connected` : "";
+  if (connections.some((connection) => connection.status === "ERROR")) {
+    return { label: `Error${suffix}`, dotClass: "bg-destructive" };
   }
+  if (connections.some((connection) => connection.status === "EXPIRED")) {
+    return { label: `Reconnect${suffix}`, dotClass: "bg-amber-500" };
+  }
+  return {
+    label: count > 1 ? `${count} connected` : "Connected",
+    dotClass: "bg-emerald-500",
+  };
 }
 
 function IntegrationTile({
@@ -47,7 +59,8 @@ function IntegrationTile({
   onOpen: () => void;
 }) {
   const status = tileStatus(data, locked);
-  const connected = !locked && data.connection?.status === "CONNECTED";
+  const connected =
+    !locked && data.connections.some((connection) => connection.status === "CONNECTED");
 
   return (
     <button
@@ -90,9 +103,7 @@ export function IntegrationsGrid({
   const renderTiles = (list: IntegrationCardData[]) => {
     // Connected tiles first, keeping the curated order otherwise.
     const sorted = [...list].sort(
-      (a, b) =>
-        Number(b.connection?.status === "CONNECTED") -
-        Number(a.connection?.status === "CONNECTED")
+      (a, b) => Number(b.connections.length > 0) - Number(a.connections.length > 0)
     );
     return (
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">

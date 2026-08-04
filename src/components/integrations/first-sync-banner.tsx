@@ -10,7 +10,10 @@ import { Card, CardContent } from "@/components/ui/card";
 
 interface FirstSyncBannerProps {
   providerId: string;
+  /** The bank's name where known, so a second connection is identifiable. */
   providerName: string;
+  /** The connection that was just made — not merely the provider. */
+  connectionId: string;
   /** Linked bank accounts, when known (GoCardless); null for Plaid/Tink. */
   accountCount: number | null;
 }
@@ -25,7 +28,12 @@ interface SyncResult {
  * and reports what was imported, instead of leaving the user to wonder
  * whether anything happened.
  */
-export function FirstSyncBanner({ providerId, providerName, accountCount }: FirstSyncBannerProps) {
+export function FirstSyncBanner({
+  providerId,
+  providerName,
+  connectionId,
+  accountCount,
+}: FirstSyncBannerProps) {
   const router = useRouter();
   const [phase, setPhase] = useState<"syncing" | "done" | "error">("syncing");
   const [result, setResult] = useState<SyncResult | null>(null);
@@ -38,7 +46,11 @@ export function FirstSyncBanner({ providerId, providerName, accountCount }: Firs
 
     void (async () => {
       try {
-        const response = await fetch(`/api/integrations/${providerId}/sync`, { method: "POST" });
+        const response = await fetch(`/api/integrations/${providerId}/sync`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ connectionId }),
+        });
         const body = (await response.json()) as {
           stats?: Record<string, number>;
           batchId?: string | null;
@@ -53,7 +65,7 @@ export function FirstSyncBanner({ providerId, providerName, accountCount }: Firs
         setPhase("error");
       }
     })();
-  }, [providerId, router]);
+  }, [providerId, connectionId, router]);
 
   const accountsLabel =
     accountCount && accountCount > 0

@@ -15,6 +15,7 @@ const report: ReportData = {
     profit: 13999.5,
     marginPct: 33.3,
     cash: 87500.25,
+    cashSource: "bank",
     accountsReceivable: 12000,
     accountsPayable: 4300,
     revenueChangePct: 12.5,

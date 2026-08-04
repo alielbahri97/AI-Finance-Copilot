@@ -314,12 +314,26 @@ model BusinessProfile {
 
 /// A user's link to an external provider (bank, accounting, productivity).
 /// Tokens are encrypted at rest with AES-256-GCM (INTEGRATION_ENCRYPTION_KEY).
+///
+/// A workspace can hold SEVERAL connections to the same provider — one per
+/// bank (ING current + Rabobank savings). `externalId` is what tells them
+/// apart; see the uniqueness note below.
 model IntegrationConnection {
   id          String            @id @default(cuid())
   workspaceId String            @map("workspace_id")
   /// The member who connected the provider (their OAuth identity).
   userId      String            @map("user_id") @db.Uuid
   provider    String
+  /// The provider's stable identifier for THIS connection: the GoCardless
+  /// institution id, Plaid item id, QuickBooks realmId, Xero tenantId...
+  /// Null for providers where only one connection makes sense (Slack, Teams,
+  /// a mailbox) and for legacy rows whose id was not derivable from metadata.
+  externalId  String?           @map("external_id")
+  /// User-chosen label ("ING business"); falls back to institutionName.
+  displayName String?           @map("display_name")
+  /// Bank/organisation name and logo as reported by the provider.
+  institutionName String?       @map("institution_name")
+  institutionLogo String?       @map("institution_logo")
   status      IntegrationStatus @default(CONNECTED)
 
   /// Encrypted (iv || tag || ciphertext, base64). For webhook-style providers
@@ -340,12 +354,48 @@ model IntegrationConnection {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  profile   Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  syncRuns  SyncRun[]
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  profile      Profile       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  syncRuns     SyncRun[]
+  bankAccounts BankAccount[]
 
-  @@unique([workspaceId, provider])
+  /// Postgres treats NULLs as distinct, so this constraint alone would allow
+  /// unlimited externalId-less rows. 0016 therefore also creates a PARTIAL
+  /// unique index — integration_connections_workspace_provider_null_key on
+  /// (workspace_id, provider) WHERE external_id IS NULL — which Prisma cannot
+  /// express. Net effect: many genuine connections per provider, but at most
+  /// one anonymous one.
+  @@unique([workspaceId, provider, externalId])
+  @@index([workspaceId, provider])
   @@map("integration_connections")
+}
+
+/// One account inside a bank connection (a requisition typically returns
+/// several: current, savings, credit card). Holds the latest balance snapshot
+/// so the aggregated cash view is a plain query, and the per-account
+/// `includeInTotals` switch that lets a personal account sit out of the totals.
+model BankAccount {
+  id                String    @id @default(cuid())
+  connectionId      String    @map("connection_id")
+  /// The provider's account id, used as the sync/dedupe key.
+  externalAccountId String    @map("external_account_id")
+  /// Provider-supplied account name, when there is one.
+  name              String?
+  /// Masked identifier shown in the UI ("…1234"). Never the full IBAN.
+  mask              String?
+  currency          String?
+  includeInTotals   Boolean   @default(true) @map("include_in_totals")
+  lastBalance       Decimal?  @map("last_balance") @db.Decimal(14, 2)
+  lastBalanceAt     DateTime? @map("last_balance_at")
+  /// Berlin Group balance type the snapshot came from (interimAvailable...).
+  balanceType       String?   @map("balance_type")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  connection IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, externalAccountId])
+  @@map("bank_accounts")
 }
 
 /// One synchronization attempt for a connection.

@@ -1,17 +1,22 @@
 import { NextResponse } from "next/server";
 
 import { enforceRateLimit } from "@/lib/api/rate-limit-guard";
-import { getConnection } from "@/lib/integrations/connections";
+import { lookupRequestedConnection } from "@/lib/integrations/connections";
 import { requireIntegrationAccess } from "@/lib/integrations/guard";
 import { getProvider } from "@/lib/integrations/registry";
 import { runSync } from "@/lib/integrations/sync";
 import { apiError } from "@/lib/api/response";
+import { prisma } from "@/lib/prisma";
 
 export const maxDuration = 120;
 
-/** Manual "Sync now" for one connection. */
+/**
+ * Manual "Sync now" for one connection. With several banks connected the
+ * request must name the connection — each has its own consent, cursor and
+ * rate-limit budget, so syncing the wrong one is not a harmless mistake.
+ */
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ provider: string }> }
 ) {
   const { provider: providerId } = await params;
@@ -34,12 +39,17 @@ export async function POST(
       );
     }
 
-    const connection = await getConnection(access.ctx.workspace.id, provider.id);
-    if (!connection) {
-      return NextResponse.json({ error: "Not connected" }, { status: 404 });
+    const body = (await request.json().catch(() => null)) as { connectionId?: string } | null;
+    const lookup = await lookupRequestedConnection(
+      access.ctx.workspace.id,
+      provider.id,
+      body?.connectionId ?? new URL(request.url).searchParams.get("connectionId")
+    );
+    if (!lookup.ok) {
+      return NextResponse.json({ error: lookup.error }, { status: lookup.status });
     }
 
-    const outcome = await runSync(connection.id);
+    const outcome = await runSync(lookup.connection.id);
     if (outcome.status === "FAILED") {
       return NextResponse.json(
         { error: outcome.error ?? "Sync failed", status: outcome.status },
@@ -49,13 +59,16 @@ export async function POST(
 
     // Bank providers record the ImportBatch of the sync so the UI can link
     // straight to the imported transactions.
-    const refreshed = await getConnection(access.ctx.workspace.id, provider.id);
-    const batchId =
-      (refreshed?.metadata as Record<string, unknown> | null)?.lastBatchId ?? null;
+    const refreshed = await prisma.integrationConnection.findUnique({
+      where: { id: lookup.connection.id },
+      select: { metadata: true },
+    });
+    const batchId = (refreshed?.metadata as Record<string, unknown> | null)?.lastBatchId ?? null;
 
     return NextResponse.json({
       ok: true,
       status: outcome.status,
+      connectionId: lookup.connection.id,
       stats: outcome.stats ?? {},
       batchId: typeof batchId === "string" ? batchId : null,
     });

@@ -29,6 +29,12 @@ export const SCHEMA_CHECKS: SchemaCheck[] = [
   { table: "subscriptions", columns: ["workspace_id"], migration: "0014_workspaces" },
   { table: "invoices", columns: ["workspace_id"], migration: "0014_workspaces" },
   { table: "invoices", columns: ["extraction_provider"], migration: "0015_extraction_telemetry" },
+  { table: "bank_accounts", columns: [], migration: "0016_multi_bank_connections" },
+  {
+    table: "integration_connections",
+    columns: ["external_id", "display_name"],
+    migration: "0016_multi_bank_connections",
+  },
 ];
 
 export interface SchemaDrift {

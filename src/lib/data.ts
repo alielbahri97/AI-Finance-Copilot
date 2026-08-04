@@ -8,6 +8,8 @@ import { trackEvent } from "@/lib/analytics";
 import { attributeReferral } from "@/lib/billing/referrals";
 import { ensureDefaultCategories } from "@/lib/categories";
 import { currencyFromRequestHeaders } from "@/lib/currency/location";
+import { anchorBalanceHistory, type CashPosition } from "@/lib/finance/cash";
+import { loadCashPosition } from "@/lib/finance/cash-data";
 import { prisma } from "@/lib/prisma";
 import { personalMembershipId, personalWorkspaceId } from "@/lib/workspace/ids";
 
@@ -135,6 +137,8 @@ export interface DashboardData {
   expensesChangePct: number | null;
   /** All-time net across recorded transactions. */
   totalBalance: number;
+  /** Aggregated bank cash with its per-account breakdown. */
+  cash: CashPosition;
   savingsRate: number;
   monthlySeries: MonthlyPoint[];
   categoryBreakdown: CategoryPoint[];
@@ -267,20 +271,37 @@ export const getDashboardData = cache(async (workspaceId: string): Promise<Dashb
     .map(toSummary);
 
   const monthNet = monthIncome - monthExpenses;
+  const transactionBalance = Math.round((priorNet + windowNet) * 100) / 100;
+
+  // Cash comes from the connected banks when there are any; the balance chart
+  // is anchored to the same figure so the two never disagree.
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
+    select: { currency: true },
+  });
+  const cash = await loadCashPosition(
+    workspaceId,
+    workspace?.currency ?? "USD",
+    transactionBalance
+  );
 
   return {
     monthIncome,
     monthExpenses,
     incomeChangePct: percentChange(monthIncome, prevMonthIncome),
     expensesChangePct: percentChange(monthExpenses, prevMonthExpenses),
-    totalBalance: Math.round((priorNet + windowNet) * 100) / 100,
+    totalBalance: cash.total,
+    cash,
     savingsRate: monthIncome > 0 ? Math.round((monthNet / monthIncome) * 100) : 0,
     monthlySeries: Array.from(monthly.values()),
     categoryBreakdown: Array.from(categories.values())
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 8),
     largestExpenses,
-    balanceHistory,
+    balanceHistory: anchorBalanceHistory(
+      balanceHistory,
+      cash.source === "bank" ? cash.total : null
+    ),
     recentTransactions: transactions.slice(0, 8).map(toSummary),
     transactionCount: transactions.length,
   };

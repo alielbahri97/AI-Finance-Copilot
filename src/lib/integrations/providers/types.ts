@@ -10,6 +10,13 @@ export interface ConnectResult {
   refreshToken?: string | null;
   expiresAt?: Date | null;
   metadata?: Record<string, unknown>;
+  /**
+   * The provider's stable id for this connection (realmId, tenantId, team id).
+   * Null/absent means "the one connection this workspace has to the provider".
+   */
+  externalId?: string | null;
+  /** Bank/organisation name for the UI, when the provider reports one. */
+  institutionName?: string | null;
 }
 
 export interface SyncContext {

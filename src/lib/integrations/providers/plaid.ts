@@ -2,6 +2,7 @@ import "server-only";
 
 import { logger, serializeError } from "@/lib/logger";
 
+import { recordBankAccounts } from "../bank-accounts";
 import { importBankTransactions, type BankTransaction } from "../bank-import";
 import { IntegrationAuthError, IntegrationError } from "../oauth";
 
@@ -67,6 +68,42 @@ export async function exchangePlaidPublicToken(
   return { accessToken: result.access_token, itemId: result.item_id };
 }
 
+interface PlaidBalanceAccount {
+  account_id: string;
+  name?: string | null;
+  official_name?: string | null;
+  mask?: string | null;
+  balances?: {
+    available?: number | null;
+    current?: number | null;
+    iso_currency_code?: string | null;
+  };
+}
+
+/**
+ * Balance snapshots for the aggregated cash view. Best-effort: a workspace
+ * whose bank refuses balances still gets its transactions, and the aggregate
+ * falls back to the transaction-derived figure.
+ */
+async function snapshotBalances(connectionId: string, accessToken: string): Promise<void> {
+  const body = await plaidPost<{ accounts: PlaidBalanceAccount[] }>("/accounts/balance/get", {
+    access_token: accessToken,
+  });
+  const now = new Date();
+  await recordBankAccounts(
+    connectionId,
+    body.accounts.map((account) => ({
+      externalAccountId: account.account_id,
+      name: account.official_name ?? account.name ?? null,
+      mask: account.mask ? `…${account.mask}` : null,
+      currency: account.balances?.iso_currency_code ?? null,
+      balance: account.balances?.available ?? account.balances?.current ?? null,
+      balanceAt: now,
+      balanceType: account.balances?.available !== null ? "available" : "current",
+    }))
+  );
+}
+
 interface PlaidTransaction {
   transaction_id: string;
   date: string;
@@ -125,6 +162,9 @@ async function sync(ctx: SyncContext): Promise<SyncStats> {
     transactions
   );
   await ctx.patchMetadata({ plaidCursor: cursor ?? null });
+  await snapshotBalances(ctx.connection.id, ctx.accessToken).catch((error) =>
+    logger.warn("[integrations] Plaid balance snapshot", { error: serializeError(error) })
+  );
 
   return { fetched: added.length, imported: result.imported, duplicates: result.duplicates };
 }

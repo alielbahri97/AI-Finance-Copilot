@@ -148,7 +148,11 @@ async function ReportBody({ ctx, period }: { ctx: WorkspaceContext; period: Reso
         <StatCard
           title="Cash"
           value={formatCurrency(kpis.cash, currency)}
-          hint="Balance at the end of the period"
+          hint={
+            kpis.cashSource === "bank"
+              ? "Combined balance of your connected accounts"
+              : "Balance at the end of the period"
+          }
           icon={WalletIcon}
           tone={kpis.cash >= 0 ? "positive" : "negative"}
         />

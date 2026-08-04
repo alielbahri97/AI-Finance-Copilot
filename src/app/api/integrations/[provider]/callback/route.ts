@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { recordBankAccounts } from "@/lib/integrations/bank-accounts";
 import { saveConnection } from "@/lib/integrations/connections";
 import { GC_REQUISITION_COOKIE, STATE_COOKIE } from "@/lib/integrations/cookies";
 import { appUrl, exchangeCode } from "@/lib/integrations/oauth";
@@ -10,10 +11,13 @@ import { logger, serializeError } from "@/lib/logger";
 import { recordAudit } from "@/lib/workspace/audit";
 import { getWorkspaceContext } from "@/lib/workspace/context";
 
-function finish(error?: string, connected?: string): NextResponse {
+function finish(error?: string, connected?: string, connectionId?: string): NextResponse {
   const url = new URL("/integrations", appUrl());
   if (error) url.searchParams.set("error", error.slice(0, 200));
   if (connected) url.searchParams.set("connected", connected);
+  // The first-sync banner needs to know which connection was just made, not
+  // merely which provider — the workspace may have several.
+  if (connectionId) url.searchParams.set("connection", connectionId);
   const response = NextResponse.redirect(url);
   response.cookies.delete(STATE_COOKIE);
   response.cookies.delete(GC_REQUISITION_COOKIE);
@@ -55,26 +59,53 @@ export async function GET(
     }
 
     if (provider.flow === "redirect" && provider.id === "gocardless") {
-      const requisitionId = request.cookies.get(GC_REQUISITION_COOKIE)?.value;
+      const pending = request.cookies.get(GC_REQUISITION_COOKIE)?.value;
+      if (!pending) {
+        return finish("The connection session expired. Try again.");
+      }
+      const [requisitionId, reference] = pending.split(".");
       if (!requisitionId) {
         return finish("The connection session expired. Try again.");
       }
+      // GoCardless echoes the reference we sent as `ref`. When it is present it
+      // must match this attempt, otherwise we would attach one bank's accounts
+      // to another bank's connection.
+      if (query.ref && reference && query.ref !== reference) {
+        return finish("That bank approval belongs to a different connection attempt. Try again.");
+      }
+
       const finalized = await finalizeRequisition(requisitionId);
-      await saveConnection(scope, provider.id, {
+      // Keyed by institution, not by requisition: renewing consent mints a new
+      // requisition for the same bank and must update that bank's connection
+      // instead of adding a duplicate.
+      const connection = await saveConnection(scope, provider.id, {
+        externalId: finalized.institutionId,
+        institutionName: finalized.institutionName,
+        institutionLogo: finalized.institutionLogo,
         metadata: {
           requisitionId,
           accounts: finalized.accounts,
-          accountLabels: finalized.accountLabels,
           institutionId: finalized.institutionId,
           institutionName: finalized.institutionName,
           consentExpiresAt: finalized.consentExpiresAt,
           maxHistoricalDays: finalized.maxHistoricalDays,
         },
       });
+      await recordBankAccounts(
+        connection.id,
+        finalized.accountDetails.map((account) => ({
+          externalAccountId: account.id,
+          name: account.name,
+          mask: account.mask,
+          currency: account.currency,
+        }))
+      );
       await recordAudit(ctx.workspace.id, user.id, "integration.connected", {
         provider: provider.id,
+        connectionId: connection.id,
+        institution: finalized.institutionName ?? finalized.institutionId,
       });
-      return finish(undefined, provider.id);
+      return finish(undefined, provider.id, connection.id);
     }
 
     if (provider.flow !== "oauth2") {
@@ -95,19 +126,22 @@ export async function GET(
       ? await hooks.afterConnect({ userId: user.id, tokens, query })
       : {};
 
-    await saveConnection(scope, provider.id, {
+    const connection = await saveConnection(scope, provider.id, {
       accessToken: extras.accessToken !== undefined ? extras.accessToken : tokens.accessToken,
       refreshToken:
         extras.refreshToken !== undefined ? extras.refreshToken : tokens.refreshToken,
       expiresAt: extras.expiresAt !== undefined ? extras.expiresAt : tokens.expiresAt,
       metadata: extras.metadata ?? {},
+      externalId: extras.externalId ?? null,
+      institutionName: extras.institutionName,
     });
 
     await recordAudit(ctx.workspace.id, user.id, "integration.connected", {
       provider: provider.id,
+      connectionId: connection.id,
     });
 
-    return finish(undefined, provider.id);
+    return finish(undefined, provider.id, connection.id);
   } catch (error) {
     logger.error(`GET /api/integrations/${providerId}/callback`, { error: serializeError(error) });
     const message = error instanceof Error ? error.message : "Connection failed.";

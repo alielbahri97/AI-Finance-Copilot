@@ -3,6 +3,7 @@ import "server-only";
 import type { Assumption } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 
+import { loadCashPosition } from "./cash-data";
 import { computeForecast, type AssumptionInput, type ForecastResult } from "./forecast";
 import type { FinanceTransaction } from "./recurrence";
 
@@ -72,11 +73,18 @@ export async function buildForecast(
     0
   );
 
+  const windowNet = transactions.reduce(
+    (sum, tx) => sum + (tx.type === "INCOME" ? tx.amount : -tx.amount),
+    0
+  );
+  const cash = await loadCashPosition(workspaceId, currency, priorNet + windowNet);
+
   return computeForecast({
     transactions,
     priorNet,
     assumptions: assumptionRows.map(mapAssumptionRow),
     currency,
     now,
+    startingBalance: cash.source === "bank" ? cash.total : null,
   });
 }

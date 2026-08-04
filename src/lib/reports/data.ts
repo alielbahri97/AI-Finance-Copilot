@@ -1,5 +1,7 @@
 import "server-only";
 
+import { resolveReportCash } from "@/lib/finance/cash";
+import { loadCashPosition } from "@/lib/finance/cash-data";
 import { prisma } from "@/lib/prisma";
 
 import { previousPeriod, type ResolvedPeriod } from "./period";
@@ -18,6 +20,8 @@ export interface ReportKpis {
   marginPct: number | null;
   /** Cash balance at the end of the period (all transactions up to `to`). */
   cash: number;
+  /** Whether `cash` came from the connected banks or from the transactions. */
+  cashSource: "bank" | "transactions";
   /** Unpaid receivable invoices — money owed to the user. */
   accountsReceivable: number;
   /** Unpaid payable invoices — bills the user owes. */
@@ -166,7 +170,19 @@ export async function buildReport(
       sum + (entry.type === "INCOME" ? Number(entry._sum.amount ?? 0) : -Number(entry._sum.amount ?? 0)),
     0
   );
-  const cash = priorNet + profit;
+  // A period that runs up to today closes on the banks' own figure (aggregated
+  // across included accounts); historical periods keep their transaction close.
+  const allTimeNet = allRows.reduce(
+    (sum, row) => sum + (row.type === "INCOME" ? Number(row.amount) : -Number(row.amount)),
+    0
+  );
+  const cashPosition = await loadCashPosition(workspaceId, currency, allTimeNet);
+  const { cash, source: cashSource } = resolveReportCash({
+    transactionCash: priorNet + profit,
+    bankCash: cashPosition.source === "bank" ? cashPosition.total : null,
+    periodEnd: period.to,
+    now: new Date(),
+  });
 
   /* ---- AR / AP + aging ---- */
   const now = Date.now();
@@ -289,6 +305,7 @@ export async function buildReport(
       profit: round2(profit),
       marginPct: revenue > 0 ? Math.round((profit / revenue) * 1000) / 10 : null,
       cash: round2(cash),
+      cashSource,
       accountsReceivable: round2(accountsReceivable),
       accountsPayable: round2(accountsPayable),
       revenueChangePct: changePct(revenue, prevRevenue),

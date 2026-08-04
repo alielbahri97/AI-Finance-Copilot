@@ -24,6 +24,9 @@ async function afterConnect({ tokens }: { userId: string; tokens: TokenSet }) {
     accessToken: webhook.url,
     refreshToken: null,
     expiresAt: null,
+    // externalId stays null: one Slack channel per workspace is the intent,
+    // which the partial unique index enforces.
+    institutionName: team?.name ?? null,
     metadata: { channel: webhook.channel ?? null, team: team?.name ?? null },
   };
 }

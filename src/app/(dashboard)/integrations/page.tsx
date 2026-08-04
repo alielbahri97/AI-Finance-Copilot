@@ -4,13 +4,16 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CheckCircle2Icon, LockIcon, TriangleAlertIcon } from "lucide-react";
 
+import type { Prisma } from "@/generated/prisma/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FirstSyncBanner } from "@/components/integrations/first-sync-banner";
 import { IntegrationsGrid } from "@/components/integrations/integrations-grid";
-import type { IntegrationCardData } from "@/components/integrations/types";
+import type { ConnectionData, IntegrationCardData } from "@/components/integrations/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { getEntitlements } from "@/lib/billing/entitlements";
+import { isSchemaOutOfDate } from "@/lib/db-errors";
+import { logger, serializeError } from "@/lib/logger";
 import { isEncryptionConfigured } from "@/lib/integrations/crypto";
 import { getProviders, isProviderConfigured } from "@/lib/integrations/registry";
 import { prisma } from "@/lib/prisma";
@@ -19,6 +22,33 @@ import { getWorkspaceContext, type WorkspaceContext } from "@/lib/workspace/cont
 export const metadata: Metadata = {
   title: "Integrations",
 };
+
+/**
+ * A connection row with the relations the cards need. Structural rather than a
+ * Prisma payload type so the pre-0016 fallback below can supply the same shape
+ * without the columns that migration adds.
+ */
+interface ConnectionRow {
+  id: string;
+  provider: string;
+  status: "CONNECTED" | "ERROR" | "EXPIRED";
+  displayName: string | null;
+  institutionName: string | null;
+  institutionLogo: string | null;
+  metadata: Prisma.JsonValue | null;
+  lastSyncAt: Date | null;
+  lastError: string | null;
+  syncRuns: { stats: Prisma.JsonValue | null }[];
+  bankAccounts: {
+    id: string;
+    name: string | null;
+    mask: string | null;
+    currency: string | null;
+    lastBalance: Prisma.Decimal | null;
+    lastBalanceAt: Date | null;
+    includeInTotals: boolean;
+  }[];
+}
 
 /** Default bank-picker country from the profile currency (GoCardless covers EEA + UK). */
 const CURRENCY_TO_COUNTRY: Record<string, string> = {
@@ -35,50 +65,25 @@ const CURRENCY_TO_COUNTRY: Record<string, string> = {
   ISK: "IS",
 };
 
-function gocardlessLabel(metadata: Record<string, unknown>): string | null {
-  const accounts = metadata.accounts as string[] | undefined;
-  if (!accounts?.length) return null;
-
-  const parts: string[] = [];
-  if (typeof metadata.institutionName === "string" && metadata.institutionName) {
-    parts.push(metadata.institutionName);
-  }
-  parts.push(`${accounts.length} account${accounts.length > 1 ? "s" : ""}`);
-
-  // Balance summary when every account reports the same currency.
-  const balances = metadata.balances as
-    | Record<string, { amount: number; currency: string }>
-    | undefined;
-  const entries = accounts.map((id) => balances?.[id]).filter(Boolean) as Array<{
-    amount: number;
-    currency: string;
-  }>;
-  if (entries.length > 0 && entries.every((entry) => entry.currency === entries[0].currency)) {
-    const total = entries.reduce((sum, entry) => sum + entry.amount, 0);
-    parts.push(
-      `${new Intl.NumberFormat(undefined, {
-        style: "currency",
-        currency: entries[0].currency,
-      }).format(total)} available`
-    );
-  }
-  return parts.join(" · ");
-}
-
-function accountLabel(provider: string, metadata: Record<string, unknown>): string | null {
+function accountLabel(
+  provider: string,
+  metadata: Record<string, unknown>,
+  accountCount: number
+): string | null {
   switch (provider) {
     case "slack":
       return metadata.channel ? `Posting to ${metadata.channel}` : null;
     case "xero":
       return metadata.tenantName ? `Organisation: ${metadata.tenantName}` : null;
-    case "plaid":
-      return metadata.institution ? `Institution: ${metadata.institution}` : null;
     case "quickbooks":
       return metadata.realmId ? `Company ${metadata.realmId}` : null;
     case "exact":
       return metadata.division ? `Division ${metadata.division}` : null;
+    case "plaid":
     case "gocardless":
-      return gocardlessLabel(metadata);
+      return accountCount > 0
+        ? `${accountCount} account${accountCount > 1 ? "s" : ""}`
+        : null;
     default:
       return null;
   }
@@ -95,7 +100,94 @@ function rateLimitedUntil(metadata: Record<string, unknown>): string | null {
   return new Date(Math.max(...future)).toISOString();
 }
 
-type IntegrationsParams = { connected?: string; error?: string };
+/** Row shape the connection list in the detail sheet renders from. */
+function toConnectionData(
+  providerId: string,
+  providerName: string,
+  connection: ConnectionRow
+): ConnectionData {
+  const metadata = (connection.metadata as Record<string, unknown> | null) ?? {};
+  const accounts = connection.bankAccounts.map((account) => ({
+    id: account.id,
+    label: account.mask || account.name || "Account",
+    currency: account.currency,
+    balance: account.lastBalance === null ? null : Number(account.lastBalance),
+    balanceAt: account.lastBalanceAt?.toISOString() ?? null,
+    includeInTotals: account.includeInTotals,
+  }));
+
+  // Only total accounts that agree on a currency — there is no FX rate here.
+  const counted = accounts.filter(
+    (account) => account.includeInTotals && account.balance !== null
+  );
+  const currencies = new Set(counted.map((account) => account.currency ?? ""));
+  const sameCurrency = counted.length > 0 && currencies.size === 1;
+
+  return {
+    id: connection.id,
+    status: connection.status,
+    displayName: connection.displayName,
+    institutionName: connection.institutionName,
+    institutionLogo: connection.institutionLogo,
+    title: connection.displayName || connection.institutionName || providerName,
+    lastSyncAt: connection.lastSyncAt?.toISOString() ?? null,
+    lastError: connection.lastError,
+    accountLabel: accountLabel(providerId, metadata, accounts.length),
+    calendarEnabled: metadata.calendarEnabled === true,
+    lastRunStats: (connection.syncRuns[0]?.stats as Record<string, number> | null) ?? null,
+    consentExpiresAt:
+      typeof metadata.consentExpiresAt === "string" ? metadata.consentExpiresAt : null,
+    rateLimitedUntil: rateLimitedUntil(metadata),
+    accounts,
+    includedBalance: sameCurrency
+      ? Math.round(counted.reduce((sum, account) => sum + (account.balance ?? 0), 0) * 100) / 100
+      : null,
+    balanceCurrency: sameCurrency ? (counted[0].currency ?? null) : null,
+  };
+}
+
+/**
+ * Every connection in the workspace. Falls back to the pre-0016 column set if
+ * the deploy is ahead of the migration, so the page still lists connections
+ * (without per-account balances) instead of erroring.
+ */
+async function loadConnections(workspaceId: string): Promise<ConnectionRow[]> {
+  const syncRuns = { orderBy: { startedAt: "desc" }, take: 1, select: { stats: true } } as const;
+  try {
+    return await prisma.integrationConnection.findMany({
+      where: { workspaceId },
+      orderBy: { createdAt: "asc" },
+      include: { syncRuns, bankAccounts: { orderBy: { createdAt: "asc" } } },
+    });
+  } catch (error) {
+    if (!isSchemaOutOfDate(error)) throw error;
+    logger.warn("[integrations] multi-connection columns unavailable; degrading", {
+      error: serializeError(error),
+    });
+    const rows = await prisma.integrationConnection.findMany({
+      where: { workspaceId },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        provider: true,
+        status: true,
+        metadata: true,
+        lastSyncAt: true,
+        lastError: true,
+        syncRuns,
+      },
+    });
+    return rows.map((row) => ({
+      ...row,
+      displayName: null,
+      institutionName: null,
+      institutionLogo: null,
+      bankAccounts: [],
+    }));
+  }
+}
+
+type IntegrationsParams = { connected?: string; connection?: string; error?: string };
 
 function IntegrationsGridSkeleton() {
   return (
@@ -153,66 +245,54 @@ async function IntegrationsContent({
   const encryptionReady = isEncryptionConfigured();
   const [entitlements, connections] = await Promise.all([
     getEntitlements(ctx.workspace.id),
-    prisma.integrationConnection.findMany({
-      where: { workspaceId: ctx.workspace.id },
-      include: {
-        syncRuns: { orderBy: { startedAt: "desc" }, take: 1 },
-      },
-    }),
+    loadConnections(ctx.workspace.id),
   ]);
   const locked = !entitlements.plan.limits.integrationsEnabled;
-  const byProvider = new Map(connections.map((connection) => [connection.provider, connection]));
+  const byProvider = new Map<string, ConnectionRow[]>();
+  for (const connection of connections) {
+    byProvider.set(connection.provider, [
+      ...(byProvider.get(connection.provider) ?? []),
+      connection,
+    ]);
+  }
   const bankPickerCountry = CURRENCY_TO_COUNTRY[ctx.workspace.currency] ?? "GB";
 
-  const cards: IntegrationCardData[] = getProviders().map((provider) => {
-    const connection = byProvider.get(provider.id);
-    const metadata = (connection?.metadata as Record<string, unknown> | null) ?? {};
-    const lastRun = connection?.syncRuns[0];
-    return {
-      id: provider.id,
-      name: provider.name,
-      description: provider.description,
-      category: provider.category,
-      capabilities: provider.capabilities,
-      flow: provider.flow,
-      configured: encryptionReady && isProviderConfigured(provider),
-      missingEnvVars: [
-        ...(encryptionReady ? [] : ["INTEGRATION_ENCRYPTION_KEY"]),
-        ...provider.envVars.filter((envVar) => !process.env[envVar]),
-      ],
-      requiredEnvVars: [...provider.envVars, "INTEGRATION_ENCRYPTION_KEY"],
-      syncable: provider.syncIntervalHours !== null,
-      bankPickerCountry,
-      connection: connection
-        ? {
-            status: connection.status,
-            lastSyncAt: connection.lastSyncAt?.toISOString() ?? null,
-            lastError: connection.lastError,
-            accountLabel: accountLabel(provider.id, metadata),
-            calendarEnabled: metadata.calendarEnabled === true,
-            lastRunStats: (lastRun?.stats as Record<string, number> | null) ?? null,
-            consentExpiresAt:
-              typeof metadata.consentExpiresAt === "string" ? metadata.consentExpiresAt : null,
-            rateLimitedUntil: rateLimitedUntil(metadata),
-          }
-        : null,
-    };
-  });
+  const cards: IntegrationCardData[] = getProviders().map((provider) => ({
+    id: provider.id,
+    name: provider.name,
+    description: provider.description,
+    category: provider.category,
+    capabilities: provider.capabilities,
+    flow: provider.flow,
+    configured: encryptionReady && isProviderConfigured(provider),
+    missingEnvVars: [
+      ...(encryptionReady ? [] : ["INTEGRATION_ENCRYPTION_KEY"]),
+      ...provider.envVars.filter((envVar) => !process.env[envVar]),
+    ],
+    requiredEnvVars: [...provider.envVars, "INTEGRATION_ENCRYPTION_KEY"],
+    syncable: provider.syncIntervalHours !== null,
+    multiInstance: provider.multiInstance,
+    bankPickerCountry,
+    currency: ctx.workspace.currency,
+    connections: (byProvider.get(provider.id) ?? []).map((connection) =>
+      toConnectionData(provider.id, provider.name, connection)
+    ),
+  }));
 
   const connectedCard = params.connected
     ? cards.find((card) => card.id === params.connected)
     : undefined;
+  // The banner is about the connection that was just made, which with several
+  // banks connected is not simply "the provider's connection".
+  const justConnected =
+    connectedCard?.connections.find((entry) => entry.id === params.connection) ??
+    connectedCard?.connections[connectedCard.connections.length - 1];
   const firstSyncEligible = Boolean(
     !locked &&
-      connectedCard?.connection &&
-      connectedCard.syncable &&
+      justConnected &&
+      connectedCard?.syncable &&
       connectedCard.capabilities.includes("transactions")
   );
-  const connectedMetadata =
-    (byProvider.get(connectedCard?.id ?? "")?.metadata as Record<string, unknown> | null) ?? {};
-  const connectedAccountCount = Array.isArray(connectedMetadata.accounts)
-    ? connectedMetadata.accounts.length
-    : null;
 
   return (
     <>
@@ -232,11 +312,12 @@ async function IntegrationsContent({
         </Alert>
       ) : null}
 
-      {connectedCard && firstSyncEligible ? (
+      {connectedCard && firstSyncEligible && justConnected ? (
         <FirstSyncBanner
           providerId={connectedCard.id}
-          providerName={connectedCard.name}
-          accountCount={connectedAccountCount}
+          providerName={justConnected.institutionName ?? connectedCard.name}
+          connectionId={justConnected.id}
+          accountCount={justConnected.accounts.length || null}
         />
       ) : params.connected ? (
         <Alert>

@@ -2,6 +2,7 @@ import "server-only";
 
 import { logger, serializeError } from "@/lib/logger";
 
+import { recordBankAccounts, type BankAccountSnapshot } from "../bank-accounts";
 import { importBankTransactions, type BankTransaction } from "../bank-import";
 import {
   agreementFor,
@@ -206,12 +207,21 @@ export async function createRequisition(
   return { requisitionId: requisition.id, link: requisition.link };
 }
 
+export interface FinalizedAccount {
+  id: string;
+  /** IBAN tail for a friendly label ("…1234"); null when the bank omits it. */
+  mask: string | null;
+  name: string | null;
+  currency: string | null;
+}
+
 export interface FinalizedRequisition {
   accounts: string[];
   institutionId: string;
   institutionName: string | null;
-  /** Per-account IBAN tails for friendly labels ("…1234"). */
-  accountLabels: string[];
+  institutionLogo: string | null;
+  /** Per-account detail, in the same order as `accounts`. */
+  accountDetails: FinalizedAccount[];
   consentExpiresAt: string | null;
   maxHistoricalDays: number | null;
 }
@@ -263,23 +273,35 @@ export async function finalizeRequisition(requisitionId: string): Promise<Finali
   }
 
   let institutionName: string | null = null;
+  let institutionLogo: string | null = null;
   try {
     const institution = await gcFetch<GcInstitution>(
       `/institutions/${encodeURIComponent(requisition.institution_id)}/`,
       token
     );
     institutionName = institution.name;
+    institutionLogo = institution.logo ?? null;
   } catch {
     institutionName = null;
   }
 
-  const accountLabels: string[] = [];
+  const accountDetails: FinalizedAccount[] = [];
   for (const accountId of requisition.accounts) {
     try {
-      const account = await gcFetch<{ iban?: string }>(`/accounts/${accountId}/`, token);
-      accountLabels.push(account.iban ? `…${account.iban.slice(-4)}` : "account");
+      const account = await gcFetch<{
+        iban?: string;
+        currency?: string;
+        ownerName?: string;
+        details?: string;
+      }>(`/accounts/${accountId}/`, token);
+      accountDetails.push({
+        id: accountId,
+        mask: account.iban ? `…${account.iban.slice(-4)}` : null,
+        name: account.details ?? null,
+        currency: account.currency ?? null,
+      });
     } catch {
-      accountLabels.push("account");
+      accountDetails.push({ id: accountId, mask: null, name: null, currency: null });
     }
   }
 
@@ -287,7 +309,8 @@ export async function finalizeRequisition(requisitionId: string): Promise<Finali
     accounts: requisition.accounts,
     institutionId: requisition.institution_id,
     institutionName,
-    accountLabels,
+    institutionLogo,
+    accountDetails,
     consentExpiresAt,
     maxHistoricalDays,
   };
@@ -301,7 +324,6 @@ interface GcMetadata {
   maxHistoricalDays?: number;
   lastSyncedAt?: string;
   rateLimitedUntil?: Record<string, string>;
-  balances?: Record<string, { amount: number; currency: string; type: string; at: string }>;
 }
 
 async function sync(ctx: SyncContext): Promise<SyncStats> {
@@ -330,7 +352,7 @@ async function sync(ctx: SyncContext): Promise<SyncStats> {
 
   const transactions: BankTransaction[] = [];
   const rateLimitedUntil: Record<string, string> = { ...(metadata.rateLimitedUntil ?? {}) };
-  const balances = { ...(metadata.balances ?? {}) };
+  const snapshots: BankAccountSnapshot[] = [];
   let fetched = 0;
   let accountsSynced = 0;
   let accountsSkipped = 0;
@@ -370,7 +392,13 @@ async function sync(ctx: SyncContext): Promise<SyncStats> {
       );
       const picked = pickBalance(body.balances ?? []);
       if (picked) {
-        balances[accountId] = { ...picked, at: now.toISOString() };
+        snapshots.push({
+          externalAccountId: accountId,
+          currency: picked.currency,
+          balance: picked.amount,
+          balanceAt: now,
+          balanceType: picked.type,
+        });
       }
     } catch (error) {
       if (!(error instanceof GcRateLimitError)) {
@@ -389,12 +417,17 @@ async function sync(ctx: SyncContext): Promise<SyncStats> {
     transactions
   );
 
+  // Balance snapshots land on the account rows, which is what the aggregated
+  // cash view reads. A snapshot failure must not fail an otherwise good sync.
+  await recordBankAccounts(ctx.connection.id, snapshots).catch((error) =>
+    logger.warn("[integrations] gocardless balance snapshot", { error: serializeError(error) })
+  );
+
   await ctx.patchMetadata({
     // Only advance the incremental cursor when at least one account synced;
     // otherwise a fully rate-limited pass would silently skip a window.
     ...(accountsSynced > 0 ? { lastSyncedAt: now.toISOString() } : {}),
     rateLimitedUntil,
-    balances,
     ...(result.batchId ? { lastBatchId: result.batchId } : {}),
   });
 

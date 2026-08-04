@@ -2,11 +2,11 @@ import "server-only";
 
 import { logger, serializeError } from "@/lib/logger";
 
-import { createHash } from "node:crypto";
-
 import { loadRuleMatchers, matchCategory } from "@/lib/categories";
 import { evaluateLargeTransactions } from "@/lib/notifications/alerts";
 import { prisma } from "@/lib/prisma";
+
+import { bankTransactionFingerprint } from "./fingerprint";
 
 /**
  * Shared import pipeline for bank integrations (Plaid, Tink, GoCardless).
@@ -32,10 +32,6 @@ export interface BankImportResult {
   batchId: string | null;
 }
 
-function fingerprint(provider: string, externalId: string): string {
-  return createHash("sha256").update(`${provider}|${externalId}`).digest("hex");
-}
-
 export async function importBankTransactions(
   scope: { workspaceId: string; userId: string },
   currency: string,
@@ -50,7 +46,7 @@ export async function importBankTransactions(
 
   const withHashes = transactions.map((tx) => ({
     ...tx,
-    hash: fingerprint(provider, tx.externalId),
+    hash: bankTransactionFingerprint(provider, tx.externalId),
   }));
 
   const existing = await prisma.transaction.findMany({

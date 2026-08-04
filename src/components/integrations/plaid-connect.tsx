@@ -46,7 +46,7 @@ function loadPlaidScript(): Promise<PlaidGlobal> {
 }
 
 /** Opens Plaid Link and exchanges the public token server-side. */
-export function PlaidConnectButton() {
+export function PlaidConnectButton({ another }: { another?: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
 
@@ -97,9 +97,9 @@ export function PlaidConnectButton() {
   }, [router]);
 
   return (
-    <Button size="sm" onClick={connect} disabled={busy}>
+    <Button size="sm" variant={another ? "outline" : "default"} onClick={connect} disabled={busy}>
       {busy ? <Loader2Icon className="size-4 animate-spin" /> : null}
-      Connect
+      {another ? "Connect another" : "Connect"}
     </Button>
   );
 }

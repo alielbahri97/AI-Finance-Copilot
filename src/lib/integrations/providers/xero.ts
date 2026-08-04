@@ -48,7 +48,11 @@ async function afterConnect({ tokens }: { userId: string; tokens: TokenSet }) {
   if (!tenant) {
     throw new IntegrationError("No Xero organisation was authorised");
   }
-  return { metadata: { tenantId: tenant.tenantId, tenantName: tenant.tenantName ?? null } };
+  return {
+    externalId: tenant.tenantId,
+    institutionName: tenant.tenantName ?? null,
+    metadata: { tenantId: tenant.tenantId, tenantName: tenant.tenantName ?? null },
+  };
 }
 
 async function sync(ctx: SyncContext): Promise<SyncStats> {

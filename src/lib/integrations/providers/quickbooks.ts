@@ -78,7 +78,7 @@ async function afterConnect({
     throw new IntegrationError("QuickBooks callback did not include a realmId");
   }
   void tokens;
-  return { metadata: { realmId } };
+  return { externalId: realmId, metadata: { realmId } };
 }
 
 async function sync(ctx: SyncContext): Promise<SyncStats> {

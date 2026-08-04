@@ -148,11 +148,19 @@ export interface ForecastInputs {
   assumptions: AssumptionInput[];
   currency: string;
   now: Date;
+  /**
+   * Today's cash as the banks report it, aggregated across every included
+   * account. When present it becomes the starting balance — the projection is
+   * only as good as where it starts from, and the banks know that better than
+   * the imported history does. The whole historical line shifts with it so the
+   * chart stays continuous.
+   */
+  startingBalance?: number | null;
 }
 
 /** Pure computation, separated from data access for clarity and testability. */
 export function computeForecast(inputs: ForecastInputs): ForecastResult {
-  const { transactions, priorNet, assumptions, currency } = inputs;
+  const { transactions, assumptions, currency } = inputs;
   const today = utcDay(inputs.now);
   const todayIso = isoDay(today);
   const currentMonthIndex = monthIndex(today);
@@ -166,7 +174,14 @@ export function computeForecast(inputs: ForecastInputs): ForecastResult {
     dailyNet.set(day, (dailyNet.get(day) ?? 0) + signed);
     windowNet += signed;
   }
-  const currentBalance = round2(priorNet + windowNet);
+  const derivedBalance = round2(inputs.priorNet + windowNet);
+  const currentBalance =
+    inputs.startingBalance === null || inputs.startingBalance === undefined
+      ? derivedBalance
+      : round2(inputs.startingBalance);
+  // Shift the opening balance by the same amount so the historical line ends
+  // exactly at the anchored figure instead of jumping at today.
+  const priorNet = inputs.priorNet + (currentBalance - derivedBalance);
 
   const historyStart = new Date(today.getTime() - 365 * MS_PER_DAY);
   const actualBalanceByDay = new Map<string, number>();

@@ -12,6 +12,7 @@ import {
   HourglassIcon,
   Loader2Icon,
   LockIcon,
+  PencilIcon,
   PlugIcon,
   RefreshCwIcon,
   ShieldCheckIcon,
@@ -37,12 +38,13 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
+import { formatCurrency } from "@/lib/utils";
 
 import { GoCardlessConnectButton } from "./gocardless-connect";
 import { PlaidConnectButton } from "./plaid-connect";
 import { getProviderGuide } from "./provider-guide";
 import { ProviderIcon } from "./provider-icons";
-import { CAPABILITY_LABELS, type IntegrationCardData } from "./types";
+import { CAPABILITY_LABELS, type ConnectionData, type IntegrationCardData } from "./types";
 
 /** Days before consent expiry at which the renew warning appears. */
 const CONSENT_WARNING_DAYS = 14;
@@ -76,10 +78,8 @@ function formatLastSync(iso: string | null): string {
   })}`;
 }
 
-export function StatusBadge({ data }: { data: IntegrationCardData }) {
-  if (!data.configured) return <Badge variant="secondary">Needs setup</Badge>;
-  if (!data.connection) return <Badge variant="outline">Available</Badge>;
-  switch (data.connection.status) {
+function ConnectionStatusBadge({ status }: { status: ConnectionData["status"] }) {
+  switch (status) {
     case "CONNECTED":
       return (
         <Badge className="border-transparent bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
@@ -95,6 +95,23 @@ export function StatusBadge({ data }: { data: IntegrationCardData }) {
         </Badge>
       );
   }
+}
+
+export function StatusBadge({ data }: { data: IntegrationCardData }) {
+  if (!data.configured) return <Badge variant="secondary">Needs setup</Badge>;
+  if (data.connections.length === 0) return <Badge variant="outline">Available</Badge>;
+  if (data.connections.length > 1) {
+    return (
+      <Badge className="border-transparent bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+        {data.connections.length} connected
+      </Badge>
+    );
+  }
+  return <ConnectionStatusBadge status={data.connections[0].status} />;
+}
+
+function formatMoney(amount: number, currency: string | null, fallback: string): string {
+  return formatCurrency(amount, currency ?? fallback);
 }
 
 function CopyEnvVar({ name }: { name: string }) {
@@ -213,53 +230,82 @@ function WebhookConnectDialog({ data }: { data: IntegrationCardData }) {
   );
 }
 
-function ConnectAction({ data, reconnect }: { data: IntegrationCardData; reconnect?: boolean }) {
-  if (data.flow === "plaid") return <PlaidConnectButton />;
+function ConnectAction({
+  data,
+  reconnect,
+  another,
+}: {
+  data: IntegrationCardData;
+  reconnect?: boolean;
+  /** An extra connection alongside the existing ones. */
+  another?: boolean;
+}) {
+  if (data.flow === "plaid") return <PlaidConnectButton another={another} />;
   if (data.flow === "webhook") return <WebhookConnectDialog data={data} />;
   if (data.id === "gocardless") {
     return (
       <GoCardlessConnectButton
         defaultCountry={data.bankPickerCountry ?? "GB"}
-        variant={reconnect ? "reconnect" : "connect"}
+        variant={another ? "another" : reconnect ? "reconnect" : "connect"}
       />
     );
   }
+  const href = `/api/integrations/${data.id}/connect${another ? "?intent=add" : ""}`;
   return (
-    <Button size="sm" asChild>
-      <a href={`/api/integrations/${data.id}/connect`}>
+    <Button size="sm" variant={another ? "outline" : "default"} asChild>
+      <a href={href}>
         <PlugIcon className="size-4" />
-        {reconnect ? "Reconnect" : "Connect"}
+        {another ? "Connect another" : reconnect ? "Reconnect" : "Connect"}
       </a>
     </Button>
   );
 }
 
-export function IntegrationDetail({
-  data,
-  locked,
-}: {
-  data: IntegrationCardData;
-  locked: boolean;
-}) {
+function ConnectionLogo({ connection, providerId }: { connection: ConnectionData; providerId: string }) {
+  if (!connection.institutionLogo) {
+    return <ProviderIcon providerId={providerId} className="size-8 shrink-0" />;
+  }
+  return (
+    // Bank logos come from the provider's CDN; next/image can't allowlist
+    // arbitrary institution hosts.
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={connection.institutionLogo}
+      alt=""
+      className="size-8 shrink-0 rounded-md object-contain"
+      loading="lazy"
+    />
+  );
+}
+
+/** One connection row: its own status, sync, rename, disconnect and accounts. */
+function ConnectionRow({ data, connection }: { data: IntegrationCardData; connection: ConnectionData }) {
   const router = useRouter();
-  const guide = getProviderGuide(data.id);
   const [syncing, setSyncing] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [nameDraft, setNameDraft] = useState(connection.displayName ?? "");
+  const [renaming, setRenaming] = useState(false);
   const [togglingCalendar, setTogglingCalendar] = useState(false);
+  const [pendingAccountId, setPendingAccountId] = useState<string | null>(null);
 
-  const connection = data.connection;
-  const daysLeft = consentDaysLeft(connection?.consentExpiresAt ?? null);
+  const daysLeft = consentDaysLeft(connection.consentExpiresAt);
   const consentExpiring =
-    connection?.status === "CONNECTED" &&
+    connection.status === "CONNECTED" &&
     daysLeft !== null &&
     daysLeft >= 0 &&
     daysLeft <= CONSENT_WARNING_DAYS;
-  const rateLimitLabel = rateLimitedUntilLabel(connection?.rateLimitedUntil ?? null);
+  const rateLimitLabel = rateLimitedUntilLabel(connection.rateLimitedUntil);
 
   const syncNow = async () => {
     setSyncing(true);
     try {
-      const response = await fetch(`/api/integrations/${data.id}/sync`, { method: "POST" });
+      const response = await fetch(`/api/integrations/${data.id}/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ connectionId: connection.id }),
+      });
       const body = (await response.json()) as {
         error?: string;
         stats?: Record<string, number>;
@@ -268,7 +314,7 @@ export function IntegrationDetail({
       const summary = Object.entries(body.stats ?? {})
         .map(([key, value]) => `${key}: ${value}`)
         .join(", ");
-      toast.success(`${data.name} synced${summary ? ` (${summary})` : ""}`);
+      toast.success(`${connection.title} synced${summary ? ` (${summary})` : ""}`);
       router.refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Sync failed");
@@ -283,10 +329,13 @@ export function IntegrationDetail({
     try {
       const response = await fetch(`/api/integrations/${data.id}/disconnect`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ connectionId: connection.id }),
       });
       const body = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(body.error ?? "Could not disconnect");
-      toast.success(`${data.name} disconnected`);
+      toast.success(`${connection.title} disconnected`);
+      setConfirmOpen(false);
       router.refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not disconnect");
@@ -295,26 +344,263 @@ export function IntegrationDetail({
     }
   };
 
+  const patchOptions = async (body: Record<string, unknown>, success: string) => {
+    const response = await fetch(`/api/integrations/${data.id}/options`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ connectionId: connection.id, ...body }),
+    });
+    if (!response.ok) {
+      const payload = (await response.json()) as { error?: string };
+      throw new Error(payload.error ?? "Could not update options");
+    }
+    toast.success(success);
+    router.refresh();
+  };
+
+  const rename = async () => {
+    setRenaming(true);
+    try {
+      const trimmed = nameDraft.trim();
+      await patchOptions({ displayName: trimmed || null }, trimmed ? "Renamed" : "Name cleared");
+      setRenameOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not rename");
+    } finally {
+      setRenaming(false);
+    }
+  };
+
+  const toggleAccount = async (accountId: string, includeInTotals: boolean) => {
+    setPendingAccountId(accountId);
+    try {
+      await patchOptions(
+        { account: { id: accountId, includeInTotals } },
+        includeInTotals ? "Account counted in totals" : "Account excluded from totals"
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update the account");
+    } finally {
+      setPendingAccountId(null);
+    }
+  };
+
   const toggleCalendar = async (enabled: boolean) => {
     setTogglingCalendar(true);
     try {
-      const response = await fetch(`/api/integrations/${data.id}/options`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ calendarEnabled: enabled }),
-      });
-      if (!response.ok) {
-        const body = (await response.json()) as { error?: string };
-        throw new Error(body.error ?? "Could not update options");
-      }
-      toast.success(enabled ? "Calendar events enabled" : "Calendar events disabled");
-      router.refresh();
+      await patchOptions(
+        { calendarEnabled: enabled },
+        enabled ? "Calendar events enabled" : "Calendar events disabled"
+      );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not update options");
     } finally {
       setTogglingCalendar(false);
     }
   };
+
+  return (
+    <div className="space-y-3 rounded-lg border p-3">
+      <div className="flex items-start gap-3">
+        <ConnectionLogo connection={connection} providerId={data.id} />
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="truncate text-sm font-medium">{connection.title}</p>
+            <ConnectionStatusBadge status={connection.status} />
+          </div>
+          <div className="text-muted-foreground space-y-1 text-xs">
+            {connection.accounts.length > 0 ? (
+              <p>
+                {connection.accounts.length} account{connection.accounts.length === 1 ? "" : "s"}
+                {connection.includedBalance !== null
+                  ? ` · ${formatMoney(connection.includedBalance, connection.balanceCurrency, data.currency)} counted`
+                  : ""}
+              </p>
+            ) : connection.accountLabel ? (
+              <p className="truncate">{connection.accountLabel}</p>
+            ) : null}
+            {data.syncable ? <p>{formatLastSync(connection.lastSyncAt)}</p> : null}
+            {connection.consentExpiresAt && !consentExpiring ? (
+              <p>
+                Consent valid until{" "}
+                {new Date(connection.consentExpiresAt).toLocaleDateString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      {consentExpiring ? (
+        <p className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+          <CalendarClockIcon className="mt-0.5 size-3.5 shrink-0" />
+          <span>
+            Bank consent expires{" "}
+            {daysLeft === 0 ? "today" : `in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`} — renew it
+            to keep syncing without interruption.
+          </span>
+        </p>
+      ) : null}
+      {rateLimitLabel ? (
+        <p className="text-muted-foreground flex items-start gap-1.5 text-xs">
+          <HourglassIcon className="mt-0.5 size-3.5 shrink-0" />
+          <span>
+            Your bank&apos;s daily data limit was reached — syncing resumes automatically after{" "}
+            {rateLimitLabel}.
+          </span>
+        </p>
+      ) : null}
+      {connection.lastError ? (
+        <p className="text-destructive flex items-start gap-1.5 text-xs">
+          <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" />
+          <span className="line-clamp-3">
+            {connection.status === "EXPIRED"
+              ? "Access expired — reconnect to resume syncing. Your imported data is unaffected."
+              : connection.lastError}
+          </span>
+        </p>
+      ) : null}
+
+      {connection.accounts.length > 0 ? (
+        <ul className="divide-y rounded-md border">
+          {connection.accounts.map((account) => (
+            <li key={account.id} className="flex items-center gap-3 px-3 py-2">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm">{account.label}</p>
+                <p className="text-muted-foreground text-xs">
+                  {account.balance !== null
+                    ? formatMoney(account.balance, account.currency, data.currency)
+                    : "No balance yet"}
+                </p>
+              </div>
+              <Label
+                htmlFor={`include-${account.id}`}
+                className="text-muted-foreground text-xs font-normal"
+              >
+                In totals
+              </Label>
+              <Switch
+                id={`include-${account.id}`}
+                checked={account.includeInTotals}
+                onCheckedChange={(checked) => toggleAccount(account.id, checked)}
+                disabled={pendingAccountId === account.id}
+              />
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {data.id === "google-calendar" ? (
+        <div className="flex items-center justify-between gap-2 rounded-md border p-3">
+          <Label htmlFor={`calendar-${connection.id}`} className="text-sm font-normal">
+            Create calendar events for upcoming bills
+          </Label>
+          <Switch
+            id={`calendar-${connection.id}`}
+            checked={connection.calendarEnabled}
+            onCheckedChange={toggleCalendar}
+            disabled={togglingCalendar}
+          />
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-2">
+        {connection.status === "EXPIRED" ? <ConnectAction data={data} reconnect /> : null}
+        {consentExpiring && data.id === "gocardless" ? (
+          <GoCardlessConnectButton
+            defaultCountry={data.bankPickerCountry ?? "GB"}
+            variant="renew"
+          />
+        ) : null}
+        {data.syncable && connection.status !== "EXPIRED" ? (
+          <Button size="sm" variant="outline" onClick={syncNow} disabled={syncing}>
+            {syncing ? (
+              <Loader2Icon className="size-4 animate-spin" />
+            ) : (
+              <RefreshCwIcon className="size-4" />
+            )}
+            {syncing ? "Syncing…" : "Sync now"}
+          </Button>
+        ) : null}
+
+        <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm" variant="ghost" className="text-muted-foreground">
+              <PencilIcon className="size-4" />
+              Rename
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Rename connection</DialogTitle>
+              <DialogDescription>
+                Give this connection a name you recognise, e.g. &quot;ING current&quot;. Leave it
+                empty to use the bank&apos;s own name.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2">
+              <Label htmlFor={`rename-${connection.id}`}>Name</Label>
+              <Input
+                id={`rename-${connection.id}`}
+                value={nameDraft}
+                maxLength={60}
+                placeholder={connection.institutionName ?? data.name}
+                onChange={(event) => setNameDraft(event.target.value)}
+              />
+            </div>
+            <DialogFooter>
+              <Button onClick={rename} disabled={renaming}>
+                {renaming ? <Loader2Icon className="size-4 animate-spin" /> : null}
+                Save
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm" variant="ghost" className="text-muted-foreground">
+              <UnplugIcon className="size-4" />
+              Disconnect
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Disconnect {connection.title}?</DialogTitle>
+              <DialogDescription>
+                Syncing stops for this connection only — your other connections keep working.
+                Transactions already imported stay in your workspace, and their accounts stop
+                counting towards your cash total.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" size="sm" onClick={() => setConfirmOpen(false)}>
+                Keep it
+              </Button>
+              <Button variant="destructive" size="sm" onClick={disconnect} disabled={disconnecting}>
+                {disconnecting ? <Loader2Icon className="size-4 animate-spin" /> : null}
+                Disconnect
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </div>
+  );
+}
+
+export function IntegrationDetail({
+  data,
+  locked,
+}: {
+  data: IntegrationCardData;
+  locked: boolean;
+}) {
+  const guide = getProviderGuide(data.id);
+  const connections = data.connections;
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">
@@ -432,7 +718,7 @@ export function IntegrationDetail({
               </div>
             </details>
           </div>
-        ) : !connection ? (
+        ) : connections.length === 0 ? (
           <Section title="How to connect" icon={<PlugIcon className="size-4" />}>
             <Steps steps={guide.userSteps} />
             <div className="pt-2">
@@ -440,97 +726,21 @@ export function IntegrationDetail({
             </div>
           </Section>
         ) : (
-          <div className="space-y-4">
-            <Section title="Connection" icon={<PlugIcon className="size-4" />}>
-              <div className="space-y-1.5 text-sm">
-                {connection.accountLabel ? (
-                  <p className="text-muted-foreground">{connection.accountLabel}</p>
-                ) : null}
-                {data.syncable ? (
-                  <p className="text-muted-foreground">{formatLastSync(connection.lastSyncAt)}</p>
-                ) : null}
-                {consentExpiring ? (
-                  <p className="flex items-start gap-1.5 text-amber-600 dark:text-amber-400">
-                    <CalendarClockIcon className="mt-0.5 size-3.5 shrink-0" />
-                    <span>
-                      Bank consent expires{" "}
-                      {daysLeft === 0 ? "today" : `in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`} —
-                      renew it to keep syncing without interruption.
-                    </span>
-                  </p>
-                ) : null}
-                {rateLimitLabel ? (
-                  <p className="text-muted-foreground flex items-start gap-1.5">
-                    <HourglassIcon className="mt-0.5 size-3.5 shrink-0" />
-                    <span>
-                      Your bank&apos;s daily data limit was reached — syncing resumes automatically
-                      after {rateLimitLabel}.
-                    </span>
-                  </p>
-                ) : null}
-                {connection.lastError ? (
-                  <p className="text-destructive flex items-start gap-1.5">
-                    <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" />
-                    <span className="line-clamp-3">
-                      {connection.status === "EXPIRED"
-                        ? "Access expired — reconnect to resume syncing. Your imported data is unaffected."
-                        : connection.lastError}
-                    </span>
-                  </p>
-                ) : null}
-              </div>
-            </Section>
-
-            {data.id === "google-calendar" ? (
-              <div className="flex items-center justify-between gap-2 rounded-lg border p-3">
-                <Label htmlFor="calendar-toggle" className="text-sm font-normal">
-                  Create calendar events for upcoming bills
-                </Label>
-                <Switch
-                  id="calendar-toggle"
-                  checked={connection.calendarEnabled}
-                  onCheckedChange={toggleCalendar}
-                  disabled={togglingCalendar}
-                />
-              </div>
-            ) : null}
-
-            <div className="flex flex-wrap gap-2">
-              {connection.status === "EXPIRED" ? (
-                <ConnectAction data={data} reconnect />
+          <Section
+            title={connections.length > 1 ? `Connections (${connections.length})` : "Connection"}
+            icon={<PlugIcon className="size-4" />}
+          >
+            <div className="space-y-3">
+              {connections.map((connection) => (
+                <ConnectionRow key={connection.id} data={data} connection={connection} />
+              ))}
+              {data.multiInstance ? (
+                <div className="pt-1">
+                  <ConnectAction data={data} another />
+                </div>
               ) : null}
-              {consentExpiring && data.id === "gocardless" ? (
-                <GoCardlessConnectButton
-                  defaultCountry={data.bankPickerCountry ?? "GB"}
-                  variant="renew"
-                />
-              ) : null}
-              {data.syncable && connection.status !== "EXPIRED" ? (
-                <Button size="sm" variant="outline" onClick={syncNow} disabled={syncing}>
-                  {syncing ? (
-                    <Loader2Icon className="size-4 animate-spin" />
-                  ) : (
-                    <RefreshCwIcon className="size-4" />
-                  )}
-                  {syncing ? "Syncing…" : "Sync now"}
-                </Button>
-              ) : null}
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={disconnect}
-                disabled={disconnecting}
-                className="text-muted-foreground"
-              >
-                {disconnecting ? (
-                  <Loader2Icon className="size-4 animate-spin" />
-                ) : (
-                  <UnplugIcon className="size-4" />
-                )}
-                Disconnect
-              </Button>
             </div>
-          </div>
+          </Section>
         )}
       </div>
     </div>

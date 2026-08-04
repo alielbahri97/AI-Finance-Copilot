@@ -76,8 +76,8 @@ interface InstitutionOption {
 interface GoCardlessConnectButtonProps {
   /** Sensible starting country, derived from the profile server-side. */
   defaultCountry: string;
-  /** Renders as "Reconnect"/"Renew" instead of "Connect bank". */
-  variant?: "connect" | "reconnect" | "renew";
+  /** Renders as "Reconnect"/"Renew"/"Connect another bank" instead of "Connect bank". */
+  variant?: "connect" | "reconnect" | "renew" | "another";
 }
 
 export function GoCardlessConnectButton({
@@ -142,18 +142,27 @@ export function GoCardlessConnectButton({
 
   const connectTo = (institutionId: string) => {
     setRedirecting(institutionId);
+    // `intent=add` tells the server this is meant to be an extra connection
+    // rather than a refresh of the existing one.
+    const intent = variant === "another" ? "&intent=add" : "";
     window.location.href = `/api/integrations/gocardless/connect?institution=${encodeURIComponent(
       institutionId
-    )}`;
+    )}${intent}`;
   };
 
   const label =
-    variant === "reconnect" ? "Reconnect" : variant === "renew" ? "Renew consent" : "Connect bank";
+    variant === "reconnect"
+      ? "Reconnect"
+      : variant === "renew"
+        ? "Renew consent"
+        : variant === "another"
+          ? "Connect another bank"
+          : "Connect bank";
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant={variant === "renew" ? "outline" : "default"}>
+        <Button size="sm" variant={variant === "connect" ? "default" : "outline"}>
           <PlugIcon className="size-4" />
           {label}
         </Button>
