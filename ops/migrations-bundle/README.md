@@ -61,6 +61,13 @@ If it errors: nothing was changed (single transaction), so send me the full
 error. The script is safe to run again; every statement is idempotent and the
 statements that write rows are skipped once 0016 is recorded as applied.
 
+**Do not use Vercel Instant Rollback after applying 0016** — same rule as 0014,
+for the same reason. The pre-0016 code upserts connections against
+`UNIQUE (workspace_id, provider)`, which 0016 replaces, so on the old code every
+connect, reconnect and OAuth callback would fail with "no unique or exclusion
+constraint matching the ON CONFLICT specification". If the new deployment
+misbehaves, roll *forward*.
+
 ---
 
 ## What is wrong (round 1)
