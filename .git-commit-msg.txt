@@ -1,0 +1,23 @@
+Add an in-app help agent for "how do I…" questions, separate from the copilot
+
+- Floating help button on every dashboard page opens a compact chat sheet;
+  full experience on the new /help page (also in the sidebar nav) with
+  featured common questions. Report-issue escalation in the panel footer.
+- Knowledge base (src/lib/help/knowledge.ts) written from the real UI:
+  getting started, CSV import, categories & rules, transactions, copilot,
+  forecasts & assumptions, invoices, reports & exports, notifications,
+  bank connections and other integrations (steps imported from
+  provider-guide.ts), billing & plans (generated from the plans module),
+  settings, and escalation.
+- Keyword-scoring retrieval (no vector DB) picks the top topics per
+  question; the streaming /api/help route (same ndjson protocol as the
+  copilot) passes them plus a user-context block (plan, configured
+  providers, connection statuses, data counts) to the AI with a
+  support-agent system prompt.
+- Help messages are stored in a new per-user HelpMessage thread
+  (migration 0013) and never consume the copilot AI-message quota; a
+  dedicated per-user rate limit (10/min) prevents abuse.
+- Assistant markdown now renders app-internal links with Next navigation
+  (benefits the copilot too).
+- 12 new tests cover knowledge integrity, link targets, retrieval and the
+  prompt builder.

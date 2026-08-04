@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -16,16 +17,22 @@ export function Markdown({ content }: { content: string }) {
         ol: ({ children }) => <ol className="mt-2 list-decimal space-y-1 pl-5">{children}</ol>,
         li: ({ children }) => <li className="leading-relaxed">{children}</li>,
         strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-        a: ({ children, href }) => (
-          <a
-            href={href}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary underline underline-offset-2"
-          >
-            {children}
-          </a>
-        ),
+        a: ({ children, href }) =>
+          // App-internal links navigate in place; external links open a tab.
+          href?.startsWith("/") ? (
+            <Link href={href} className="text-primary underline underline-offset-2">
+              {children}
+            </Link>
+          ) : (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary underline underline-offset-2"
+            >
+              {children}
+            </a>
+          ),
         h1: ({ children }) => <h3 className="mt-3 text-base font-semibold">{children}</h3>,
         h2: ({ children }) => <h3 className="mt-3 text-base font-semibold">{children}</h3>,
         h3: ({ children }) => <h4 className="mt-3 text-sm font-semibold">{children}</h4>,

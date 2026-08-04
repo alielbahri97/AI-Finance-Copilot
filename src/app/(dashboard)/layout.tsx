@@ -4,6 +4,7 @@ import { redirect, unstable_rethrow } from "next/navigation";
 import { DatabaseUnavailable } from "@/components/dashboard/database-unavailable";
 import { Header } from "@/components/dashboard/header";
 import { Sidebar } from "@/components/dashboard/sidebar";
+import { HelpLauncher } from "@/components/help/help-launcher";
 import { getOrCreateProfile } from "@/lib/data";
 import { describeDatabaseError, isDatabaseUnavailable } from "@/lib/db-errors";
 import { logger } from "@/lib/logger";
@@ -48,6 +49,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             {children}
           </main>
         </div>
+        <HelpLauncher />
       </div>
     );
   } catch (error) {

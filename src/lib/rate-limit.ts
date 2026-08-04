@@ -135,4 +135,6 @@ export const RATE_LIMITS = {
   billing: { limit: 10, windowMs: 60_000 },
   /** Manual integration syncs. */
   sync: { limit: 6, windowMs: 60_000 },
+  /** Help agent: not plan-gated, so rate limiting is the only abuse brake. */
+  help: { limit: 10, windowMs: 60_000 },
 } as const satisfies Record<string, RateLimitConfig>;

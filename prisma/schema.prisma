@@ -159,8 +159,24 @@ model Profile {
   analyticsEvents        AnalyticsEvent[]
   integrationConnections IntegrationConnection[]
   businessProfile        BusinessProfile?
+  helpMessages           HelpMessage[]
 
   @@map("profiles")
+}
+
+/// Support/help-agent chat: one lightweight thread per user, separate from
+/// the finance copilot's conversations (different quota, different prompt).
+model HelpMessage {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id") @db.Uuid
+  role      ChatRole
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("help_messages")
 }
 
 /// Captures light business context from post-signup onboarding so FinPilot

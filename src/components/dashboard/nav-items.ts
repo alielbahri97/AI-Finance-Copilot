@@ -5,6 +5,7 @@ import {
   ChartSplineIcon,
   CreditCardIcon,
   LayoutDashboardIcon,
+  LifeBuoyIcon,
   PlugIcon,
   ReceiptTextIcon,
   SettingsIcon,
@@ -34,6 +35,7 @@ export const NAV_ITEMS: NavItem[] = [
   { title: "Billing", href: "/billing", icon: CreditCardIcon },
   { title: "Profile", href: "/profile", icon: UserIcon },
   { title: "Settings", href: "/settings", icon: SettingsIcon },
+  { title: "Help", href: "/help", icon: LifeBuoyIcon },
 ];
 
 /** Shown only to profiles with isAdmin = true. */
