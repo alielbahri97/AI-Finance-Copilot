@@ -6,6 +6,12 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
+    env: {
+      // src/lib/prisma.ts creates its client (and pg pool) eagerly at import
+      // time and fails fast without a connection string. No test ever opens a
+      // connection, so any syntactically valid URL suffices.
+      DATABASE_URL: "postgresql://vitest:vitest@localhost:5432/vitest",
+    },
   },
   resolve: {
     alias: [

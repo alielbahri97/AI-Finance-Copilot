@@ -93,6 +93,9 @@ export function OnboardingWizard({
       monthlyRent: typeof values.monthlyRent === "number" ? values.monthlyRent : null,
       monthlyRevenue: typeof values.monthlyRevenue === "number" ? values.monthlyRevenue : null,
     });
+    // form.getValues() is non-reactive, so `step` is a deliberate dependency:
+    // it refreshes the preview with the values entered on the completed step.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form, step]);
 
   async function goNext() {
