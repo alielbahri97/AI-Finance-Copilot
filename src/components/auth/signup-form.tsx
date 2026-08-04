@@ -25,8 +25,12 @@ import { signupSchema, type SignupValues } from "@/lib/validations/auth";
 export function SignupForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
+  const searchParams = useSearchParams();
   // Referral attribution: /signup?ref=CODE travels via signup metadata.
-  const referralCode = useSearchParams().get("ref");
+  const referralCode = searchParams.get("ref");
+  // Post-confirmation destination (e.g. back to a workspace invitation).
+  const rawNext = searchParams.get("next");
+  const next = rawNext && rawNext.startsWith("/") ? rawNext : "/onboarding";
 
   const form = useForm<SignupValues>({
     resolver: zodResolver(signupSchema),
@@ -45,7 +49,7 @@ export function SignupForm() {
             full_name: values.fullName,
             ...(referralCode ? { referral_code: referralCode } : {}),
           },
-          emailRedirectTo: authCallbackUrl("/onboarding"),
+          emailRedirectTo: authCallbackUrl(next),
         },
       });
 

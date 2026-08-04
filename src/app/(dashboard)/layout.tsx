@@ -11,6 +11,7 @@ import { logger } from "@/lib/logger";
 import { isOnboardingDone } from "@/lib/onboarding/benchmarks";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
+import { getWorkspaceContext, listUserWorkspaces } from "@/lib/workspace/context";
 
 // Everything behind login is per-user data; keep it out of search engines.
 export const metadata: Metadata = {
@@ -24,16 +25,21 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }
 
   try {
-    const [profile, businessProfile] = await Promise.all([
+    const [profile, businessProfile, ctx, workspaces] = await Promise.all([
       getOrCreateProfile(user),
       // First-run business onboarding — skip once the user completes or dismisses it.
       prisma.businessProfile.findUnique({
         where: { userId: user.id },
         select: { completedAt: true, skippedAt: true },
       }),
+      getWorkspaceContext(),
+      listUserWorkspaces(user.id),
     ]);
     if (!isOnboardingDone(businessProfile)) {
       redirect("/onboarding");
+    }
+    if (!ctx) {
+      redirect("/login");
     }
 
     return (
@@ -45,6 +51,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
             fullName={profile.fullName}
             avatarUrl={profile.avatarUrl}
             isAdmin={profile.isAdmin}
+            workspaces={workspaces}
+            currentWorkspaceId={ctx.workspace.id}
           />
           <main id="main-content" tabIndex={-1} className="flex-1 p-4 outline-none sm:p-6">
             {children}

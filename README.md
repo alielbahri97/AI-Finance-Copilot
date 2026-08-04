@@ -92,6 +92,12 @@ Supabase, Prisma and OpenAI/Anthropic.
   status, last sync and last error with connect/disconnect/sync-now controls. An hourly
   cron runs due syncs with per-connection error isolation and failure backoff; providers
   without credentials simply show as "Not configured" with the env vars they need.
+- **Teams & shared workspaces** — every account gets a personal workspace, and Business+
+  plans can invite more people into it: members sign in with their own accounts and share
+  the workspace's transactions, invoices, forecasts and copilot. Roles
+  (owner/admin/member/viewer) with per-member permission overrides, hashed single-use email
+  invitations (7-day expiry), a workspace switcher, seat limits from the plan, and an audit
+  log of member/billing/data changes. See [Teams, roles & permissions](#teams-roles--permissions).
 - **Profile & Settings** — display name, preferred currency, AI provider choice, theme
   (light/dark/system) and password change
 - **UI** — responsive layout, dark mode, toast notifications, loading skeletons, error
@@ -491,11 +497,57 @@ keys are missing. Full commented reference in [.env.example](.env.example).
 Only `NEXT_PUBLIC_*` values reach the browser bundle: the Supabase URL + anon key (designed
 to be public), the app URL and the VAPID *public* key. Everything else is server-only.
 
+## Teams, roles & permissions
+
+All business data (transactions, categories, rules, imports, invoices, forecasts,
+assumptions, copilot conversations, integrations, billing) belongs to a **workspace**, not
+to an individual user. Every account owns a personal workspace, created automatically, so
+single-user Free/Pro accounts work exactly as before. Business+ plans can share a
+workspace with more people.
+
+**Roles.** Each member has one of four roles:
+
+| Role   | Access                                                                       |
+| ------ | ---------------------------------------------------------------------------- |
+| Owner  | Everything, always — permission overrides never apply to the owner            |
+| Admin  | Everything, including member and billing management                           |
+| Member | View + edit data, exports, copilot, forecast — no member/billing/integrations |
+| Viewer | Read-only: transactions, invoices, reports                                    |
+
+**Granular permissions.** On top of the role defaults, owners and admins can toggle
+individual permissions per member in *Settings → Team* (e.g. give a viewer copilot access,
+or take exports away from a member): `view_transactions`, `edit_transactions`,
+`view_invoices`, `edit_invoices`, `view_reports`, `export_data`, `use_copilot`,
+`manage_forecast`, `manage_integrations`, `view_billing`, `manage_members`,
+`manage_settings`. The matrix lives in `src/lib/workspace/permissions.ts`.
+
+**Enforcement.** Every API route and server page resolves
+`getWorkspaceContext()`/`requireWorkspace()` (`src/lib/workspace/context.ts`): it
+authenticates the user, validates the workspace cookie **against membership in the
+database on every request** (a forged cookie is useless and a removed member loses access
+immediately), and returns the effective permission set. Routes reject with 403 when a
+permission is missing; the UI additionally hides what a member can't use, but the server
+check is the source of truth.
+
+**Invitations.** Owners/admins invite by email with a role. Invitations are single-use,
+bound to the invited email, expire after 7 days, and can be revoked while pending; only a
+SHA-256 hash of the invite token is stored. The invite is emailed via Resend when
+configured — otherwise the dialog shows a copyable link. Accepting requires signing in (or
+signing up) with the invited address at `/invite/<token>`.
+
+**Seats.** Seats (members + pending invitations) come from the plan: Free/Pro 1, Business
+5, Enterprise custom. Inviting beyond the limit returns an upgrade prompt. The workspace —
+not the user — carries the subscription.
+
+**Audit log.** Member, permission, billing, export and destructive data changes are
+recorded per workspace (`AuditLog`) and visible to owners/admins in *Settings → Team*.
+
 ## Security
 
 - **Auth & ownership** — `src/middleware.ts` guards all app routes; every API route
-  re-checks `supabase.auth.getUser()` and scopes each query/mutation by the authenticated
-  user id (deletes/updates use `deleteMany`/ownership pre-checks so a foreign id yields 404).
+  resolves the workspace context (authenticated user + database-verified membership +
+  permission check) and scopes each query/mutation by the workspace id (deletes/updates use
+  `deleteMany`/ownership pre-checks so a foreign id yields 404).
 - **Security headers** — set globally in `next.config.ts`: a CSP restricted to self plus
   Supabase/Plaid origins, HSTS (2 years, preload-ready), `X-Frame-Options: DENY`,
   `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`

@@ -29,7 +29,9 @@ apply if you enable that feature.
 - [ ] Private `invoices` storage bucket created with the per-user RLS policy from the README
 - [ ] RLS enabled on all tables in the `public` schema with no anon-role policies
       (Prisma connects with the postgres role; the anon key must not read app tables)
-- [ ] All migrations applied: `npx prisma migrate deploy` (through `0009_performance_indexes`)
+- [ ] All migrations applied: `npx prisma migrate deploy` (through `0014_workspaces` —
+      this one migrates every existing user into a personal workspace and remaps all
+      business data to workspace scope; take a backup first and apply it in one go)
 - [ ] Database backups: PITR or scheduled dumps enabled in the Supabase dashboard
 
 ## Stripe *(optional)*
