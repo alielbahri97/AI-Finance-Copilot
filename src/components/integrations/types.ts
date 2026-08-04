@@ -8,6 +8,8 @@ export interface IntegrationCardData {
   flow: "oauth2" | "plaid" | "redirect" | "webhook";
   configured: boolean;
   missingEnvVars: string[];
+  /** Every env var the provider needs (for the admin setup guide). */
+  requiredEnvVars: string[];
   /** Whether the provider has something to sync (vs. outgoing-only). */
   syncable: boolean;
   /** Default country for the GoCardless bank picker (from the profile). */

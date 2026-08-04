@@ -4,27 +4,19 @@ import { redirect } from "next/navigation";
 import { CheckCircle2Icon, LockIcon, TriangleAlertIcon } from "lucide-react";
 
 import { FirstSyncBanner } from "@/components/integrations/first-sync-banner";
-import { IntegrationCard } from "@/components/integrations/integration-card";
+import { IntegrationsGrid } from "@/components/integrations/integrations-grid";
 import type { IntegrationCardData } from "@/components/integrations/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { isEncryptionConfigured } from "@/lib/integrations/crypto";
-import {
-  CATEGORY_LABELS,
-  getProviders,
-  isProviderConfigured,
-  type IntegrationCategory,
-} from "@/lib/integrations/registry";
+import { getProviders, isProviderConfigured } from "@/lib/integrations/registry";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
   title: "Integrations",
 };
-
-const CATEGORY_ORDER: IntegrationCategory[] = ["banking", "accounting", "productivity"];
 
 /** Default bank-picker country from the profile currency (GoCardless covers EEA + UK). */
 const CURRENCY_TO_COUNTRY: Record<string, string> = {
@@ -90,7 +82,7 @@ function accountLabel(provider: string, metadata: Record<string, unknown>): stri
   }
 }
 
-/** Latest still-active per-account rate-limit window, for the card note. */
+/** Latest still-active per-account rate-limit window, for the detail view. */
 function rateLimitedUntil(metadata: Record<string, unknown>): string | null {
   const map = metadata.rateLimitedUntil as Record<string, string> | undefined;
   if (!map) return null;
@@ -110,34 +102,7 @@ export default async function IntegrationsPage({
   if (!user) redirect("/login");
 
   const [entitlements, params] = await Promise.all([getEntitlements(user.id), searchParams]);
-
-  if (!entitlements.plan.limits.integrationsEnabled) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Integrations</h1>
-          <p className="text-muted-foreground text-sm">
-            Connect banks, accounting software and productivity tools
-          </p>
-        </div>
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
-            <div className="bg-muted flex size-12 items-center justify-center rounded-full">
-              <LockIcon className="text-muted-foreground size-6" />
-            </div>
-            <p className="font-medium">Integrations are a Business feature</p>
-            <p className="text-muted-foreground max-w-md text-sm">
-              Automatically sync bank transactions, pull invoices from your accounting
-              software, ingest invoices from email and send alerts to Slack or Teams.
-            </p>
-            <Button asChild size="sm">
-              <Link href="/billing">Upgrade plan</Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  const locked = !entitlements.plan.limits.integrationsEnabled;
 
   const encryptionReady = isEncryptionConfigured();
   const [connections, profile] = await Promise.all([
@@ -168,6 +133,7 @@ export default async function IntegrationsPage({
         ...(encryptionReady ? [] : ["INTEGRATION_ENCRYPTION_KEY"]),
         ...provider.envVars.filter((envVar) => !process.env[envVar]),
       ],
+      requiredEnvVars: [...provider.envVars, "INTEGRATION_ENCRYPTION_KEY"],
       syncable: provider.syncIntervalHours !== null,
       bankPickerCountry,
       connection: connection
@@ -190,7 +156,8 @@ export default async function IntegrationsPage({
     ? cards.find((card) => card.id === params.connected)
     : undefined;
   const firstSyncEligible = Boolean(
-    connectedCard?.connection &&
+    !locked &&
+      connectedCard?.connection &&
       connectedCard.syncable &&
       connectedCard.capabilities.includes("transactions")
   );
@@ -205,10 +172,26 @@ export default async function IntegrationsPage({
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Integrations</h1>
         <p className="text-muted-foreground text-sm">
-          Connect banks, accounting software and productivity tools. Connected sources sync
+          Pick a tool to see what it does and how to connect it. Connected sources sync
           automatically every few hours.
         </p>
       </div>
+
+      {locked ? (
+        <Alert>
+          <LockIcon className="size-4" />
+          <AlertTitle>Integrations are a Business feature</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <span>
+              Automatically sync bank transactions, pull invoices from your accounting software,
+              ingest invoices from email and send alerts to Slack or Teams.
+            </span>
+            <Button asChild size="sm">
+              <Link href="/billing">Upgrade plan</Link>
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {connectedCard && firstSyncEligible ? (
         <FirstSyncBanner
@@ -237,7 +220,7 @@ export default async function IntegrationsPage({
         </Alert>
       ) : null}
 
-      {!encryptionReady ? (
+      {!locked && !encryptionReady ? (
         <Alert>
           <TriangleAlertIcon className="size-4" />
           <AlertTitle>Setup required</AlertTitle>
@@ -249,18 +232,7 @@ export default async function IntegrationsPage({
         </Alert>
       ) : null}
 
-      {CATEGORY_ORDER.map((category) => (
-        <section key={category} className="space-y-3">
-          <h2 className="text-lg font-medium">{CATEGORY_LABELS[category]}</h2>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {cards
-              .filter((card) => card.category === category)
-              .map((card) => (
-                <IntegrationCard key={card.id} data={card} />
-              ))}
-          </div>
-        </section>
-      ))}
+      <IntegrationsGrid cards={cards} locked={locked} />
     </div>
   );
 }
