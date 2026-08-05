@@ -1,22 +1,27 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
-  CopyIcon,
   LinkIcon,
   Loader2Icon,
-  LogOutIcon,
   MailPlusIcon,
-  Share2Icon,
   ShieldIcon,
   Trash2Icon,
   UserMinusIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  api,
+  InviteLinkPanel,
+  LeaveWorkspace,
+  type InviteResult,
+  type PendingInvitationView,
+} from "@/components/team/invite-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
   DialogContent,
@@ -37,8 +42,6 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { BRAND } from "@/lib/branding";
-import type { EmailDeliveryResult } from "@/lib/notifications/email";
 import {
   ALL_PERMISSIONS,
   assignableRoles,
@@ -49,6 +52,8 @@ import {
   type WorkspaceRoleName,
 } from "@/lib/workspace/permissions";
 
+export type { PendingInvitationView };
+
 export interface TeamMemberView {
   id: string;
   userId: string;
@@ -57,13 +62,6 @@ export interface TeamMemberView {
   role: WorkspaceRoleName;
   joinedAt: string;
   overrides: Partial<Record<Permission, boolean>>;
-}
-
-export interface PendingInvitationView {
-  id: string;
-  email: string;
-  role: WorkspaceRoleName;
-  expiresAt: string;
 }
 
 interface TeamSettingsProps {
@@ -81,17 +79,6 @@ const ROLE_DESCRIPTIONS: Record<string, string> = {
   MEMBER: "View and edit data, no member or billing management",
   VIEWER: "Read-only access",
 };
-
-async function api(path: string, method: string, body?: unknown) {
-  const response = await fetch(path, {
-    method,
-    headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error ?? "Request failed");
-  return data;
-}
 
 export function TeamSettings({
   currentUserId,
@@ -162,121 +149,8 @@ export function TeamSettings({
       {!isOwner && (
         <>
           <Separator />
-          <LeaveWorkspace />
+          <LeaveWorkspace description="You will lose access to this workspace's data. Your own workspace is unaffected." />
         </>
-      )}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Invite link + email delivery status                                 */
-/* ------------------------------------------------------------------ */
-
-interface InviteResult {
-  invitation: PendingInvitationView;
-  inviteLink: string;
-  emailDelivery: EmailDeliveryResult;
-}
-
-/** navigator.share is mobile-only; resolved after mount to keep SSR stable. */
-function useCanShare(): boolean {
-  const [canShare, setCanShare] = useState(false);
-  useEffect(() => {
-    setCanShare(typeof navigator !== "undefined" && typeof navigator.share === "function");
-  }, []);
-  return canShare;
-}
-
-/**
- * The link is the part that always works, so it leads. Email delivery is
- * reported underneath as a fact, never as an assumption.
- */
-function InviteLinkPanel({ result }: { result: InviteResult }) {
-  const canShare = useCanShare();
-  const email = result.invitation.email;
-
-  async function share() {
-    try {
-      await navigator.share({
-        title: `Join my ${BRAND.name} workspace`,
-        text: `Join my ${BRAND.name} workspace — sign in with ${email}.`,
-        url: result.inviteLink,
-      });
-    } catch {
-      // The user dismissed the share sheet; nothing to report.
-    }
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      <p className="text-sm">
-        Invitation created. Send this link to <span className="font-medium">{email}</span> — they
-        will need to sign in with that address.
-      </p>
-      <div className="flex items-center gap-2">
-        <Input readOnly value={result.inviteLink} aria-label="Invitation link" />
-        <Button
-          aria-label="Copy invitation link"
-          onClick={() => {
-            void navigator.clipboard.writeText(result.inviteLink);
-            toast.success("Link copied");
-          }}
-        >
-          <CopyIcon />
-          Copy
-        </Button>
-        {canShare && (
-          <Button
-            variant="outline"
-            size="icon"
-            aria-label="Share invitation link"
-            onClick={() => void share()}
-          >
-            <Share2Icon />
-          </Button>
-        )}
-      </div>
-      <EmailDeliveryNote email={email} delivery={result.emailDelivery} />
-    </div>
-  );
-}
-
-function EmailDeliveryNote({ email, delivery }: { email: string; delivery: EmailDeliveryResult }) {
-  if (delivery.status === "sent") {
-    return <p className="text-muted-foreground text-xs">We also emailed the link to {email}.</p>;
-  }
-
-  if (delivery.status === "not_configured") {
-    return (
-      <div className="text-muted-foreground flex flex-col gap-1 text-xs">
-        <p>Email delivery isn&apos;t set up, so use the link above.</p>
-        <details>
-          <summary className="cursor-pointer">Enable email (admin)</summary>
-          <p className="mt-1">
-            Set <code className="font-mono">RESEND_API_KEY</code> and{" "}
-            <code className="font-mono">EMAIL_FROM</code> on the server, then restart it.
-          </p>
-        </details>
-      </div>
-    );
-  }
-
-  return (
-    <div className="text-muted-foreground flex flex-col gap-1 text-xs">
-      {delivery.domainRestricted ? (
-        <p>
-          Resend only delivers to your own address until you verify a domain — share the link
-          instead, or verify a domain in Resend.
-        </p>
-      ) : (
-        <p>The invitation email couldn&apos;t be sent, so share the link above.</p>
-      )}
-      {delivery.error && (
-        <details>
-          <summary className="cursor-pointer">Provider response</summary>
-          <p className="mt-1 break-words">{delivery.error}</p>
-        </details>
       )}
     </div>
   );
@@ -434,7 +308,6 @@ function MemberRow({
   }
 
   async function remove() {
-    if (!window.confirm(`Remove ${member.email} from this workspace?`)) return;
     setIsBusy(true);
     try {
       await api(`/api/workspace/members/${member.id}`, "DELETE");
@@ -473,16 +346,23 @@ function MemberRow({
             </SelectContent>
           </Select>
           <PermissionsDialog member={member} onChanged={onChanged} />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-destructive size-8"
-            onClick={remove}
-            disabled={isBusy}
-            aria-label={`Remove ${member.email}`}
-          >
-            <UserMinusIcon />
-          </Button>
+          <ConfirmDialog
+            title={`Remove ${member.name ?? member.email}?`}
+            description={`${member.email} loses access to this workspace immediately. Their own workspaces are unaffected.`}
+            confirmLabel="Remove"
+            onConfirm={remove}
+            trigger={
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-destructive size-8"
+                disabled={isBusy}
+                aria-label={`Remove ${member.email}`}
+              >
+                <UserMinusIcon />
+              </Button>
+            }
+          />
         </div>
       ) : (
         <Badge variant={member.role === "OWNER" ? "default" : "secondary"}>
@@ -687,45 +567,5 @@ function InvitationRow({
         </div>
       )}
     </li>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Leave workspace                                                     */
-/* ------------------------------------------------------------------ */
-
-function LeaveWorkspace() {
-  const router = useRouter();
-  const [isLoading, setIsLoading] = useState(false);
-
-  async function leave() {
-    if (!window.confirm("Leave this workspace? You will lose access to its data.")) return;
-    setIsLoading(true);
-    try {
-      await api("/api/workspace/leave", "POST");
-      toast.success("You left the workspace");
-      router.push("/dashboard");
-      router.refresh();
-    } catch (error) {
-      toast.error("Couldn't leave the workspace", {
-        description: error instanceof Error ? error.message : undefined,
-      });
-      setIsLoading(false);
-    }
-  }
-
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <div>
-        <p className="text-sm font-medium">Leave workspace</p>
-        <p className="text-muted-foreground text-xs">
-          You will lose access to this workspace&apos;s data. Your own workspace is unaffected.
-        </p>
-      </div>
-      <Button variant="outline" size="sm" onClick={leave} disabled={isLoading}>
-        {isLoading ? <Loader2Icon className="animate-spin" /> : <LogOutIcon />}
-        Leave
-      </Button>
-    </div>
   );
 }
