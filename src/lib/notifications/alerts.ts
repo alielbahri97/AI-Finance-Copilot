@@ -6,7 +6,7 @@ import type { NotificationPreference } from "@/generated/prisma/client";
 import { buildForecast } from "@/lib/finance/data";
 import { getInvoiceReminders } from "@/lib/invoices/reminders";
 import { prisma } from "@/lib/prisma";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, localeForCurrency } from "@/lib/utils";
 
 import { dispatchNotification, type DispatchTarget } from "./dispatch";
 import { renderAlertEmail } from "./email";
@@ -43,6 +43,8 @@ export async function evaluateLargeTransactions(
     const members = await listNotifiableMembers(workspaceId, "view_transactions");
     if (members.length === 0) return;
 
+    const money = (value: number) => formatCurrency(value, currency, localeForCurrency(currency));
+
     // Statistical norm from recent expense history (before this batch).
     const history = await prisma.transaction.findMany({
       where: {
@@ -63,7 +65,7 @@ export async function evaluateLargeTransactions(
     }
 
     const describe = (tx: AlertCandidate) =>
-      `${tx.type === "EXPENSE" ? "-" : "+"}${formatCurrency(tx.amount, currency)} ${tx.counterparty || tx.description}`;
+      `${tx.type === "EXPENSE" ? "-" : "+"}${money(tx.amount)} ${tx.counterparty || tx.description}`;
 
     // Post to the workspace's Slack/Teams channel once, not once per member.
     let chatPosted = false;
@@ -86,7 +88,7 @@ export async function evaluateLargeTransactions(
 
       if (large.length === 1) {
         const tx = large[0];
-        const title = `Large ${tx.type === "EXPENSE" ? "expense" : "incoming payment"}: ${formatCurrency(tx.amount, currency)}`;
+        const title = `Large ${tx.type === "EXPENSE" ? "expense" : "incoming payment"}: ${money(tx.amount)}`;
         const body = `${describe(tx)} on ${tx.date.toISOString().slice(0, 10)}.`;
         await dispatchNotification(target, prefs, {
           type: "LARGE_TRANSACTION",
@@ -99,7 +101,7 @@ export async function evaluateLargeTransactions(
             title,
             bodyText: "A transaction above your alert threshold was just recorded.",
             details: [
-              { label: "Amount", value: formatCurrency(tx.amount, currency) },
+              { label: "Amount", value: money(tx.amount) },
               { label: "Type", value: tx.type === "EXPENSE" ? "Expense" : "Income" },
               { label: "Counterparty", value: tx.counterparty || tx.description },
               { label: "Date", value: tx.date.toISOString().slice(0, 10) },
@@ -160,12 +162,13 @@ export async function checkLowCash(
   prefs: NotificationPreference
 ): Promise<LowCashCheck> {
   const forecast = await buildForecast(workspaceId, currency);
+  const money = (value: number) => formatCurrency(value, currency, localeForCurrency(currency));
   const floor = Number(prefs.lowCashFloor);
   const horizonDays = prefs.lowCashHorizonDays;
 
   if (forecast.currentBalance < floor) {
     const title = "Low cash warning";
-    const body = `Your balance ${formatCurrency(forecast.currentBalance, currency)} is below your floor of ${formatCurrency(floor, currency)}.`;
+    const body = `Your balance ${money(forecast.currentBalance)} is below your floor of ${money(floor)}.`;
     return {
       triggered: true,
       title,
@@ -174,8 +177,8 @@ export async function checkLowCash(
         title,
         bodyText: body,
         details: [
-          { label: "Current balance", value: formatCurrency(forecast.currentBalance, currency) },
-          { label: "Configured floor", value: formatCurrency(floor, currency) },
+          { label: "Current balance", value: money(forecast.currentBalance) },
+          { label: "Configured floor", value: money(floor) },
         ],
         ctaLabel: "Open forecast",
         ctaPath: "/forecast",
@@ -190,7 +193,7 @@ export async function checkLowCash(
     if (new Date(`${point.date}T00:00:00.000Z`) > horizonEnd) break;
     if ((point.projected as number) < floor) {
       const title = "Projected low cash";
-      const body = `Your balance is projected to fall below ${formatCurrency(floor, currency)} around ${point.date} (projected ${formatCurrency(point.projected as number, currency)}).`;
+      const body = `Your balance is projected to fall below ${money(floor)} around ${point.date} (projected ${money(point.projected as number)}).`;
       return {
         triggered: true,
         title,
@@ -199,13 +202,10 @@ export async function checkLowCash(
           title,
           bodyText: body,
           details: [
-            { label: "Current balance", value: formatCurrency(forecast.currentBalance, currency) },
+            { label: "Current balance", value: money(forecast.currentBalance) },
             { label: "Projected date", value: point.date },
-            {
-              label: "Projected balance",
-              value: formatCurrency(point.projected as number, currency),
-            },
-            { label: "Configured floor", value: formatCurrency(floor, currency) },
+            { label: "Projected balance", value: money(point.projected as number) },
+            { label: "Configured floor", value: money(floor) },
           ],
           ctaLabel: "Open forecast",
           ctaPath: "/forecast",
@@ -238,15 +238,16 @@ export async function checkInvoiceReminders(
   const dueSoonCount = reminders.dueSoon.length;
   if (overdueCount === 0 && dueSoonCount === 0) return { triggered: false };
 
+  const locale = localeForCurrency(currency);
   const pieces: string[] = [];
   if (overdueCount > 0) {
     pieces.push(
-      `${overdueCount} overdue (${formatCurrency(reminders.overdueTotal, currency)})`
+      `${overdueCount} overdue (${formatCurrency(reminders.overdueTotal, currency, locale)})`
     );
   }
   if (dueSoonCount > 0) {
     pieces.push(
-      `${dueSoonCount} due this week (${formatCurrency(reminders.dueSoonTotal, currency)})`
+      `${dueSoonCount} due this week (${formatCurrency(reminders.dueSoonTotal, currency, locale)})`
     );
   }
 
@@ -256,7 +257,7 @@ export async function checkInvoiceReminders(
 
   const details = [...reminders.overdue, ...reminders.dueSoon].slice(0, 8).map((invoice) => ({
     label: `${invoice.vendor || "Unknown vendor"}${invoice.dueDate ? ` — due ${invoice.dueDate.slice(0, 10)}` : ""}`,
-    value: formatCurrency(invoice.total, invoice.currency),
+    value: formatCurrency(invoice.total, invoice.currency, locale),
   }));
 
   return {
