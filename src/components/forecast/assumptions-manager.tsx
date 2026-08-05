@@ -45,6 +45,13 @@ export interface AssumptionItem {
 interface AssumptionsManagerProps {
   assumptions: AssumptionItem[];
   currency: string;
+  /**
+   * The scenario these assumptions belong to, and that new ones are written
+   * into. Omitted (or the base scenario's id) means the base scenario, which is
+   * what every assumption held before scenarios existed.
+   */
+  scenarioId?: string;
+  scenarioName?: string;
 }
 
 const KIND_LABELS: Record<AssumptionItem["kind"], string> = {
@@ -93,7 +100,12 @@ function describe(assumption: AssumptionItem, currency: string): string {
   return `${assumption.percent ?? 0}% ${side} growth per month (compounding)`;
 }
 
-export function AssumptionsManager({ assumptions, currency }: AssumptionsManagerProps) {
+export function AssumptionsManager({
+  assumptions,
+  currency,
+  scenarioId,
+  scenarioName,
+}: AssumptionsManagerProps) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -137,6 +149,8 @@ export function AssumptionsManager({ assumptions, currency }: AssumptionsManager
       kind: form.kind,
       type: form.type,
       label: form.label.trim(),
+      // Only meaningful on create; the update route leaves the scenario alone.
+      ...(scenarioId ? { scenarioId } : {}),
     };
     if (form.kind === "PERCENT_GROWTH") {
       payload.percent = Number(form.percent);
@@ -217,9 +231,11 @@ export function AssumptionsManager({ assumptions, currency }: AssumptionsManager
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <p className="text-muted-foreground text-sm">
-          What-if adjustments applied on top of the data-driven forecast.
+          {scenarioName
+            ? `What-if adjustments in "${scenarioName}", applied on top of the data-driven forecast.`
+            : "What-if adjustments applied on top of the data-driven forecast."}
         </p>
         <Button size="sm" onClick={openCreate}>
           <PlusIcon />
@@ -231,7 +247,7 @@ export function AssumptionsManager({ assumptions, currency }: AssumptionsManager
         <EmptyState
           className="py-8"
           icon={SlidersHorizontalIcon}
-          title="No assumptions yet"
+          title={scenarioName ? `Nothing in "${scenarioName}" yet` : "No assumptions yet"}
           description="Add a one-off or repeating amount the data cannot know about — an expected invoice payment, or a new hire from March — and the forecast folds it in."
           action={
             <Button size="sm" variant="outline" onClick={openCreate}>

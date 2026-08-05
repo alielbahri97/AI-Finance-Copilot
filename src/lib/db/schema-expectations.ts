@@ -58,6 +58,10 @@ export const SCHEMA_CHECKS: SchemaCheck[] = [
   { table: "reminder_logs", columns: [], migration: "0019_customer_dunning" },
   { table: "assets", columns: [], migration: "0020_net_worth" },
   { table: "asset_valuations", columns: [], migration: "0020_net_worth" },
+  // The forecast page reads both on every load, and the copilot's snapshot
+  // reads the column.
+  { table: "scenarios", columns: [], migration: "0021_forecast_scenarios" },
+  { table: "assumptions", columns: ["scenario_id"], migration: "0021_forecast_scenarios" },
 ];
 
 export interface SchemaDrift {

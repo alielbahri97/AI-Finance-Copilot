@@ -1,7 +1,7 @@
 import "server-only";
 
 import { loadCashPosition } from "@/lib/finance/cash-data";
-import { mapAssumptionRow } from "@/lib/finance/data";
+import { loadDefaultScenarioAssumptions, mapAssumptionRow } from "@/lib/finance/data";
 import { computeForecast, type AssumptionInput, type ForecastResult } from "@/lib/finance/forecast";
 import { detectRecurring, type FinanceTransaction, type RecurringItem } from "@/lib/finance/recurrence";
 import { renderForecastText } from "@/lib/finance/render";
@@ -136,7 +136,9 @@ export async function buildFinancialSnapshot(
       where: { workspaceId, date: { lt: windowStart } },
       select: { type: true, amount: true },
     }),
-    prisma.assumption.findMany({ where: { workspaceId }, orderBy: { createdAt: "asc" } }),
+    // The default scenario's assumptions, so the copilot's snapshot matches the
+    // projection the forecast page opens on rather than every scenario at once.
+    loadDefaultScenarioAssumptions(workspaceId),
   ]);
 
   const transactions: FinanceTransaction[] = rows.map((row) => ({

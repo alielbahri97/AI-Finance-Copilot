@@ -52,6 +52,14 @@ export interface PlanLimits {
   exportsEnabled: boolean;
   /** What-if assumptions on the forecast page. */
   assumptionsEnabled: boolean;
+  /**
+   * Named forecast scenarios a workspace may keep, on top of the base
+   * scenario, which is not a row and is therefore never capped; null =
+   * unlimited. Always 0 where `assumptionsEnabled` is false — there would be
+   * nothing to put in a scenario — so those tiers see a locked teaser rather
+   * than an empty switcher.
+   */
+  maxScenarios: number | null;
   /** Bank/accounting/productivity integrations at all. */
   integrationsEnabled: boolean;
   /** Simultaneous bank connections; null = unlimited, 0 = none. */
@@ -106,6 +114,7 @@ const BUSINESS_FREE: Plan = {
     dunningEnabled: false,
     exportsEnabled: false,
     assumptionsEnabled: false,
+    maxScenarios: 0,
     integrationsEnabled: false,
     bankConnections: 0,
     goalsEnabled: false,
@@ -138,6 +147,7 @@ const PRO: Plan = {
     dunningEnabled: true,
     exportsEnabled: true,
     assumptionsEnabled: true,
+    maxScenarios: 3,
     integrationsEnabled: false,
     bankConnections: 0,
     goalsEnabled: false,
@@ -151,7 +161,7 @@ const PRO: Plan = {
     "Unlimited AI transaction categorization",
     "50 AI invoice extractions per month",
     "PDF, Excel & CSV exports",
-    "What-if forecast assumptions",
+    "What-if forecast assumptions, in up to 3 named scenarios",
   ],
 };
 
@@ -171,6 +181,7 @@ const BUSINESS: Plan = {
     dunningEnabled: true,
     exportsEnabled: true,
     assumptionsEnabled: true,
+    maxScenarios: null,
     integrationsEnabled: true,
     bankConnections: null,
     goalsEnabled: false,
@@ -180,6 +191,7 @@ const BUSINESS: Plan = {
   },
   highlights: [
     "Everything in Pro",
+    "Unlimited named forecast scenarios, compared side by side",
     "Unlimited AI copilot messages",
     "500 AI invoice extractions per month",
     "Bank, accounting & productivity integrations",
@@ -203,6 +215,7 @@ const ENTERPRISE: Plan = {
     dunningEnabled: true,
     exportsEnabled: true,
     assumptionsEnabled: true,
+    maxScenarios: null,
     integrationsEnabled: true,
     bankConnections: null,
     goalsEnabled: false,
@@ -242,6 +255,7 @@ const PERSONAL_FREE: Plan = {
     dunningEnabled: false,
     exportsEnabled: false,
     assumptionsEnabled: false,
+    maxScenarios: 0,
     integrationsEnabled: true,
     bankConnections: 1,
     goalsEnabled: false,
@@ -275,6 +289,7 @@ const PLUS: Plan = {
     dunningEnabled: false,
     exportsEnabled: true,
     assumptionsEnabled: false,
+    maxScenarios: 0,
     integrationsEnabled: true,
     bankConnections: null,
     goalsEnabled: true,
@@ -309,6 +324,7 @@ const PREMIUM: Plan = {
     dunningEnabled: false,
     exportsEnabled: true,
     assumptionsEnabled: true,
+    maxScenarios: 3,
     integrationsEnabled: true,
     bankConnections: null,
     goalsEnabled: true,
@@ -319,7 +335,7 @@ const PREMIUM: Plan = {
   highlights: [
     "Everything in Plus",
     "Unlimited AI copilot messages",
-    "What-if planning: model a raise, a move, a big purchase",
+    "What-if planning: model a raise, a move, a big purchase — in up to 3 scenarios you can compare",
     "20,000 rows per import",
   ],
 };

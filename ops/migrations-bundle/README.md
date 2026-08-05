@@ -3,7 +3,7 @@
 Applying pending Prisma migrations from any browser (including a phone),
 because the machine that has the repo cannot reach Postgres directly.
 
-There have been six rounds. Each has its own file to paste:
+There have been seven rounds. Each has its own file to paste:
 
 | Round | Migrations | File |
 | --- | --- | --- |
@@ -13,11 +13,73 @@ There have been six rounds. Each has its own file to paste:
 | 4 | `0018_ai_categorization` | [`apply-0018.sql`](./apply-0018.sql) |
 | 5 | `0019_customer_dunning` | [`apply-0019.sql`](./apply-0019.sql) |
 | 6 | `0020_net_worth` | [`apply-0020.sql`](./apply-0020.sql) |
+| 7 | `0021_forecast_scenarios` | [`apply-0021.sql`](./apply-0021.sql) |
 
 Run them in order; each round checks for the previous round's schema and
 refuses to run without it. Everything from "Step A" onwards describes round 1,
 but the mechanics — backup, paste the whole file, press Run, read the last
 result table — are the same for all of them.
+
+---
+
+## Round 7: `0021_forecast_scenarios`
+
+Named forecast scenarios. Instead of one flat list of what-if assumptions, a
+workspace can keep several named sets — "Base case", "Hire in Q4", "Lose the top
+client" — switch the forecast between them and put two or three on one chart.
+Two things go into the database:
+
+- `scenarios` — the names, workspace-scoped like every other business table,
+  with a `UNIQUE (workspace_id, name)` so the switcher never shows the same
+  name twice. The row holds no numbers: a scenario is a grouping, and the
+  forecast engine is what turns the assumptions in it into a projection.
+- `assumptions.scenario_id` (`TEXT`, nullable) — which set an assumption
+  belongs to, cascading with the scenario so deleting one takes its own
+  assumptions with it.
+
+**Nothing is backfilled, and nothing needs to be.** `NULL` is not "not set
+yet" — it *is* the base scenario. Every assumption in the database keeps
+applying to the forecast exactly as it did before, and a workspace that never
+names a scenario sees no change at all.
+
+Purely additive: one new table and one nullable column with no default (a
+catalog-only change on PostgreSQL — no rewrite, no long lock). Nothing is
+dropped, narrowed or renamed, and no statement in the file reads or writes a
+row of existing data.
+
+File to paste:
+
+```text
+ops/migrations-bundle/apply-0021.sql
+```
+
+What to do:
+
+1. **Back up.** Supabase → **Database → Backups**. Note the latest
+   Point-in-Time Recovery timestamp.
+2. **Paste all of it** into Supabase → **SQL Editor → New query**, in the
+   **production** project, and press **Run**.
+3. **Read the last result table.** It has 19 rows; every one should say `OK` in
+   the `result` column. Scroll up for the migration history (expect 21 rows,
+   `0001`–`0021`) and the shape of the new table and the altered one.
+4. **Load the site**, and check `https://app.ballastmoney.com/api/health` —
+   `status: "ok"`, `schema: "ok"`, empty `missingTables`, `missingColumns` and
+   `pendingMigrations`.
+
+If it errors: nothing was changed (single transaction), so send me the full
+error. One error has a specific answer here:
+
+- **`This database is missing "assets" …`** — round 6 was never applied. Run
+  [`apply-0020.sql`](./apply-0020.sql) first, then this file. The refusal
+  happens before anything is changed.
+
+**Instant Rollback is safe for this one.** The pre-0021 code never reads the
+table or the column, and 0021 removes nothing, so an older deployment runs
+unchanged on the new schema. Until it is applied, `/api/health` names
+`scenarios` and `assumptions.scenario_id` as missing and the forecast page's
+scenario section is what the deployed code cannot serve; assumptions themselves
+are unaffected either way, because the base scenario is the `NULL` they already
+hold.
 
 ---
 
@@ -573,6 +635,7 @@ SHA-256, hex, of the exact `migration.sql` file bytes — the same thing
 | `0018_ai_categorization` | `3a670714d7c810ec2a5756b1f1ba214422e79bc2b3f310eb0a80165141079500` | `apply-0018.sql` |
 | `0019_customer_dunning` | `0cd9e7a2a9099cc862fa4323ccbe5305921cc52b7f683bc4c912ba98460a2364` | `apply-0019.sql` |
 | `0020_net_worth` | `ef31084c0ebfb00083cff17b112c6f02216cb5d5a51f72e1cf8ec47d1cc453c7` | `apply-0020.sql` |
+| `0021_forecast_scenarios` | `2dcc4989b5ae4fb39acb1b776ced3bd11b31033bfea05a621719dee7546e359c` | `apply-0021.sql` |
 
 **Important:** these checksums describe the migration files as they were when
 this bundle was generated. They were re-verified against the migration files as

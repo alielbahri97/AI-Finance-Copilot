@@ -12,6 +12,7 @@ export default function ForecastLoading() {
           <Skeleton key={index} className="h-28 rounded-xl" />
         ))}
       </div>
+      <Skeleton className="h-44 rounded-xl" />
       <Skeleton className="h-96 rounded-xl" />
       <Skeleton className="h-32 rounded-xl" />
       <div className="grid gap-4 lg:grid-cols-5">

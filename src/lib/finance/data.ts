@@ -4,7 +4,12 @@ import type { Assumption } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 
 import { loadCashPosition } from "./cash-data";
-import { computeForecast, type AssumptionInput, type ForecastResult } from "./forecast";
+import {
+  computeForecast,
+  type AssumptionInput,
+  type ForecastInputs,
+  type ForecastResult,
+} from "./forecast";
 import type { FinanceTransaction } from "./recurrence";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -25,20 +30,23 @@ export function mapAssumptionRow(row: Assumption): AssumptionInput {
   };
 }
 
+/** Everything `computeForecast` needs except the assumptions to apply. */
+export type ForecastBaseInputs = Omit<ForecastInputs, "assumptions">;
+
 /**
- * Loads the workspace's transactions and assumptions and computes the
- * forecast. Pass `preloadedAssumptions` when the caller already fetched the
- * rows (e.g. the forecast page shows them too) to avoid a duplicate query.
+ * Loads the history, the opening balance and the bank-anchored current balance.
+ * Separated from `buildForecast` because scenario comparison runs the engine
+ * two or three times over the *same* history with different assumptions — this
+ * is the part that costs database round-trips, and it is loaded once.
  */
-export async function buildForecast(
+export async function loadForecastInputs(
   workspaceId: string,
-  currency: string,
-  preloadedAssumptions?: Assumption[]
-): Promise<ForecastResult> {
+  currency: string
+): Promise<ForecastBaseInputs> {
   const now = new Date();
   const windowStart = new Date(now.getTime() - 370 * MS_PER_DAY);
 
-  const [rows, priorRows, assumptionRows] = await Promise.all([
+  const [rows, priorRows] = await Promise.all([
     prisma.transaction.findMany({
       where: { workspaceId, date: { gte: windowStart } },
       orderBy: { date: "asc" },
@@ -55,8 +63,6 @@ export async function buildForecast(
       where: { workspaceId, date: { lt: windowStart } },
       select: { type: true, amount: true },
     }),
-    preloadedAssumptions ??
-      prisma.assumption.findMany({ where: { workspaceId }, orderBy: { createdAt: "asc" } }),
   ]);
 
   const transactions: FinanceTransaction[] = rows.map((row) => ({
@@ -79,12 +85,48 @@ export async function buildForecast(
   );
   const cash = await loadCashPosition(workspaceId, currency, priorNet + windowNet);
 
-  return computeForecast({
+  return {
     transactions,
     priorNet,
-    assumptions: assumptionRows.map(mapAssumptionRow),
     currency,
     now,
     startingBalance: cash.source === "bank" ? cash.total : null,
+  };
+}
+
+/**
+ * The assumptions "the forecast" means when nobody named a scenario: the ones
+ * in the workspace's default scenario, or — for every workspace that has never
+ * created one — the base scenario's, which is the `scenario_id IS NULL` set
+ * that predates scenarios entirely. So the dashboard, the digests, the alerts
+ * and the copilot all read the same projection the forecast page opens on,
+ * and a workspace with no scenarios sees precisely what it always saw.
+ */
+export async function loadDefaultScenarioAssumptions(workspaceId: string): Promise<Assumption[]> {
+  const preferred = await prisma.scenario.findFirst({
+    where: { workspaceId, isDefault: true },
+    select: { id: true },
   });
+  return prisma.assumption.findMany({
+    where: { workspaceId, scenarioId: preferred?.id ?? null },
+    orderBy: { createdAt: "asc" },
+  });
+}
+
+/**
+ * Loads the workspace's transactions and assumptions and computes the
+ * forecast. Pass `preloadedAssumptions` when the caller already fetched the
+ * rows (e.g. the forecast page shows them too) to avoid a duplicate query.
+ */
+export async function buildForecast(
+  workspaceId: string,
+  currency: string,
+  preloadedAssumptions?: Assumption[]
+): Promise<ForecastResult> {
+  const [base, assumptionRows] = await Promise.all([
+    loadForecastInputs(workspaceId, currency),
+    preloadedAssumptions ?? loadDefaultScenarioAssumptions(workspaceId),
+  ]);
+
+  return computeForecast({ ...base, assumptions: assumptionRows.map(mapAssumptionRow) });
 }
