@@ -88,10 +88,16 @@ async function sync(ctx: SyncContext): Promise<SyncStats> {
     ctx.currency,
     "tink",
     `Tink sync ${new Date().toISOString().slice(0, 10)}`,
-    transactions
+    transactions,
+    { aiProvider: ctx.aiProvider }
   );
 
-  return { fetched, imported: result.imported, duplicates: result.duplicates };
+  return {
+    fetched,
+    imported: result.imported,
+    duplicates: result.duplicates,
+    aiCategorized: result.aiCategorized,
+  };
 }
 
 export const tinkHooks: ProviderHooks = { sync };

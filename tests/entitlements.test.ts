@@ -45,7 +45,14 @@ function entitlements(planId: "FREE" | "PRO" | "BUSINESS", usage: Partial<Entitl
     currentPeriodEnd: null,
     hasStripeCustomer: false,
     period: "2026-07",
-    usage: { aiMessages: 0, csvImports: 0, invoiceExtractions: 0, exports: 0, ...usage },
+    usage: {
+      aiMessages: 0,
+      aiCategorizations: 0,
+      csvImports: 0,
+      invoiceExtractions: 0,
+      exports: 0,
+      ...usage,
+    },
   };
 }
 

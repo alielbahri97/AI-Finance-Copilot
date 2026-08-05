@@ -165,6 +165,9 @@ model Workspace {
   type      WorkspaceType @default(BUSINESS)
   /// Currency for the workspace's shared data.
   currency  String   @default("USD")
+  /// Opt-out for AI categorization of imported transactions. On by default;
+  /// rule matching and manual categorization are unaffected either way.
+  aiCategorizationEnabled Boolean @default(true) @map("ai_categorization_enabled")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -473,6 +476,8 @@ model UsageRecord {
   userId             String?  @map("user_id") @db.Uuid
   period             String
   aiMessages         Int      @default(0) @map("ai_messages")
+  /// Transactions handed to the AI categorizer this period.
+  aiCategorizations  Int      @default(0) @map("ai_categorizations")
   csvImports         Int      @default(0) @map("csv_imports")
   invoiceExtractions Int      @default(0) @map("invoice_extractions")
   exports            Int      @default(0)

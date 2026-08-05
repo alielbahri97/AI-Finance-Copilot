@@ -65,6 +65,10 @@ interface CommitResponse {
   failed: number;
   rowErrors: RowError[];
   batchId: string | null;
+  /** Rows the AI categorized after no rule matched them. */
+  aiCategorized?: number;
+  /** Why the AI did less than it could have (an exhausted monthly allowance). */
+  aiCategorizationNote?: string | null;
 }
 
 const ROLE_OPTIONS: { value: ColumnRole; label: string }[] = [
@@ -245,9 +249,16 @@ export function ImportWizard({ currency }: ImportWizardProps) {
             <h2 className="text-lg font-semibold">Import complete</h2>
             <p className="text-muted-foreground mt-1 text-sm">
               {result.imported} imported · {result.duplicates} duplicates skipped
+              {result.aiCategorized ? ` · ${result.aiCategorized} auto-categorized by AI` : ""}
               {result.failed > 0 && ` · ${result.failed} rows could not be read`}
             </p>
           </div>
+          {result.aiCategorizationNote && (
+            <Alert className="max-w-lg text-left">
+              <AlertTitle>AI categorization paused</AlertTitle>
+              <AlertDescription>{result.aiCategorizationNote}</AlertDescription>
+            </Alert>
+          )}
           {result.rowErrors.length > 0 && (
             <Alert className="max-w-lg text-left">
               <AlertTitle>Some rows were skipped</AlertTitle>

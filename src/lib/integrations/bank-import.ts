@@ -2,6 +2,7 @@ import "server-only";
 
 import { logger, serializeError } from "@/lib/logger";
 
+import { autoCategorizeImportBatch } from "@/lib/ai/categorize";
 import { loadRuleMatchers, matchCategory } from "@/lib/categories";
 import { evaluateLargeTransactions } from "@/lib/notifications/alerts";
 import { prisma } from "@/lib/prisma";
@@ -30,6 +31,8 @@ export interface BankImportResult {
   imported: number;
   duplicates: number;
   batchId: string | null;
+  /** Rows the AI categorized after rule matching left them empty. */
+  aiCategorized: number;
 }
 
 export async function importBankTransactions(
@@ -37,11 +40,12 @@ export async function importBankTransactions(
   currency: string,
   provider: string,
   label: string,
-  transactions: BankTransaction[]
+  transactions: BankTransaction[],
+  options: { aiProvider?: "OPENAI" | "ANTHROPIC" | "GROQ" | null } = {}
 ): Promise<BankImportResult> {
   const { workspaceId, userId } = scope;
   if (transactions.length === 0) {
-    return { imported: 0, duplicates: 0, batchId: null };
+    return { imported: 0, duplicates: 0, batchId: null, aiCategorized: 0 };
   }
 
   const withHashes = transactions.map((tx) => ({
@@ -58,7 +62,7 @@ export async function importBankTransactions(
   const duplicates = withHashes.length - fresh.length;
 
   if (fresh.length === 0) {
-    return { imported: 0, duplicates, batchId: null };
+    return { imported: 0, duplicates, batchId: null, aiCategorized: 0 };
   }
 
   const matchers = await loadRuleMatchers(workspaceId);
@@ -96,5 +100,17 @@ export async function importBankTransactions(
     }))
   ).catch((error) => logger.error("[integrations] alert evaluation", { error: serializeError(error) }));
 
-  return { imported: fresh.length, duplicates, batchId: batch.id };
+  // Same order as the CSV import: rules first, then the AI on what is left.
+  const categorization = await autoCategorizeImportBatch({
+    workspaceId,
+    batchId: batch.id,
+    aiProvider: options.aiProvider ?? null,
+  });
+
+  return {
+    imported: fresh.length,
+    duplicates,
+    batchId: batch.id,
+    aiCategorized: categorization.categorized,
+  };
 }

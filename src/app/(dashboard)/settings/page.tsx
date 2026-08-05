@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
+import { AiCategorizationForm } from "@/components/settings/ai-categorization-form";
 import { AiProviderForm } from "@/components/settings/ai-provider-form";
 import { AppearanceForm } from "@/components/settings/appearance-form";
 import { ChangePasswordForm } from "@/components/settings/change-password-form";
@@ -222,6 +223,25 @@ export default async function SettingsPage() {
           <AiProviderForm defaultProvider={profile.aiProvider} />
         </CardContent>
       </Card>
+
+      {canManageSettings && (
+        <Card>
+          <CardHeader>
+            <CardTitle>AI categorization</CardTitle>
+            <CardDescription>
+              Whether imported transactions your rules don&apos;t cover are categorized
+              automatically.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AiCategorizationForm
+              defaultEnabled={workspace.aiCategorizationEnabled}
+              monthlyLimit={entitlements.plan.limits.aiCategorizationPerMonth}
+              used={entitlements.usage.aiCategorizations}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

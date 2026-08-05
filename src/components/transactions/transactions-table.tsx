@@ -167,9 +167,19 @@ export function TransactionsTable({
         toast.error("Could not update category", { description: body?.error ?? "Try again." });
         return;
       }
-      const learned = body?.learnedRule as { categoryName?: string } | null | undefined;
+      const learned = body?.learnedRule as
+        | { pattern?: string; categoryName?: string }
+        | null
+        | undefined;
       if (learned?.categoryName) {
-        toast.success(`We'll categorize similar transactions as ${learned.categoryName} going forward`);
+        // Naming the pattern is the point: the user needs to know what we
+        // learned, so they can go and fix it on /rules if it is too broad.
+        toast.success(
+          learned.pattern
+            ? `Always categorizing "${learned.pattern}" as ${learned.categoryName}`
+            : `We'll categorize similar transactions as ${learned.categoryName} going forward`,
+          { description: "Rules like this always take precedence over AI suggestions." }
+        );
       }
       router.refresh();
     } catch {
@@ -216,12 +226,18 @@ export function TransactionsTable({
         return;
       }
       toast.success(successMessage(payload?.affected ?? selected.size));
-      const learned = payload?.learnedRules as { categoryName?: string }[] | null | undefined;
-      if (learned && learned.length > 0) {
-        const name = learned[0]?.categoryName;
-        if (name) {
-          toast.success(`We'll categorize similar transactions as ${name} going forward`);
-        }
+      const learned = payload?.learnedRules as
+        | { pattern?: string; categoryName?: string }[]
+        | null
+        | undefined;
+      const first = learned?.[0];
+      if (first?.categoryName) {
+        toast.success(
+          first.pattern
+            ? `Always categorizing "${first.pattern}" as ${first.categoryName}${learned && learned.length > 1 ? ` (+${learned.length - 1} more)` : ""}`
+            : `We'll categorize similar transactions as ${first.categoryName} going forward`,
+          { description: "Rules like this always take precedence over AI suggestions." }
+        );
       }
       setSelected(new Set());
       router.refresh();

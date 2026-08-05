@@ -3,18 +3,69 @@
 Applying pending Prisma migrations from any browser (including a phone),
 because the machine that has the repo cannot reach Postgres directly.
 
-There have been three rounds. Each has its own file to paste:
+There have been four rounds. Each has its own file to paste:
 
 | Round | Migrations | File |
 | --- | --- | --- |
 | 1 (done) | `0013`, `0014`, `0015` | [`apply-pending-migrations.sql`](./apply-pending-migrations.sql) |
 | 2 (done) | `0016_multi_bank_connections` | [`apply-0016.sql`](./apply-0016.sql) |
 | 3 | `0017_workspace_editions` | [`apply-0017.sql`](./apply-0017.sql) |
+| 4 | `0018_ai_categorization` | [`apply-0018.sql`](./apply-0018.sql) |
 
-Run them in order; round 3 checks for round 2's schema and refuses to run
-without it. Everything from "Step A" onwards describes round 1, but the
-mechanics — backup, paste the whole file, press Run, read the last result
-table — are the same for all three.
+Run them in order; each round checks for the previous round's schema and
+refuses to run without it. Everything from "Step A" onwards describes round 1,
+but the mechanics — backup, paste the whole file, press Run, read the last
+result table — are the same for all of them.
+
+---
+
+## Round 4: `0018_ai_categorization`
+
+AI categorization of imported transactions. Rows that no `CategoryRule`
+matches are sent to the AI in batches on CSV import and on bank sync, and only
+suggestions the model is at least 80% sure of are written. Two columns is
+everything the database needs for that:
+
+- `workspaces.ai_categorization_enabled` (`BOOLEAN NOT NULL DEFAULT true`) —
+  the per-workspace opt-out in Settings.
+- `usage_records.ai_categorizations` (`INTEGER NOT NULL DEFAULT 0`) — the
+  monthly meter the Free tier's 100-row allowance is enforced against, next to
+  the existing `ai_messages`, `csv_imports` and `invoice_extractions` counters.
+
+Both are `ADD COLUMN` with a constant default, which PostgreSQL applies as
+metadata only: no table rewrite, no backfill, no long lock. Nothing is dropped,
+narrowed or renamed, and no statement in the file changes a row of data.
+
+File to paste:
+
+```text
+ops/migrations-bundle/apply-0018.sql
+```
+
+What to do:
+
+1. **Back up.** Supabase → **Database → Backups**. Note the latest
+   Point-in-Time Recovery timestamp. This one is about as low-risk as a
+   migration gets, but the habit is cheap.
+2. **Paste all of it** into Supabase → **SQL Editor → New query**, in the
+   **production** project, and press **Run**.
+3. **Read the last result table.** It has 10 rows; every one should say `OK` in
+   the `result` column. Scroll up for the migration history (expect 18 rows,
+   `0001`–`0018`) and the definitions of the two new columns.
+4. **Load the site**, and check `https://app.ballastmoney.com/api/health` —
+   `status: "ok"`, `schema: "ok"`, empty `missingTables`, `missingColumns` and
+   `pendingMigrations`.
+
+If it errors: nothing was changed (single transaction), so send me the full
+error. One error has a specific answer here:
+
+- **`This database is missing "workspaces"."type" …`** — round 3 was never
+  applied. Run [`apply-0017.sql`](./apply-0017.sql) first, then this file. The
+  refusal happens before anything is changed.
+
+**Instant Rollback is safe for this one.** The pre-0018 code never reads either
+column and 0018 removes nothing, so an older deployment runs unchanged on the
+new schema.
 
 ---
 
@@ -406,6 +457,7 @@ SHA-256, hex, of the exact `migration.sql` file bytes — the same thing
 | `0015_extraction_telemetry` | `c7aad200de37b496f33bbe77e2dcffbbd47fa25b4a1f17a2e94ab8aec7e6ff9f` | `apply-pending-migrations.sql` |
 | `0016_multi_bank_connections` | `f92b0da30a50ac653bd603aa512c1a5fdb3fdd9227cb02218b503ae4d72b5fb8` | `apply-0016.sql` |
 | `0017_workspace_editions` | `6ea302ea168c82af6f8f6e627f879809a4ea48cecc2b5c47d83f1ee9422d681d` | `apply-0017.sql` |
+| `0018_ai_categorization` | `3a670714d7c810ec2a5756b1f1ba214422e79bc2b3f310eb0a80165141079500` | `apply-0018.sql` |
 
 **Important:** these checksums describe the migration files as they were when
 this bundle was generated. They were re-verified against the migration files as

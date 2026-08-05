@@ -112,6 +112,7 @@ export function FirstSyncBanner({
   const imported = stats.imported ?? 0;
   const duplicates = stats.duplicates ?? 0;
   const skipped = stats.accountsSkipped ?? 0;
+  const aiCategorized = stats.aiCategorized ?? 0;
 
   return (
     <Card role="status" aria-live="polite">
@@ -124,6 +125,11 @@ export function FirstSyncBanner({
               : `${providerName} connected — no new transactions to import`}
             {duplicates > 0 ? ` (${duplicates} duplicate${duplicates === 1 ? "" : "s"} skipped)` : ""}
           </p>
+          {aiCategorized > 0 ? (
+            <p className="text-muted-foreground">
+              {aiCategorized} auto-categorized by AI.
+            </p>
+          ) : null}
           {skipped > 0 ? (
             <p className="text-muted-foreground">
               {skipped} account{skipped === 1 ? "" : "s"} hit the bank&apos;s daily data limit and

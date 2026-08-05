@@ -31,6 +31,13 @@ export interface PlanLimits {
   rowsPerImport: number | null;
   /** AI copilot messages per calendar month; null = unlimited. */
   aiMessagesPerMonth: number | null;
+  /**
+   * Transactions handed to the AI categorizer per calendar month; null =
+   * unlimited. Free gets a taste, every paid tier is unlimited: a row costs
+   * a fraction of a cent to classify and better-categorized data makes every
+   * other feature in the product work.
+   */
+  aiCategorizationPerMonth: number | null;
   /** AI invoice extractions per calendar month; null = unlimited. 0 on Personal, which has no invoices. */
   invoiceExtractionsPerMonth: number | null;
   /** PDF/Excel/CSV report exports. */
@@ -77,6 +84,7 @@ const BUSINESS_FREE: Plan = {
     csvImportsPerMonth: 1,
     rowsPerImport: 100,
     aiMessagesPerMonth: 50,
+    aiCategorizationPerMonth: 100,
     invoiceExtractionsPerMonth: 5,
     exportsEnabled: false,
     assumptionsEnabled: false,
@@ -89,6 +97,7 @@ const BUSINESS_FREE: Plan = {
   highlights: [
     "1 CSV import per month (100 rows)",
     "50 AI copilot messages per month",
+    "AI categorization for 100 transactions per month",
     "5 AI invoice extractions per month",
     "Dashboard, forecasting & reports (view only)",
   ],
@@ -105,6 +114,7 @@ const PRO: Plan = {
     csvImportsPerMonth: null,
     rowsPerImport: 5000,
     aiMessagesPerMonth: 500,
+    aiCategorizationPerMonth: null,
     invoiceExtractionsPerMonth: 50,
     exportsEnabled: true,
     assumptionsEnabled: true,
@@ -117,6 +127,7 @@ const PRO: Plan = {
   highlights: [
     "Unlimited CSV imports (5,000 rows each)",
     "500 AI copilot messages per month",
+    "Unlimited AI transaction categorization",
     "50 AI invoice extractions per month",
     "PDF, Excel & CSV exports",
     "What-if forecast assumptions",
@@ -134,6 +145,7 @@ const BUSINESS: Plan = {
     csvImportsPerMonth: null,
     rowsPerImport: 20000,
     aiMessagesPerMonth: null,
+    aiCategorizationPerMonth: null,
     invoiceExtractionsPerMonth: 500,
     exportsEnabled: true,
     assumptionsEnabled: true,
@@ -163,6 +175,7 @@ const ENTERPRISE: Plan = {
     csvImportsPerMonth: null,
     rowsPerImport: null,
     aiMessagesPerMonth: null,
+    aiCategorizationPerMonth: null,
     invoiceExtractionsPerMonth: null,
     exportsEnabled: true,
     assumptionsEnabled: true,
@@ -199,6 +212,7 @@ const PERSONAL_FREE: Plan = {
     csvImportsPerMonth: 2,
     rowsPerImport: 500,
     aiMessagesPerMonth: 50,
+    aiCategorizationPerMonth: 100,
     invoiceExtractionsPerMonth: 0,
     exportsEnabled: false,
     assumptionsEnabled: false,
@@ -211,6 +225,7 @@ const PERSONAL_FREE: Plan = {
   highlights: [
     "1 bank connection",
     "50 AI copilot messages per month",
+    "AI categorization for 100 transactions per month",
     "Dashboard, spending breakdown & forecast",
     "Monthly budgets per category",
   ],
@@ -227,6 +242,7 @@ const PLUS: Plan = {
     csvImportsPerMonth: null,
     rowsPerImport: 5000,
     aiMessagesPerMonth: 500,
+    aiCategorizationPerMonth: null,
     invoiceExtractionsPerMonth: 0,
     exportsEnabled: true,
     assumptionsEnabled: false,
@@ -239,6 +255,7 @@ const PLUS: Plan = {
   highlights: [
     "Unlimited bank connections",
     "500 AI copilot messages per month",
+    "Unlimited AI transaction categorization",
     "Savings goals with projected completion dates",
     "Subscription insights: monthly cost, price rises, unused",
     "PDF, Excel & CSV exports",
@@ -256,6 +273,7 @@ const PREMIUM: Plan = {
     csvImportsPerMonth: null,
     rowsPerImport: 20000,
     aiMessagesPerMonth: null,
+    aiCategorizationPerMonth: null,
     invoiceExtractionsPerMonth: 0,
     exportsEnabled: true,
     assumptionsEnabled: true,
