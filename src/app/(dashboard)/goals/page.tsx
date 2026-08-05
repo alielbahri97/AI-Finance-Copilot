@@ -1,14 +1,17 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { LockIcon } from "lucide-react";
 
+import { GoalsBodySkeleton } from "@/components/goals/goal-skeletons";
 import { GoalsManager } from "@/components/goals/goals-manager";
 import { GoalsSummaryCard } from "@/components/goals/goals-summary";
 import type { GoalCardData } from "@/components/goals/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeading } from "@/components/ui/page-heading";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { EDITION_PLAN_ORDER, getPlan } from "@/lib/billing/plans";
 import { getGoalsOverview, type GoalDetail } from "@/lib/personal/goals-data";
@@ -69,7 +72,7 @@ function toCardData(detail: GoalDetail): GoalCardData {
 function PageHeader() {
   return (
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight">Savings goals</h1>
+      <PageHeading>Savings goals</PageHeading>
       <p className="text-muted-foreground text-sm">
         What you are saving for, how far along you are, and when you get there at the rate you
         are actually saving.
@@ -78,6 +81,7 @@ function PageHeader() {
   );
 }
 
+/** Streams: the header paints first, the plan check and the goals follow. */
 export default async function GoalsPage() {
   const ctx = await getWorkspaceContext();
   if (!ctx) redirect("/login");
@@ -85,7 +89,28 @@ export default async function GoalsPage() {
   if (!editionHasFeature(ctx.workspace.type, "goals")) notFound();
   if (!ctx.permissions.has("view_reports")) redirect("/dashboard");
 
-  const entitlements = await getEntitlements(ctx.workspace.id);
+  return (
+    <div className="space-y-6">
+      <PageHeader />
+      <Suspense fallback={<GoalsBodySkeleton />}>
+        <GoalsBody
+          workspaceId={ctx.workspace.id}
+          currency={ctx.workspace.currency}
+          canEdit={ctx.permissions.has("edit_transactions")}
+        />
+      </Suspense>
+    </div>
+  );
+}
+
+interface GoalsBodyProps {
+  workspaceId: string;
+  currency: string;
+  canEdit: boolean;
+}
+
+async function GoalsBody({ workspaceId, currency, canEdit }: GoalsBodyProps) {
+  const entitlements = await getEntitlements(workspaceId);
 
   // The edition allows goals but the plan does not include them: the page still
   // exists and explains itself rather than pretending to be missing.
@@ -95,8 +120,7 @@ export default async function GoalsPage() {
       .find((plan) => plan.limits.goalsEnabled);
 
     return (
-      <div className="space-y-6">
-        <PageHeader />
+      <>
         <Alert>
           <LockIcon className="size-4" />
           <AlertTitle>
@@ -131,19 +155,16 @@ export default async function GoalsPage() {
             </ul>
           </CardContent>
         </Card>
-      </div>
+      </>
     );
   }
 
-  const overview = await getGoalsOverview(ctx.workspace.id);
-  const canEdit = ctx.permissions.has("edit_transactions");
+  const overview = await getGoalsOverview(workspaceId);
 
   return (
-    <div className="space-y-6">
-      <PageHeader />
-
+    <>
       {overview.goals.length > 0 ? (
-        <GoalsSummaryCard summary={overview.summary} currency={ctx.workspace.currency} />
+        <GoalsSummaryCard summary={overview.summary} currency={currency} />
       ) : null}
 
       <GoalsManager
@@ -151,9 +172,9 @@ export default async function GoalsPage() {
         archived={overview.archived.map(toCardData)}
         categories={overview.categories}
         accounts={overview.bankAccounts}
-        currency={ctx.workspace.currency}
+        currency={currency}
         canEdit={canEdit}
       />
-    </div>
+    </>
   );
 }

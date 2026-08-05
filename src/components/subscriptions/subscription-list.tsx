@@ -1,5 +1,6 @@
 import { RepeatIcon } from "lucide-react";
 
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Table,
   TableBody,
@@ -9,25 +10,35 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { DetectedSubscription } from "@/lib/personal/subscriptions";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, localeForCurrency } from "@/lib/utils";
 
 import { flagExplanation, SubscriptionFlagBadges } from "./subscription-flags";
 
 interface SubscriptionListProps {
   items: DetectedSubscription[];
   currency: string;
-  emptyMessage: string;
+  emptyTitle: string;
+  emptyDescription: string;
 }
 
-export function SubscriptionList({ items, currency, emptyMessage }: SubscriptionListProps) {
+export function SubscriptionList({
+  items,
+  currency,
+  emptyTitle,
+  emptyDescription,
+}: SubscriptionListProps) {
   if (items.length === 0) {
     return (
-      <div className="text-muted-foreground flex flex-col items-center gap-2 py-8 text-center text-sm">
-        <RepeatIcon className="size-6 opacity-50" />
-        <p>{emptyMessage}</p>
-      </div>
+      <EmptyState
+        className="py-8"
+        icon={RepeatIcon}
+        title={emptyTitle}
+        description={emptyDescription}
+      />
     );
   }
+
+  const locale = localeForCurrency(currency);
 
   return (
     <Table>
@@ -64,13 +75,13 @@ export function SubscriptionList({ items, currency, emptyMessage }: Subscription
                 <span className="text-xs"> · {item.timesSeen}x</span>
               </TableCell>
               <TableCell className="text-muted-foreground hidden md:table-cell">
-                {item.flags.includes("overdue") ? "—" : formatDate(item.nextChargeAt)}
+                {item.flags.includes("overdue") ? "—" : formatDate(item.nextChargeAt, locale)}
               </TableCell>
               <TableCell className="text-right font-medium tabular-nums">
-                {formatCurrency(item.averageAmount, currency)}
+                {formatCurrency(item.averageAmount, currency, locale)}
               </TableCell>
               <TableCell className="text-right font-semibold tabular-nums">
-                {formatCurrency(item.monthlyAmount, currency)}
+                {formatCurrency(item.monthlyAmount, currency, locale)}
               </TableCell>
             </TableRow>
           );

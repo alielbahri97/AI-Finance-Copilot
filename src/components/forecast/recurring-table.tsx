@@ -1,5 +1,8 @@
+import Link from "next/link";
 import { RepeatIcon } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Table,
   TableBody,
@@ -9,23 +12,32 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { RecurringItem } from "@/lib/finance/recurrence";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, localeForCurrency } from "@/lib/utils";
 
 interface RecurringTableProps {
   items: RecurringItem[];
   currency: string;
-  emptyMessage: string;
+  emptyTitle: string;
 }
 
-export function RecurringTable({ items, currency, emptyMessage }: RecurringTableProps) {
+export function RecurringTable({ items, currency, emptyTitle }: RecurringTableProps) {
   if (items.length === 0) {
     return (
-      <div className="text-muted-foreground flex flex-col items-center gap-2 py-8 text-center text-sm">
-        <RepeatIcon className="size-6 opacity-50" />
-        <p>{emptyMessage}</p>
-      </div>
+      <EmptyState
+        className="py-8"
+        icon={RepeatIcon}
+        title={emptyTitle}
+        description="Detection needs the same amount to land on a regular rhythm before it counts as recurring."
+        action={
+          <Button size="sm" variant="outline" asChild>
+            <Link href="/import">Import more history</Link>
+          </Button>
+        }
+      />
     );
   }
+
+  const locale = localeForCurrency(currency);
 
   return (
     <Table>
@@ -52,13 +64,13 @@ export function RecurringTable({ items, currency, emptyMessage }: RecurringTable
               <span className="text-xs"> · {item.timesSeen}x</span>
             </TableCell>
             <TableCell className="text-muted-foreground hidden md:table-cell">
-              {formatDate(item.lastDate)}
+              {formatDate(item.lastDate, locale)}
             </TableCell>
             <TableCell className="text-right font-medium tabular-nums">
-              {formatCurrency(item.averageAmount, currency)}
+              {formatCurrency(item.averageAmount, currency, locale)}
             </TableCell>
             <TableCell className="text-right font-semibold tabular-nums">
-              {formatCurrency(item.monthlyAmount, currency)}
+              {formatCurrency(item.monthlyAmount, currency, locale)}
             </TableCell>
           </TableRow>
         ))}

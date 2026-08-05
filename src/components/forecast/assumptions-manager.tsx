@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2Icon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import { Loader2Icon, PencilIcon, PlusIcon, SlidersHorizontalIcon, Trash2Icon } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -26,7 +27,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, localeForCurrency } from "@/lib/utils";
 
 export interface AssumptionItem {
   id: string;
@@ -75,18 +76,19 @@ const EMPTY_FORM: FormState = {
 };
 
 function describe(assumption: AssumptionItem, currency: string): string {
+  const locale = localeForCurrency(currency);
   const side = assumption.type === "INCOME" ? "income" : "expense";
   if (assumption.kind === "ONE_OFF") {
-    return `${formatCurrency(assumption.amount ?? 0, currency)} ${side} on ${assumption.date ? formatDate(assumption.date) : "?"}`;
+    return `${formatCurrency(assumption.amount ?? 0, currency, locale)} ${side} on ${assumption.date ? formatDate(assumption.date, locale) : "?"}`;
   }
   if (assumption.kind === "RECURRING") {
     const window = [
-      assumption.startDate ? `from ${formatDate(assumption.startDate)}` : null,
-      assumption.endDate ? `until ${formatDate(assumption.endDate)}` : null,
+      assumption.startDate ? `from ${formatDate(assumption.startDate, locale)}` : null,
+      assumption.endDate ? `until ${formatDate(assumption.endDate, locale)}` : null,
     ]
       .filter(Boolean)
       .join(" ");
-    return `${formatCurrency(assumption.amount ?? 0, currency)}/month ${side}${window ? ` ${window}` : ""}`;
+    return `${formatCurrency(assumption.amount ?? 0, currency, locale)}/month ${side}${window ? ` ${window}` : ""}`;
   }
   return `${assumption.percent ?? 0}% ${side} growth per month (compounding)`;
 }
@@ -226,9 +228,18 @@ export function AssumptionsManager({ assumptions, currency }: AssumptionsManager
       </div>
 
       {assumptions.length === 0 ? (
-        <p className="text-muted-foreground py-6 text-center text-sm">
-          No assumptions yet. Try “Expected invoice payment” or “New hire from March”.
-        </p>
+        <EmptyState
+          className="py-8"
+          icon={SlidersHorizontalIcon}
+          title="No assumptions yet"
+          description="Add a one-off or repeating amount the data cannot know about — an expected invoice payment, or a new hire from March — and the forecast folds it in."
+          action={
+            <Button size="sm" variant="outline" onClick={openCreate}>
+              <PlusIcon />
+              Add assumption
+            </Button>
+          }
+        />
       ) : (
         <div className="flex flex-col gap-1">
           {assumptions.map((assumption) => (

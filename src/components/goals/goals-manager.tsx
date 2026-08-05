@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { PlusIcon } from "lucide-react";
+import { PiggyBankIcon, PlusIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 
 import { GoalCard } from "./goal-card";
 import { GoalDialog } from "./goal-dialog";
@@ -52,19 +53,24 @@ export function GoalsManager({
       </div>
 
       {goals.length === 0 ? (
-        <div className="rounded-xl border border-dashed p-8 text-center">
-          <p className="font-medium">No savings goals yet</p>
-          <p className="text-muted-foreground mx-auto mt-1 max-w-md text-sm">
-            Name what you are saving for and how much it takes. Record what you put aside and
-            this page will tell you when you get there at the rate you are actually saving.
-          </p>
-          {canEdit ? (
-            <Button className="mt-4" onClick={openCreate}>
-              <PlusIcon />
-              Create your first goal
-            </Button>
-          ) : null}
-        </div>
+        <EmptyState
+          className="rounded-xl border border-dashed"
+          icon={PiggyBankIcon}
+          title="No savings goals yet"
+          description={
+            canEdit
+              ? "Name what you are saving for and how much it takes. Record what you put aside and this page will tell you when you get there at the rate you are actually saving."
+              : "Nobody has set one up yet. An owner or admin can add the first goal, and it will appear here for everyone."
+          }
+          action={
+            canEdit ? (
+              <Button onClick={openCreate}>
+                <PlusIcon />
+                Create your first goal
+              </Button>
+            ) : undefined
+          }
+        />
       ) : (
         <div className="grid gap-4 xl:grid-cols-2">
           {goals.map((goal) => (

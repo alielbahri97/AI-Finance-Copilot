@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRightIcon, WalletIcon } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -8,9 +9,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Progress } from "@/components/ui/progress";
 import { budgetStatus, monthLabel, type BudgetSummary } from "@/lib/personal/budgets";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, localeForCurrency } from "@/lib/utils";
 
 import { STATUS_TONES } from "./status-tone";
 
@@ -30,6 +32,8 @@ interface BudgetWidgetProps {
 export function BudgetWidget({ summary, currency }: BudgetWidgetProps) {
   const period = { year: summary.year, month: summary.month };
   const overall = budgetStatus(summary.totalSpent, summary.totalAvailable);
+  const locale = localeForCurrency(currency);
+  const money = (value: number) => formatCurrency(value, currency, locale);
 
   // Over-budget categories first; within each group the summary is already
   // ordered by spend, which is the order that reads as "biggest first".
@@ -48,21 +52,26 @@ export function BudgetWidget({ summary, currency }: BudgetWidgetProps) {
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {summary.budgets.length === 0 ? (
-          <div className="text-muted-foreground flex flex-col items-center gap-3 py-6 text-center text-sm">
-            <p>No budgets set for this month yet.</p>
-            <Link href="/budgets" className="text-primary text-sm font-medium hover:underline">
-              Set a monthly limit
-            </Link>
-          </div>
+          <EmptyState
+            className="py-6"
+            icon={WalletIcon}
+            title="No budgets set for this month"
+            description="Put a limit on a category or two and this card shows how much of it is left."
+            action={
+              <Button size="sm" variant="outline" asChild>
+                <Link href="/budgets">Set a monthly limit</Link>
+              </Button>
+            }
+          />
         ) : (
           <>
             <div className="flex flex-col gap-2">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="text-2xl font-bold tracking-tight">
-                  {formatCurrency(summary.totalSpent, currency)}
+                <span className="text-lg font-semibold tracking-tight">
+                  {money(summary.totalSpent)}
                 </span>
                 <span className="text-muted-foreground text-sm">
-                  of {formatCurrency(summary.totalAvailable, currency)} budgeted
+                  of {money(summary.totalAvailable)} budgeted
                 </span>
               </div>
               <Progress
@@ -72,8 +81,8 @@ export function BudgetWidget({ summary, currency }: BudgetWidgetProps) {
               />
               <p className="text-muted-foreground text-xs">
                 {summary.totalRemaining < 0
-                  ? `${formatCurrency(Math.abs(summary.totalRemaining), currency)} over across all budgets`
-                  : `${formatCurrency(summary.totalRemaining, currency)} left this month`}
+                  ? `${money(Math.abs(summary.totalRemaining))} over across all budgets`
+                  : `${money(summary.totalRemaining)} left this month`}
                 {summary.overCount > 0 &&
                   ` · ${summary.overCount} ${summary.overCount === 1 ? "category is" : "categories are"} over`}
               </p>
@@ -85,8 +94,7 @@ export function BudgetWidget({ summary, currency }: BudgetWidgetProps) {
                   <div className="flex items-baseline justify-between gap-2 text-xs">
                     <span className="min-w-0 truncate font-medium">{budget.category}</span>
                     <span className="text-muted-foreground shrink-0 tabular-nums">
-                      {formatCurrency(budget.spent, currency)} /{" "}
-                      {formatCurrency(budget.available, currency)}
+                      {money(budget.spent)} / {money(budget.available)}
                     </span>
                   </div>
                   <Progress

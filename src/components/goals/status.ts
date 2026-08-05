@@ -56,40 +56,44 @@ function months(count: number): string {
  * would actually demand. A user who disagrees with the date can see why it says
  * what it says.
  */
-export function projectionSentences(goal: ProjectionLike, currency: string): string[] {
+export function projectionSentences(
+  goal: ProjectionLike,
+  currency: string,
+  locale: string = "en-US"
+): string[] {
   const sentences: string[] = [];
+  const money = (value: number) => formatCurrency(value, currency, locale);
+  const day = (value: Date | string) => formatDate(value, locale);
 
   if (goal.status === "achieved") {
     sentences.push(
-      `Fully funded: ${formatCurrency(goal.saved, currency)} set aside towards ${formatCurrency(goal.targetAmount, currency)}.`
+      `Fully funded: ${money(goal.saved)} set aside towards ${money(goal.targetAmount)}.`
     );
     if (goal.targetDate) {
-      sentences.push(`Target date ${formatDate(goal.targetDate)}.`);
+      sentences.push(`Target date ${day(goal.targetDate)}.`);
     }
     return sentences;
   }
 
   if (goal.monthlyRate <= 0 || !goal.projectedCompletion || goal.monthsRemaining === null) {
     sentences.push(
-      `Nothing saved towards it in the last ${RATE_WINDOW_MONTHS} months, so there is no projected date yet. ${formatCurrency(goal.remaining, currency)} still to go.`
+      `Nothing saved towards it in the last ${RATE_WINDOW_MONTHS} months, so there is no projected date yet. ${money(goal.remaining)} still to go.`
     );
   } else {
     sentences.push(
-      `Reaches ${formatCurrency(goal.targetAmount, currency)} around ${formatDate(goal.projectedCompletion)}: ${months(goal.monthsRemaining)} to cover the remaining ${formatCurrency(goal.remaining, currency)}.`
+      `Reaches ${money(goal.targetAmount)} around ${day(goal.projectedCompletion)}: ${months(goal.monthsRemaining)} to cover the remaining ${money(goal.remaining)}.`
     );
     sentences.push(
-      `That is at ${formatCurrency(goal.monthlyRate, currency)} a month, your average over the last ${RATE_WINDOW_MONTHS} months, or since the goal started if it is newer.`
+      `That is at ${money(goal.monthlyRate)} a month, your average over the last ${RATE_WINDOW_MONTHS} months, or since the goal started if it is newer.`
     );
   }
 
   if (goal.targetDate && goal.requiredMonthlyRate !== null) {
     const gap = goal.requiredMonthlyRate - goal.monthlyRate;
     const shortfall =
-      gap > 0
-        ? ` That is ${formatCurrency(gap, currency)} a month more than you are putting aside now.`
-        : "";
+      gap > 0 ? ` That is ${money(gap)} a month more than you are putting aside now.` : "";
     sentences.push(
-      `To make ${formatDate(goal.targetDate)} you need ${formatCurrency(goal.requiredMonthlyRate, currency)} a month.${shortfall}`
+      `To make ${day(goal.targetDate)} you need ${money(goal.requiredMonthlyRate)} a month.${shortfall}`
     );
   }
 

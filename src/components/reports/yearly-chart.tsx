@@ -1,5 +1,6 @@
 "use client";
 
+import { TrendingUpIcon } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -11,8 +12,9 @@ import {
   YAxis,
 } from "recharts";
 
+import { EmptyState } from "@/components/ui/empty-state";
 import type { YearTrend } from "@/lib/reports/data";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, localeForCurrency } from "@/lib/utils";
 
 const SERIES_LABELS: Record<string, string> = {
   revenue: "Revenue",
@@ -26,11 +28,16 @@ interface YearlyChartProps {
 }
 
 export function YearlyChart({ data, currency }: YearlyChartProps) {
+  const locale = localeForCurrency(currency);
+
   if (data.length === 0) {
     return (
-      <div className="text-muted-foreground flex h-80 items-center justify-center text-sm">
-        No yearly history yet
-      </div>
+      <EmptyState
+        className="h-80"
+        icon={TrendingUpIcon}
+        title="No yearly history yet"
+        description="This fills in once you have transactions spanning more than one year."
+      />
     );
   }
 
@@ -53,12 +60,12 @@ export function YearlyChart({ data, currency }: YearlyChartProps) {
             axisLine={false}
             width={64}
             tickFormatter={(value: number) =>
-              new Intl.NumberFormat("en-US", { notation: "compact" }).format(value)
+              new Intl.NumberFormat(locale, { notation: "compact" }).format(value)
             }
           />
           <Tooltip
             formatter={(value, name) => [
-              formatCurrency(Number(value ?? 0), currency),
+              formatCurrency(Number(value ?? 0), currency, locale),
               SERIES_LABELS[String(name)] ?? String(name),
             ]}
             contentStyle={{

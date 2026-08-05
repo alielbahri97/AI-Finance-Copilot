@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -11,8 +12,10 @@ import {
 } from "lucide-react";
 
 import { BudgetManager } from "@/components/budgets/budget-manager";
+import { BudgetsBodySkeleton } from "@/components/budgets/budget-skeletons";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { Button } from "@/components/ui/button";
+import { PageHeading } from "@/components/ui/page-heading";
 import {
   Card,
   CardContent,
@@ -29,7 +32,7 @@ import {
   type BudgetPeriod,
 } from "@/lib/personal/budgets";
 import { getBudgetOverview } from "@/lib/personal/budgets-data";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, localeForCurrency } from "@/lib/utils";
 import { getWorkspaceContext } from "@/lib/workspace/context";
 import { editionHasFeature } from "@/lib/workspace/editions";
 
@@ -57,14 +60,11 @@ export default async function BudgetsPage({ searchParams }: BudgetsPageProps) {
   const period = parsePeriod(params.year, params.month, thisMonth);
   const isThisMonth = period.year === thisMonth.year && period.month === thisMonth.month;
 
-  const { summary, categories } = await getBudgetOverview(ctx.workspace.id, period);
-  const currency = ctx.workspace.currency;
-
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Budgets</h1>
+          <PageHeading>Budgets</PageHeading>
           <p className="text-muted-foreground text-sm">
             A monthly limit per category, and how {monthLabel(period)} is tracking against it.
           </p>
@@ -89,26 +89,54 @@ export default async function BudgetsPage({ searchParams }: BudgetsPageProps) {
         </div>
       </div>
 
+      {/* Keyed on the period so stepping to another month shows the skeleton
+          again rather than holding the previous month on screen. */}
+      <Suspense key={`${period.year}-${period.month}`} fallback={<BudgetsBodySkeleton />}>
+        <BudgetsBody
+          workspaceId={ctx.workspace.id}
+          currency={ctx.workspace.currency}
+          period={period}
+          canEdit={ctx.permissions.has("edit_transactions")}
+        />
+      </Suspense>
+    </div>
+  );
+}
+
+interface BudgetsBodyProps {
+  workspaceId: string;
+  currency: string;
+  period: BudgetPeriod;
+  canEdit: boolean;
+}
+
+async function BudgetsBody({ workspaceId, currency, period, canEdit }: BudgetsBodyProps) {
+  const { summary, categories } = await getBudgetOverview(workspaceId, period);
+  const locale = localeForCurrency(currency);
+  const money = (value: number) => formatCurrency(value, currency, locale);
+
+  return (
+    <>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Budgeted"
-          value={formatCurrency(summary.totalAvailable, currency)}
+          value={money(summary.totalAvailable)}
           hint={
             summary.totalAvailable === summary.totalLimit
               ? "Across every category with a limit"
-              : `Limits of ${formatCurrency(summary.totalLimit, currency)} plus rollover`
+              : `Limits of ${money(summary.totalLimit)} plus rollover`
           }
           icon={WalletIcon}
         />
         <StatCard
           title="Spent"
-          value={formatCurrency(summary.totalSpent, currency)}
+          value={money(summary.totalSpent)}
           hint="Expenses in budgeted categories"
           icon={TrendingDownIcon}
         />
         <StatCard
           title="Remaining"
-          value={formatCurrency(summary.totalRemaining, currency)}
+          value={money(summary.totalRemaining)}
           hint={summary.totalRemaining < 0 ? "Spending is past the total" : "Left to spend"}
           icon={PiggyBankIcon}
           tone={summary.totalRemaining < 0 ? "negative" : "positive"}
@@ -135,10 +163,10 @@ export default async function BudgetsPage({ searchParams }: BudgetsPageProps) {
             summary={summary}
             categories={categories}
             currency={currency}
-            canEdit={ctx.permissions.has("edit_transactions")}
+            canEdit={canEdit}
           />
         </CardContent>
       </Card>
-    </div>
+    </>
   );
 }
