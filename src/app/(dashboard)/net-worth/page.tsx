@@ -89,6 +89,12 @@ export default async function NetWorthPage() {
 
   const canEdit = manualEnabled && ctx.permissions.has("edit_transactions");
 
+  // A workspace that downgraded from Plus still has its holdings, and they are
+  // still in the total above — so the tables stay, read-only, rather than
+  // leaving the summary to mention holdings the page then refuses to show.
+  const holdings = overview.position.assets.length + overview.position.liabilities.length;
+  const showHoldings = manualEnabled || holdings > 0;
+
   return (
     <div className="space-y-6">
       <PageHeader />
@@ -125,7 +131,29 @@ export default async function NetWorthPage() {
         </CardContent>
       </Card>
 
-      {manualEnabled ? (
+      {manualEnabled ? null : (
+        <Alert>
+          <LockIcon className="size-4" />
+          <AlertTitle>
+            Assets and debts are part of {upgradeTo?.name ?? "the paid plans"}
+          </AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <span>
+              You are on {entitlements.plan.name}, which tracks net worth from your
+              connected accounts. Upgrading adds the things your banks cannot see — a
+              house, a car, investments, a mortgage — each with its own value history.
+              {holdings > 0
+                ? " What you have already entered still counts towards the figure above; upgrade to change it or add more."
+                : ""}
+            </span>
+            <Button asChild size="sm">
+              <Link href="/billing">Upgrade plan</Link>
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {showHoldings ? (
         <HoldingsManager
           assets={overview.position.assets.map((asset) =>
             toRow(asset, overview.valuations[asset.id])
@@ -138,24 +166,7 @@ export default async function NetWorthPage() {
           currency={currency}
           canEdit={canEdit}
         />
-      ) : (
-        <Alert>
-          <LockIcon className="size-4" />
-          <AlertTitle>
-            Assets and debts are part of {upgradeTo?.name ?? "the paid plans"}
-          </AlertTitle>
-          <AlertDescription className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <span>
-              You are on {entitlements.plan.name}, which tracks net worth from your
-              connected accounts. Upgrading adds the things your banks cannot see — a
-              house, a car, investments, a mortgage — each with its own value history.
-            </span>
-            <Button asChild size="sm">
-              <Link href="/billing">Upgrade plan</Link>
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
+      ) : null}
     </div>
   );
 }
