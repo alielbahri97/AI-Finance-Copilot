@@ -53,7 +53,10 @@ export function HelpLauncher({ edition = DEFAULT_EDITION }: { edition?: Edition 
         onClick={() => handleOpenChange(true)}
         aria-label="Help & support"
         title="Help & support"
-        className="fixed right-4 bottom-4 z-40 size-11 rounded-full shadow-lg sm:right-6 sm:bottom-6"
+        // Bottom-right, above the tab bar at every width. Toasts have moved to
+        // the top, so this corner is now the one place floating utilities live
+        // — with the install prompt stacked directly above it.
+        className="fixed right-4 bottom-[calc(var(--tab-bar-height)+1.5rem)] z-40 size-11 rounded-full shadow-lg sm:right-6"
       >
         <HelpCircleIcon className="size-5" />
       </Button>

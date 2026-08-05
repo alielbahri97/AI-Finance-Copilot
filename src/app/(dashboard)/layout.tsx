@@ -3,6 +3,7 @@ import { redirect, unstable_rethrow } from "next/navigation";
 
 import { DatabaseUnavailable } from "@/components/dashboard/database-unavailable";
 import { Header } from "@/components/dashboard/header";
+import { MobileTabBar } from "@/components/dashboard/mobile-nav";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { HelpLauncher } from "@/components/help/help-launcher";
 import { getOrCreateProfile } from "@/lib/data";
@@ -11,6 +12,7 @@ import { logger } from "@/lib/logger";
 import { isOnboardingDone } from "@/lib/onboarding/benchmarks";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
+import { localeForCurrency } from "@/lib/utils";
 import { getWorkspaceContext, listUserWorkspaces } from "@/lib/workspace/context";
 import { editionForWorkspaceType } from "@/lib/workspace/editions";
 
@@ -58,11 +60,17 @@ export default async function DashboardLayout({ children }: { children: React.Re
             workspaces={workspaces}
             currentWorkspaceId={ctx.workspace.id}
             currentWorkspaceType={ctx.workspace.type}
+            locale={localeForCurrency(ctx.workspace.currency)}
           />
-          <main id="main-content" tabIndex={-1} className="flex-1 p-4 outline-none sm:p-6">
+          <main
+            id="main-content"
+            tabIndex={-1}
+            className="flex flex-1 flex-col p-4 pb-[calc(var(--tab-bar-height)+1.5rem)] outline-none sm:px-6 sm:pt-6"
+          >
             {children}
           </main>
         </div>
+        <MobileTabBar isAdmin={profile.isAdmin} workspaceType={ctx.workspace.type} />
         <HelpLauncher edition={editionForWorkspaceType(ctx.workspace.type)} />
       </div>
     );

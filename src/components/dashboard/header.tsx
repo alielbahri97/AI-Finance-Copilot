@@ -13,6 +13,7 @@ interface HeaderProps {
   workspaces: WorkspaceOption[];
   currentWorkspaceId: string;
   currentWorkspaceType: WorkspaceType;
+  locale: string;
 }
 
 export function Header({
@@ -23,13 +24,14 @@ export function Header({
   workspaces,
   currentWorkspaceId,
   currentWorkspaceType,
+  locale,
 }: HeaderProps) {
   return (
     <header className="bg-background/80 sticky top-0 z-40 flex h-16 items-center justify-between gap-2 border-b px-4 backdrop-blur sm:px-6">
       <MobileNav isAdmin={isAdmin} workspaceType={currentWorkspaceType} />
       <WorkspaceSwitcher workspaces={workspaces} currentId={currentWorkspaceId} />
       <div className="ml-auto flex items-center gap-1.5">
-        <NotificationBell />
+        <NotificationBell locale={locale} />
         <ThemeToggle />
         <UserNav email={email} fullName={fullName} avatarUrl={avatarUrl} />
       </div>
