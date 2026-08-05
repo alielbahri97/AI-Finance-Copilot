@@ -41,7 +41,10 @@ export async function resolveReportRequest(
   // Plan gating: exports are a paid feature.
   const entitlements = await getEntitlements(ctx.workspace.id);
   if (!entitlements.plan.limits.exportsEnabled) {
-    return { error: upgradeError("Report exports", entitlements.planId).error, status: 402 };
+    return {
+      error: upgradeError("Report exports", entitlements.planId, entitlements.edition).error,
+      status: 402,
+    };
   }
 
   const url = new URL(request.url);

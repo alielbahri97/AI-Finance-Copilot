@@ -22,9 +22,10 @@ export async function requireIntegrationAccess(): Promise<
   if (!entitlements.plan.limits.integrationsEnabled) {
     return {
       ok: false,
-      response: NextResponse.json(upgradeError("Integrations", entitlements.planId), {
-        status: 402,
-      }),
+      response: NextResponse.json(
+        upgradeError("Integrations", entitlements.planId, entitlements.edition),
+        { status: 402 }
+      ),
     };
   }
 

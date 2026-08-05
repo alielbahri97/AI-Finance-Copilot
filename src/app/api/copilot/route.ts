@@ -57,7 +57,10 @@ export async function POST(request: Request) {
     const entitlements = await getEntitlements(workspace.id);
     const quota = checkLimit(entitlements, "aiMessages", entitlements.plan.limits.aiMessagesPerMonth);
     if (!quota.allowed) {
-      return NextResponse.json(limitError("AI message", entitlements.planId), { status: 402 });
+      return NextResponse.json(
+        limitError("AI message", entitlements.planId, entitlements.edition),
+        { status: 402 }
+      );
     }
     await incrementUsage(workspace.id, "aiMessages");
     await trackEvent(user.id, "ai_message", { conversationId: conversationId ?? null });

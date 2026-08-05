@@ -70,7 +70,10 @@ export async function POST(request: Request) {
     const entitlements = await getEntitlements(workspace.id);
     const quota = checkLimit(entitlements, "csvImports", entitlements.plan.limits.csvImportsPerMonth);
     if (!quota.allowed) {
-      return NextResponse.json(limitError("CSV import", entitlements.planId), { status: 402 });
+      return NextResponse.json(
+        limitError("CSV import", entitlements.planId, entitlements.edition),
+        { status: 402 }
+      );
     }
 
     const csv = parseCsv(await file.arrayBuffer());
