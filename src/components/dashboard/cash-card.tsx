@@ -1,19 +1,31 @@
 import { WalletIcon } from "lucide-react";
 
+import {
+  statCardSpan,
+  statValueClass,
+  type StatEmphasis,
+} from "@/components/dashboard/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { CashAccount, CashPosition } from "@/lib/finance/cash";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency, localeForCurrency } from "@/lib/utils";
 
 /**
  * Total cash across every included bank account, with the per-bank → per-account
  * breakdown one click away. Uses a native <details> so it stays a server
  * component — no client bundle for a disclosure.
  */
-export function CashCard({ cash }: { cash: CashPosition }) {
+export function CashCard({
+  cash,
+  emphasis = "default",
+}: {
+  cash: CashPosition;
+  emphasis?: StatEmphasis;
+}) {
   const hasBreakdown = cash.accounts.length > 0;
+  const locale = localeForCurrency(cash.currency);
 
   return (
-    <Card className="gap-2">
+    <Card className={cn("gap-2", statCardSpan(emphasis))}>
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle className="text-muted-foreground text-sm font-medium">Total cash</CardTitle>
         <WalletIcon className="text-muted-foreground size-4" />
@@ -21,11 +33,12 @@ export function CashCard({ cash }: { cash: CashPosition }) {
       <CardContent>
         <span
           className={cn(
-            "text-2xl font-bold tracking-tight",
+            "numeric tracking-tight",
+            statValueClass(emphasis),
             cash.total >= 0 ? "text-success" : "text-destructive"
           )}
         >
-          {formatCurrency(cash.total, cash.currency)}
+          {formatCurrency(cash.total, cash.currency, locale)}
         </span>
         <p className="text-muted-foreground mt-1 text-xs">{hint(cash)}</p>
 
@@ -41,7 +54,7 @@ export function CashCard({ cash }: { cash: CashPosition }) {
                   <div className="flex items-baseline justify-between gap-2 text-xs font-medium">
                     <span className="truncate">{bank.label}</span>
                     <span className="tabular-nums">
-                      {formatCurrency(bank.total, cash.currency)}
+                      {formatCurrency(bank.total, cash.currency, locale)}
                     </span>
                   </div>
                   <ul className="space-y-0.5 pl-2">
@@ -57,7 +70,11 @@ export function CashCard({ cash }: { cash: CashPosition }) {
                         <span className={cn("tabular-nums", !account.counted && "line-through")}>
                           {account.balance === null
                             ? "—"
-                            : formatCurrency(account.balance, account.currency ?? cash.currency)}
+                            : formatCurrency(
+                                account.balance,
+                                account.currency ?? cash.currency,
+                                locale
+                              )}
                         </span>
                       </li>
                     ))}
@@ -80,6 +97,8 @@ export function CashCard({ cash }: { cash: CashPosition }) {
  */
 export function CashLegend({ cash }: { cash: CashPosition }) {
   if (cash.accounts.length === 0) return null;
+
+  const locale = localeForCurrency(cash.currency);
 
   return (
     <div className="mt-3 flex flex-wrap gap-1.5">
@@ -106,7 +125,7 @@ export function CashLegend({ cash }: { cash: CashPosition }) {
             <span className="tabular-nums">
               {account.balance === null
                 ? "—"
-                : formatCurrency(account.balance, account.currency ?? cash.currency)}
+                : formatCurrency(account.balance, account.currency ?? cash.currency, locale)}
             </span>
           </span>
         ))

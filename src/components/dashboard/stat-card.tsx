@@ -3,6 +3,54 @@ import { TrendingDownIcon, TrendingUpIcon, type LucideIcon } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
+/**
+ * A stat row should have one answer, not four competing ones. `emphasis="hero"`
+ * is the edition's headline figure — it spans two grid columns and reads at
+ * twice the size; everything else in the row is deliberately quieter.
+ */
+export type StatEmphasis = "default" | "hero";
+
+/**
+ * The grid a hero stat row lives in: five columns at xl so the hero can take
+ * two of them and the three supporting cards still fit on one line.
+ */
+export const STAT_ROW_GRID = "grid gap-4 sm:grid-cols-2 xl:grid-cols-5";
+
+/**
+ * A stat row containing a hero. The `data-hero` marker is what quiets the
+ * other cards in the row (see `statValueClass`), and it lives on the row
+ * rather than on each card because a card cannot know what it is standing
+ * next to — which is how Invoices, Subscriptions and Admin ended up with
+ * deferential figures and nothing to defer to.
+ */
+export function StatRow({ children }: { children: React.ReactNode }) {
+  return (
+    <div data-hero className={cn("group/stat-row", STAT_ROW_GRID)}>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Grid span for the card itself, shared with CashCard and the skeleton row.
+ * Only widened at xl: below that the row is two columns, where a full-width
+ * hero would leave the fourth card stranded alone on a third line. At those
+ * sizes the type scale alone carries the hierarchy.
+ */
+export const statCardSpan = (emphasis: StatEmphasis) =>
+  emphasis === "hero" ? "xl:col-span-2" : undefined;
+
+/**
+ * Type scale for the figure, shared with CashCard. Emphasis is relative: a
+ * card is only quiet in relation to a louder one, so the smaller figure is
+ * scoped to rows that actually have a hero. A row without one keeps the full
+ * size, because there is nothing there for it to be quieter than.
+ */
+export const statValueClass = (emphasis: StatEmphasis) =>
+  emphasis === "hero"
+    ? "text-4xl font-bold"
+    : "text-2xl font-bold group-data-hero/stat-row:text-xl group-data-hero/stat-row:font-semibold";
+
 interface StatCardProps {
   title: string;
   value: string;
@@ -13,6 +61,7 @@ interface StatCardProps {
   changePct?: number | null;
   /** Whether an increase is good (income) or bad (expenses). */
   increaseIsGood?: boolean;
+  emphasis?: StatEmphasis;
 }
 
 export function StatCard({
@@ -23,12 +72,13 @@ export function StatCard({
   tone = "default",
   changePct,
   increaseIsGood = true,
+  emphasis = "default",
 }: StatCardProps) {
   const showTrend = changePct !== undefined && changePct !== null;
   const isGood = showTrend && (changePct >= 0 ? increaseIsGood : !increaseIsGood);
 
   return (
-    <Card className="gap-2">
+    <Card className={cn("gap-2", statCardSpan(emphasis))}>
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle className="text-muted-foreground text-sm font-medium">{title}</CardTitle>
         <Icon className="text-muted-foreground size-4" />
@@ -37,7 +87,8 @@ export function StatCard({
         <div className="flex flex-wrap items-baseline gap-2">
           <span
             className={cn(
-              "text-2xl font-bold tracking-tight",
+              "numeric tracking-tight",
+              statValueClass(emphasis),
               tone === "positive" && "text-success",
               tone === "negative" && "text-destructive"
             )}
@@ -47,8 +98,8 @@ export function StatCard({
           {showTrend && (
             <span
               className={cn(
-                "flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-medium",
-                isGood ? "bg-success/15 text-success" : "bg-destructive/10 text-destructive"
+                "numeric flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-medium",
+                isGood ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"
               )}
             >
               {changePct >= 0 ? (
