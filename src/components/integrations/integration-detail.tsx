@@ -38,7 +38,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatDate, formatDateTime, localeForCurrency } from "@/lib/utils";
 
 import { GoCardlessConnectButton } from "./gocardless-connect";
 import { PlaidConnectButton } from "./plaid-connect";
@@ -56,43 +56,29 @@ function consentDaysLeft(iso: string | null): number | null {
   return Math.floor((expires - Date.now()) / (24 * 60 * 60 * 1000));
 }
 
-function rateLimitedUntilLabel(iso: string | null): string | null {
+function rateLimitedUntilLabel(iso: string | null, locale: string): string | null {
   if (!iso) return null;
   const until = Date.parse(iso);
   if (!Number.isFinite(until) || until <= Date.now()) return null;
-  return new Date(until).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatDateTime(new Date(until), locale);
 }
 
-function formatLastSync(iso: string | null): string {
+function formatLastSync(iso: string | null, locale: string): string {
   if (!iso) return "Never synced";
-  return `Last synced ${new Date(iso).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })}`;
+  return `Last synced ${formatDateTime(iso, locale)}`;
 }
 
 function ConnectionStatusBadge({ status }: { status: ConnectionData["status"] }) {
   switch (status) {
     case "CONNECTED":
       return (
-        <Badge className="border-transparent bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
-          Connected
-        </Badge>
+        <Badge variant="success">Connected</Badge>
       );
     case "ERROR":
       return <Badge variant="destructive">Error</Badge>;
     case "EXPIRED":
       return (
-        <Badge className="border-transparent bg-amber-500/15 text-amber-600 dark:text-amber-400">
-          Expired
-        </Badge>
+        <Badge variant="warning">Expired</Badge>
       );
   }
 }
@@ -102,16 +88,14 @@ export function StatusBadge({ data }: { data: IntegrationCardData }) {
   if (data.connections.length === 0) return <Badge variant="outline">Available</Badge>;
   if (data.connections.length > 1) {
     return (
-      <Badge className="border-transparent bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
-        {data.connections.length} connected
-      </Badge>
+      <Badge variant="success">{data.connections.length} connected</Badge>
     );
   }
   return <ConnectionStatusBadge status={data.connections[0].status} />;
 }
 
 function formatMoney(amount: number, currency: string | null, fallback: string): string {
-  return formatCurrency(amount, currency ?? fallback);
+  return formatCurrency(amount, currency ?? fallback, localeForCurrency(fallback));
 }
 
 function CopyEnvVar({ name }: { name: string }) {
@@ -290,13 +274,14 @@ function ConnectionRow({ data, connection }: { data: IntegrationCardData; connec
   const [togglingCalendar, setTogglingCalendar] = useState(false);
   const [pendingAccountId, setPendingAccountId] = useState<string | null>(null);
 
+  const locale = localeForCurrency(data.currency);
   const daysLeft = consentDaysLeft(connection.consentExpiresAt);
   const consentExpiring =
     connection.status === "CONNECTED" &&
     daysLeft !== null &&
     daysLeft >= 0 &&
     daysLeft <= CONSENT_WARNING_DAYS;
-  const rateLimitLabel = rateLimitedUntilLabel(connection.rateLimitedUntil);
+  const rateLimitLabel = rateLimitedUntilLabel(connection.rateLimitedUntil, locale);
 
   const syncNow = async () => {
     setSyncing(true);
@@ -419,16 +404,9 @@ function ConnectionRow({ data, connection }: { data: IntegrationCardData; connec
             ) : connection.accountLabel ? (
               <p className="truncate">{connection.accountLabel}</p>
             ) : null}
-            {data.syncable ? <p>{formatLastSync(connection.lastSyncAt)}</p> : null}
+            {data.syncable ? <p>{formatLastSync(connection.lastSyncAt, locale)}</p> : null}
             {connection.consentExpiresAt && !consentExpiring ? (
-              <p>
-                Consent valid until{" "}
-                {new Date(connection.consentExpiresAt).toLocaleDateString(undefined, {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                })}
-              </p>
+              <p>Consent valid until {formatDate(connection.consentExpiresAt, locale)}</p>
             ) : null}
           </div>
         </div>

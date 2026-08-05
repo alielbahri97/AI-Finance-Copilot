@@ -1,5 +1,7 @@
 import { ScrollTextIcon } from "lucide-react";
 
+import { EmptyState } from "@/components/ui/empty-state";
+
 /**
  * Server-rendered audit trail for owners/admins: who did what, when.
  * Entries are recorded by recordAudit() across the app.
@@ -46,10 +48,12 @@ function describeDetail(detail: unknown): string | null {
 export function AuditLog({ entries }: { entries: AuditEntryView[] }) {
   if (entries.length === 0) {
     return (
-      <div className="text-muted-foreground flex flex-col items-center gap-2 py-8 text-sm">
-        <ScrollTextIcon className="size-6" aria-hidden />
-        No activity recorded yet.
-      </div>
+      <EmptyState
+        className="py-8"
+        icon={ScrollTextIcon}
+        title="No activity recorded yet"
+        description="Invites, role changes and integration connections are logged here as they happen."
+      />
     );
   }
 

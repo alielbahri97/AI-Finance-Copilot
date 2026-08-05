@@ -15,6 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { PageHeading } from "@/components/ui/page-heading";
 import { serializeInvoice } from "@/lib/invoices/serialize";
 import { prisma } from "@/lib/prisma";
 import { getWorkspaceContext } from "@/lib/workspace/context";
@@ -52,9 +53,9 @@ export default async function InvoiceDetailPage({ params }: InvoiceDetailPagePro
             Back to invoices
           </Link>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight">
+            <PageHeading>
               {dto.vendor || "Unknown vendor"}
-            </h1>
+            </PageHeading>
             <InvoiceStatusBadge status={dto.derivedStatus} />
           </div>
           <p className="text-muted-foreground text-sm">
@@ -65,7 +66,7 @@ export default async function InvoiceDetailPage({ params }: InvoiceDetailPagePro
       </div>
 
       {dto.status === "DRAFT" && (
-        <div className="border-chart-4/40 bg-chart-4/10 flex items-start gap-2 rounded-lg border px-4 py-3 text-sm">
+        <div className="border-warning/40 bg-warning/10 flex items-start gap-2 rounded-lg border px-4 py-3 text-sm">
           <ScanSearchIcon className="mt-0.5 size-4 shrink-0" />
           <div className="flex flex-col gap-1">
             <span>

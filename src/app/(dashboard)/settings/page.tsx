@@ -18,6 +18,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { PageHeading } from "@/components/ui/page-heading";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { BRAND } from "@/lib/branding";
 import { getOrCreateProfile } from "@/lib/data";
@@ -115,7 +116,7 @@ export default async function SettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
+        <PageHeading>Settings</PageHeading>
         <p className="text-muted-foreground text-sm">
           {sharing
             ? "Manage your workspace, team, appearance, AI provider and account security."

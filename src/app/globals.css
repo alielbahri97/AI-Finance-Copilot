@@ -3,42 +3,147 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * Light-mode values are chosen so that every token used as *text* clears WCAG
+ * AA (4.5:1) against `--card`, which is where nearly all copy sits. The bright
+ * greens/ambers that read well on a dark card are kept in `.dark` only.
+ */
 :root {
   --radius: 0.625rem;
-  --background: oklch(0.985 0.002 247.839);
+  --background: oklch(0.968 0.004 247.9);
   --foreground: oklch(0.13 0.028 261.692);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.13 0.028 261.692);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.13 0.028 261.692);
-  --primary: oklch(0.546 0.245 262.881);
+  --primary: oklch(0.511 0.262 276.966);
   --primary-foreground: oklch(0.985 0.002 247.839);
   --secondary: oklch(0.967 0.003 264.542);
   --secondary-foreground: oklch(0.21 0.034 264.665);
-  --muted: oklch(0.967 0.003 264.542);
-  --muted-foreground: oklch(0.551 0.027 264.364);
-  --accent: oklch(0.951 0.015 262.881);
-  --accent-foreground: oklch(0.424 0.199 265.638);
+  --muted: oklch(0.945 0.005 264.5);
+  /*
+   * Tuned against `--muted`, not `--card`. The chip pattern `bg-muted
+   * text-muted-foreground` (Draft invoices, inactive tabs, empty-state icons)
+   * puts this on the 0.945 surface, where the card-tuned 0.54 only reached
+   * 4.31:1. Darkening by 0.015 clears AA there and lifts every other use.
+   */
+  --muted-foreground: oklch(0.525 0.027 264.364);
+  --accent: oklch(0.951 0.015 276.966);
+  --accent-foreground: oklch(0.424 0.199 276.966);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0.002 247.839);
   --border: oklch(0.928 0.006 264.531);
   --input: oklch(0.928 0.006 264.531);
-  --ring: oklch(0.546 0.245 262.881);
-  --chart-1: oklch(0.546 0.245 262.881);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
+  --ring: oklch(0.511 0.262 276.966);
+  --chart-1: oklch(0.511 0.262 276.966);
+  --chart-2: oklch(0.56 0.14 162.5);
+  --chart-3: oklch(0.62 0.16 55);
+  --chart-4: oklch(0.56 0.24 303.9);
+  --chart-5: oklch(0.58 0.22 16.4);
   --sidebar: oklch(1 0 0);
   --sidebar-foreground: oklch(0.13 0.028 261.692);
-  --sidebar-primary: oklch(0.546 0.245 262.881);
+  --sidebar-primary: oklch(0.511 0.262 276.966);
   --sidebar-primary-foreground: oklch(0.985 0.002 247.839);
-  --sidebar-accent: oklch(0.951 0.015 262.881);
-  --sidebar-accent-foreground: oklch(0.424 0.199 265.638);
+  --sidebar-accent: oklch(0.951 0.015 276.966);
+  --sidebar-accent-foreground: oklch(0.424 0.199 276.966);
   --sidebar-border: oklch(0.928 0.006 264.531);
-  --sidebar-ring: oklch(0.546 0.245 262.881);
-  --success: oklch(0.627 0.194 149.214);
-  --warning: oklch(0.769 0.188 70.08);
+  --sidebar-ring: oklch(0.511 0.262 276.966);
+  --success: oklch(0.5 0.16 149.2);
+  /*
+   * Dark enough to survive being printed on a 10% wash of itself, which is how
+   * every warning badge and alert renders it. At the 4.5:1-on-white value it
+   * had, the wash alone dropped it to 4.14:1 and the pattern failed AA
+   * everywhere it was used.
+   */
+  --warning: oklch(0.53 0.13 55);
+  --warning-foreground: oklch(1 0 0);
+
+  /*
+   * A semantic colour plays three distinct roles and no single value satisfies
+   * all three. Splitting them by role is what stops a fix to one role rippling
+   * into the others:
+   *
+   *   --destructive          base — charts (`--chart-expense` aliases it),
+   *                          borders, rings, progress fills, and text on a
+   *                          plain `--card` or `--background` surface.
+   *   --destructive-tinted   foreground for text on a `/10` wash of the base
+   *                          (status chips, destructive menu items).
+   *   --destructive-solid    a filled surface carrying white text (buttons,
+   *                          the solid badge variant, the unread counter).
+   *
+   * The base therefore stays exactly where the charts want it, and neither of
+   * the other two roles can drag it.
+   *
+   * Tinted: a 10% wash of a colour is a lightened version of that same hue, so
+   * printing the colour on its own wash costs ~0.8:1 against `--card` and
+   * ~1.1:1 against `--background` — which is where the invoice detail page puts
+   * its status chip. Same hues, dark enough to clear AA on the worse surface.
+   */
+  --destructive-tinted: oklch(0.525 0.212 27.325);
+  --success-tinted: oklch(0.494 0.132 149.2);
+  --warning-tinted: oklch(0.519 0.126 55);
+
+  /*
+   * Solid is squeezed from both sides: white text needs the fill dark (luminance
+   * <= 0.1833 for 4.5:1), while the button's own edge needs it light enough to
+   * clear 3:1 against a near-black card (WCAG 1.4.11). The `/90` hover blends
+   * *towards* the surface, so in light mode it lightens the fill and is the
+   * tightest of the four constraints — the old `bg-destructive` sat at 4.52:1
+   * there. This value maximises the margin on all four at once, which is also
+   * why it needs no `.dark` override: one red covers both themes, and a
+   * dangerous action arguably should not change colour between them.
+   *
+   * There is deliberately no `--success-solid`/`--warning-solid`. Nothing fills
+   * a surface with those and puts text on it; their only filled uses are
+   * progress bars and status dots, which are graphical and stay on the base.
+   */
+  --destructive-solid: oklch(0.545 0.22 27.325);
+
+  /*
+   * Chart series are addressed by what they *mean*, not by slot order, so green
+   * cannot end up labelled "Income" on one page and "Profit" on another. Income
+   * and expense alias the semantic pair the rest of the UI already uses, so a
+   * contrast fix above propagates into the charts for free.
+   */
+  --chart-income: var(--success);
+  --chart-expense: var(--destructive);
+  --chart-net: var(--primary);
+  --chart-projected: oklch(0.55 0.22 303.9);
+
+  /*
+   * Elevation. Tinted with the foreground's blue-grey hue rather than pure
+   * black, which is what makes a stock Tailwind shadow read as grime on a
+   * coloured page. Aliased to --shadow-* in @theme so `shadow-sm` and friends
+   * pick the right treatment up per theme.
+   */
+  --elevation-xs: 0 1px 2px 0 oklch(0.13 0.028 261.692 / 0.05);
+  --elevation-sm:
+    0 1px 2px 0 oklch(0.13 0.028 261.692 / 0.06), 0 1px 3px 0 oklch(0.13 0.028 261.692 / 0.08);
+  --elevation-md:
+    0 2px 4px -1px oklch(0.13 0.028 261.692 / 0.06), 0 4px 8px -2px oklch(0.13 0.028 261.692 / 0.1);
+  --elevation-lg:
+    0 4px 6px -2px oklch(0.13 0.028 261.692 / 0.06),
+    0 12px 20px -4px oklch(0.13 0.028 261.692 / 0.12);
+  --elevation-xl:
+    0 8px 12px -4px oklch(0.13 0.028 261.692 / 0.08),
+    0 24px 32px -8px oklch(0.13 0.028 261.692 / 0.14);
+  --elevation-2xl: 0 32px 64px -12px oklch(0.13 0.028 261.692 / 0.22);
+
+  /*
+   * The mobile tab bar is fixed to the bottom edge, so everything else that
+   * floats there — the page's own bottom padding, the help FAB, the install
+   * prompt — has to know how tall it is. One value, read by all of them,
+   * rather than four hand-tuned `bottom-*` offsets that drift apart the first
+   * time the bar changes height.
+   */
+  --tab-bar-height: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* The bar is `lg:hidden`, so above that there is nothing to clear. */
+@media (width >= 64rem) {
+  :root {
+    --tab-bar-height: 0rem;
+  }
 }
 
 .dark {
@@ -48,37 +153,100 @@
   --card-foreground: oklch(0.985 0.002 247.839);
   --popover: oklch(0.18 0.03 262.5);
   --popover-foreground: oklch(0.985 0.002 247.839);
-  --primary: oklch(0.623 0.214 259.815);
+  /*
+   * The two things this token has to do in dark mode pull against each other:
+   * carry near-white text as a solid button, and be read as text itself on
+   * `--card`. Those two ratios multiply to a constant that depends only on
+   * `--primary-foreground` and `--card` — 18.03 here — so whatever indigo goes
+   * in, min(button, link) can never exceed sqrt(18.03) = 4.25:1. (Even pure
+   * white button text only lifts the ceiling to 4.34.) AA on both is therefore
+   * unreachable without either inverting the button foreground to navy or
+   * darkening every card, so this sits exactly on the balance point at
+   * 4.25/4.24 rather than letting one side fail outright.
+   *
+   * Chroma drops from 0.233 to 0.22 because the balanced lightness at 0.233
+   * falls outside sRGB — it would render clipped, i.e. not the colour declared.
+   * Hue is held at the light-mode/app-icon indigo.
+   */
+  --primary: oklch(0.589 0.22 276.966);
   --primary-foreground: oklch(0.985 0.002 247.839);
   --secondary: oklch(0.24 0.034 264.665);
   --secondary-foreground: oklch(0.985 0.002 247.839);
   --muted: oklch(0.24 0.034 264.665);
   --muted-foreground: oklch(0.707 0.022 261.325);
-  --accent: oklch(0.28 0.06 262.881);
-  --accent-foreground: oklch(0.882 0.059 254.128);
+  --accent: oklch(0.28 0.06 276.966);
+  --accent-foreground: oklch(0.882 0.059 276.966);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0.002 247.839);
-  --border: oklch(1 0 0 / 12%);
+  --border: oklch(1 0 0 / 16%);
   --input: oklch(1 0 0 / 16%);
-  --ring: oklch(0.623 0.214 259.815);
-  --chart-1: oklch(0.623 0.214 259.815);
+  --ring: oklch(0.589 0.22 276.966);
+  --chart-1: oklch(0.589 0.22 276.966);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-4: oklch(0.72 0.18 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
   --sidebar: oklch(0.16 0.03 262.5);
   --sidebar-foreground: oklch(0.985 0.002 247.839);
-  --sidebar-primary: oklch(0.623 0.214 259.815);
+  --sidebar-primary: oklch(0.589 0.22 276.966);
   --sidebar-primary-foreground: oklch(0.985 0.002 247.839);
-  --sidebar-accent: oklch(0.28 0.06 262.881);
-  --sidebar-accent-foreground: oklch(0.882 0.059 254.128);
+  --sidebar-accent: oklch(0.28 0.06 276.966);
+  --sidebar-accent-foreground: oklch(0.882 0.059 276.966);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.623 0.214 259.815);
+  --sidebar-ring: oklch(0.589 0.22 276.966);
   --success: oklch(0.723 0.219 149.579);
   --warning: oklch(0.795 0.184 86.047);
+  --warning-foreground: oklch(0.21 0.034 264.665);
+
+  /*
+   * A 10% wash over a dark surface is *darker* than the surface it sits on,
+   * so the tinted pattern gains contrast here instead of losing it — the base
+   * colours already clear AA on their own washes by 5.8:1 to 9.3:1. These stay
+   * aliased so a component can use `text-destructive-tinted` in both themes.
+   */
+  --destructive-tinted: var(--destructive);
+  --success-tinted: var(--success);
+  --warning-tinted: var(--warning);
+
+  /*
+   * `--destructive-solid` is intentionally absent: the `:root` value already
+   * clears 4.5:1 with white text and 3:1 at its own edge on both themes'
+   * surfaces, so overriding it here would only risk drift.
+   */
+
+  --chart-income: var(--success);
+  --chart-expense: var(--destructive);
+  --chart-net: var(--primary);
+  --chart-projected: oklch(0.68 0.2 303.9);
+
+  /*
+   * A drop shadow cannot lift a #12172a card off a #0a111f page — there is no
+   * darker to go. So dark mode spends its elevation budget on a top-edge inset
+   * highlight, as if the surface were catching light from above, and keeps only
+   * enough real shadow to separate overlays (dialogs, popovers) from the page.
+   * The scale still climbs, so `shadow-sm` → `shadow-lg` still means "further
+   * forward" and no component needs a dark: variant.
+   */
+  --elevation-xs: inset 0 1px 0 0 oklch(1 0 0 / 0.04);
+  --elevation-sm: inset 0 1px 0 0 oklch(1 0 0 / 0.05), 0 1px 2px 0 oklch(0 0 0 / 0.4);
+  --elevation-md: inset 0 1px 0 0 oklch(1 0 0 / 0.06), 0 4px 8px -2px oklch(0 0 0 / 0.5);
+  --elevation-lg: inset 0 1px 0 0 oklch(1 0 0 / 0.07), 0 12px 20px -4px oklch(0 0 0 / 0.55);
+  --elevation-xl: inset 0 1px 0 0 oklch(1 0 0 / 0.08), 0 24px 32px -8px oklch(0 0 0 / 0.6);
+  --elevation-2xl: inset 0 1px 0 0 oklch(1 0 0 / 0.08), 0 32px 64px -12px oklch(0 0 0 / 0.7);
 }
 
 @theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-custom), ui-monospace, monospace;
+  /* Notification counters and the sidebar edition label were hand-written as
+     text-[10px]/text-[11px]/text-[0.6875rem]; this is the one step below xs. */
+  --text-2xs: 0.6875rem;
+  --shadow-xs: var(--elevation-xs);
+  --shadow-sm: var(--elevation-sm);
+  --shadow-md: var(--elevation-md);
+  --shadow-lg: var(--elevation-lg);
+  --shadow-xl: var(--elevation-xl);
+  --shadow-2xl: var(--elevation-2xl);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -99,6 +267,8 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-tinted: var(--destructive-tinted);
+  --color-destructive-solid: var(--destructive-solid);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -107,6 +277,10 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+  --color-chart-income: var(--chart-income);
+  --color-chart-expense: var(--chart-expense);
+  --color-chart-net: var(--chart-net);
+  --color-chart-projected: var(--chart-projected);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -116,7 +290,18 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-success: var(--success);
+  --color-success-tinted: var(--success-tinted);
   --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-tinted: var(--warning-tinted);
+}
+
+/**
+ * Money figures anywhere. `tabular-nums` stops digits changing width between
+ * renders, `slashed-zero` keeps 0 and O apart in account and invoice numbers.
+ */
+@utility numeric {
+  font-variant-numeric: tabular-nums slashed-zero;
 }
 
 @layer base {
@@ -125,5 +310,26 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+    /* Inter's stylistic sets: cv11 gives the single-storey 'a'/'l' that keep
+       narrow table columns legible, ss01 the disambiguated punctuation. */
+    font-feature-settings: "cv11", "ss01";
+  }
+}
+
+/*
+ * tw-animate-css drives every Dialog, Sheet, Select, DropdownMenu and Popover
+ * transition. Durations are collapsed rather than removed: Radix unmounts on
+ * `animationend`, so an animation that never runs would leave content mounted.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
   }
 }

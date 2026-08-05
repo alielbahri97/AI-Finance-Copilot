@@ -11,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { PageHeading } from "@/components/ui/page-heading";
 import { BRAND } from "@/lib/branding";
 import { prisma } from "@/lib/prisma";
 import { getWorkspaceContext } from "@/lib/workspace/context";
@@ -63,7 +64,7 @@ export default async function CategoriesPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Categories</h1>
+        <PageHeading>Categories</PageHeading>
         <p className="text-muted-foreground text-sm">
           Organize your spending with categories and auto-categorization rules.
         </p>

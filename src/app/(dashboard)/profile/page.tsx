@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { BusinessProfileCard } from "@/components/profile/business-profile-card";
 import { ProfileForm } from "@/components/profile/profile-form";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { PageHeading } from "@/components/ui/page-heading";
 import {
   Card,
   CardContent,
@@ -44,9 +45,9 @@ export default async function ProfilePage() {
           </AvatarFallback>
         </Avatar>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">
+          <PageHeading>
             {profile.fullName ?? "Your profile"}
-          </h1>
+          </PageHeading>
           <p className="text-muted-foreground text-sm">{profile.email}</p>
         </div>
       </div>

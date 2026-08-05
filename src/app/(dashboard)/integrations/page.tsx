@@ -11,6 +11,7 @@ import { IntegrationsGrid } from "@/components/integrations/integrations-grid";
 import type { ConnectionData, IntegrationCardData } from "@/components/integrations/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { PageHeading } from "@/components/ui/page-heading";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { isSchemaOutOfDate } from "@/lib/db-errors";
 import { logger, serializeError } from "@/lib/logger";
@@ -221,7 +222,7 @@ export default async function IntegrationsPage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Integrations</h1>
+        <PageHeading>Integrations</PageHeading>
         <p className="text-muted-foreground text-sm">
           Pick a tool to see what it does and how to connect it. Connected sources sync
           automatically every few hours.
