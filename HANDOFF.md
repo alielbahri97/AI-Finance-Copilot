@@ -231,7 +231,6 @@ This is the single biggest source of surprise for a new agent.
 
 ```powershell
 $env:NPM_CONFIG_REGISTRY = "https://artifactory.ams.optiver.com/artifactory/api/npm/npm/"
-$env:PRISMA_SCHEMA_ENGINE_BINARY = "C:\Users\alielbahri\.prisma-stub-engine.exe"
 ```
 
 - **npm**: `registry.npmjs.org` is blocked (ETIMEDOUT/403). The internal
@@ -241,9 +240,16 @@ $env:PRISMA_SCHEMA_ENGINE_BINARY = "C:\Users\alielbahri\.prisma-stub-engine.exe"
   `cafile=C:\Users\alielbahri\optiver-ca-chain.pem` (Node does not trust the
   corporate CA otherwise).
 - **Prisma engines**: `binaries.prisma.sh` is blocked and has no Artifactory
-  mirror. `prisma generate` only checks the engine file *exists*, so an empty
-  stub at `C:\Users\alielbahri\.prisma-stub-engine.exe` makes generate and
-  builds work. Runtime queries never need it (pg driver adapter).
+  mirror (verified — all of Artifactory's Generic repos are local, so
+  `PRISMA_ENGINES_MIRROR` has nothing to point at). No shell setup is needed
+  any more: `scripts/prisma-generate.mjs` handles this, and `build`,
+  `postinstall` and `generate` all route through it. It attempts a normal
+  `prisma generate` first and only falls back to a placeholder engine when the
+  download itself fails, so an unrestricted network is unaffected. The CLI only
+  checks the engine file *exists*; runtime queries never need it (pg driver
+  adapter). Set `PRISMA_ENGINE_STUB_FALLBACK=always` to skip the doomed ~70s
+  download attempt on this machine, or `off` to forbid the fallback entirely.
+  `db:push` and `db:migrate` still need a real engine — use `npm run db:apply`.
 
 ### What is blocked from this machine
 
@@ -253,7 +259,7 @@ $env:PRISMA_SCHEMA_ENGINE_BINARY = "C:\Users\alielbahri\.prisma-stub-engine.exe"
 | supabase.com, api.supabase.com | 403 via squid — dashboard unreachable |
 | vercel.com, api.vercel.com | 403 via squid — no CLI, no API, no dashboard |
 | api.resend.com | 403 via squid |
-| Google Fonts | Unreachable at build → the app uses the system font stack (`next/font/google` deliberately not used) |
+| Google Fonts | Unreachable at build → fonts are **self-hosted**. Inter and JetBrains Mono woff2 files live in `src/app/fonts/` (sourced from the `@fontsource-variable/*` packages via Artifactory) and load through `next/font/local`. Do not switch to `next/font/google` — it fetches at build time and will fail here |
 
 ### What works
 
