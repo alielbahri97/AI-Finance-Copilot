@@ -1,3 +1,27 @@
+export const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
+export const DEFAULT_PAGE_SIZE = 50;
+
+export type TransactionSortKey = "date" | "description" | "category" | "amount";
+export type SortDirection = "asc" | "desc";
+
+export const DEFAULT_SORT: TransactionSortKey = "date";
+export const DEFAULT_SORT_DIRECTION: SortDirection = "desc";
+
+/** Direction a column starts in when you first sort by it. */
+export const SORT_DEFAULT_DIRECTION: Record<TransactionSortKey, SortDirection> = {
+  date: "desc",
+  description: "asc",
+  category: "asc",
+  amount: "desc",
+};
+
+/** Totals for the whole filtered set, not just the page on screen. */
+export interface TransactionTotals {
+  income: number;
+  expenses: number;
+  net: number;
+}
+
 export interface CategoryOption {
   id: string;
   name: string;

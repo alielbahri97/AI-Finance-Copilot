@@ -8,21 +8,27 @@ import { TableCardSkeleton } from "@/components/dashboard/section-skeletons";
 import { TransactionDialog } from "@/components/transactions/transaction-dialog";
 import { TransactionsTable } from "@/components/transactions/transactions-table";
 import { TransactionsToolbar } from "@/components/transactions/transactions-toolbar";
-import type {
-  BatchOption,
-  CategoryOption,
-  TransactionRow,
+import {
+  DEFAULT_PAGE_SIZE,
+  DEFAULT_SORT,
+  DEFAULT_SORT_DIRECTION,
+  PAGE_SIZE_OPTIONS,
+  type BatchOption,
+  type CategoryOption,
+  type SortDirection,
+  type TransactionRow,
+  type TransactionSortKey,
 } from "@/components/transactions/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { PageHeading } from "@/components/ui/page-heading";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { localeForCurrency } from "@/lib/utils";
 import { getWorkspaceContext, type WorkspaceContext } from "@/lib/workspace/context";
 
 export const metadata: Metadata = { title: "Transactions" };
 export const dynamic = "force-dynamic";
-
-const PAGE_SIZE = 50;
 
 type SearchParams = { [key: string]: string | string[] | undefined };
 
@@ -41,6 +47,40 @@ function parseAmountParam(value: string | undefined): number | undefined {
   if (!value) return undefined;
   const amount = Number(value);
   return Number.isNaN(amount) || amount < 0 ? undefined : amount;
+}
+
+function parsePageSize(value: string | undefined): number {
+  const size = Number(value);
+  return (PAGE_SIZE_OPTIONS as readonly number[]).includes(size) ? size : DEFAULT_PAGE_SIZE;
+}
+
+function parseSort(value: string | undefined): TransactionSortKey {
+  const keys: TransactionSortKey[] = ["date", "description", "category", "amount"];
+  return keys.find((key) => key === value) ?? DEFAULT_SORT;
+}
+
+function parseDirection(value: string | undefined): SortDirection {
+  return value === "asc" || value === "desc" ? value : DEFAULT_SORT_DIRECTION;
+}
+
+/**
+ * Sorting has to happen in the query, not on the page we happened to fetch:
+ * every column falls back to date so the order stays stable across pages.
+ */
+function buildOrderBy(
+  sort: TransactionSortKey,
+  direction: SortDirection
+): Prisma.TransactionOrderByWithRelationInput[] {
+  switch (sort) {
+    case "amount":
+      return [{ amount: direction }, { date: "desc" }, { createdAt: "desc" }];
+    case "description":
+      return [{ description: direction }, { date: "desc" }, { createdAt: "desc" }];
+    case "category":
+      return [{ category: { name: direction } }, { date: "desc" }, { createdAt: "desc" }];
+    default:
+      return [{ date: direction }, { createdAt: direction }];
+  }
 }
 
 /**
@@ -69,7 +109,7 @@ export default async function TransactionsPage({
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Transactions</h1>
+          <PageHeading>Transactions</PageHeading>
           <p className="text-muted-foreground text-sm">
             Search, filter and categorize your income and expenses.
           </p>
@@ -112,6 +152,9 @@ async function TransactionsContent({
   const min = parseAmountParam(first(params, "min"));
   const max = parseAmountParam(first(params, "max"));
   const requestedPage = Math.max(1, Number(first(params, "page") ?? "1") || 1);
+  const pageSize = parsePageSize(first(params, "size"));
+  const sort = parseSort(first(params, "sort"));
+  const direction = parseDirection(first(params, "dir"));
 
   const where: Prisma.TransactionWhereInput = { workspaceId: ctx.workspace.id };
   if (q) {
@@ -129,23 +172,33 @@ async function TransactionsContent({
     where.amount = { ...(min !== undefined && { gte: min }), ...(max !== undefined && { lte: max }) };
   }
 
-  const [totalCount, batches] = await Promise.all([
+  // The totals are aggregated over `where`, so they describe the whole filtered
+  // set — the number people actually came for after narrowing to a category.
+  const [totalCount, batches, sumsByType] = await Promise.all([
     prisma.transaction.count({ where }),
     prisma.importBatch.findMany({
       where: { workspaceId: ctx.workspace.id },
       orderBy: { createdAt: "desc" },
       include: { _count: { select: { transactions: true } } },
     }),
+    prisma.transaction.groupBy({ by: ["type"], where, _sum: { amount: true } }),
   ]);
 
-  const pageCount = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const income = Number(
+    sumsByType.find((entry) => entry.type === "INCOME")?._sum.amount ?? 0
+  );
+  const expenses = Number(
+    sumsByType.find((entry) => entry.type === "EXPENSE")?._sum.amount ?? 0
+  );
+
+  const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
   const page = Math.min(requestedPage, pageCount);
 
   const transactions = await prisma.transaction.findMany({
     where,
-    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-    skip: (page - 1) * PAGE_SIZE,
-    take: PAGE_SIZE,
+    orderBy: buildOrderBy(sort, direction),
+    skip: (page - 1) * pageSize,
+    take: pageSize,
     include: {
       category: { select: { name: true, color: true } },
       invoice: { select: { id: true, vendor: true } },
@@ -178,7 +231,11 @@ async function TransactionsContent({
 
   return (
     <>
-      <TransactionsToolbar categories={categoryOptions} batches={batchOptions} />
+      <TransactionsToolbar
+        categories={categoryOptions}
+        batches={batchOptions}
+        locale={localeForCurrency(ctx.workspace.currency)}
+      />
 
       <Card>
         <CardContent>
@@ -188,7 +245,12 @@ async function TransactionsContent({
             currency={ctx.workspace.currency}
             page={page}
             pageCount={pageCount}
+            pageSize={pageSize}
             totalCount={totalCount}
+            totals={{ income, expenses, net: income - expenses }}
+            sort={sort}
+            direction={direction}
+            canEdit={ctx.permissions.has("edit_transactions")}
             hasActiveFilters={hasActiveFilters}
           />
         </CardContent>

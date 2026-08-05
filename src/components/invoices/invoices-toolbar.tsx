@@ -32,6 +32,7 @@ export function InvoicesToolbar() {
         if (value === null || value === "" || value === ALL) params.delete(key);
         else params.set(key, value);
       }
+      params.delete("page"); // filters reset pagination
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     },
     [router, pathname, searchParams]

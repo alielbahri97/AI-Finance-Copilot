@@ -1,13 +1,17 @@
+import { CheckCircle2Icon } from "lucide-react";
+
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
 import type { AgingBucket } from "@/lib/reports/data";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency, localeForCurrency } from "@/lib/utils";
 
 interface AgingTableProps {
   buckets: AgingBucket[];
@@ -17,12 +21,16 @@ interface AgingTableProps {
 /** AR/AP aging summary: current / 1-30 / 31-60 / 60+ days overdue. */
 export function AgingTable({ buckets, currency }: AgingTableProps) {
   const total = buckets.reduce((sum, bucket) => sum + bucket.total, 0);
+  const locale = localeForCurrency(currency);
 
   if (total === 0 && buckets.every((bucket) => bucket.count === 0)) {
     return (
-      <div className="text-muted-foreground flex h-40 items-center justify-center text-sm">
-        Nothing outstanding
-      </div>
+      <EmptyState
+        className="h-40"
+        icon={CheckCircle2Icon}
+        title="Nothing outstanding"
+        description="Every invoice in this period has been settled."
+      />
     );
   }
 
@@ -45,20 +53,22 @@ export function AgingTable({ buckets, currency }: AgingTableProps) {
               {bucket.count}
             </TableCell>
             <TableCell className="text-right font-medium tabular-nums">
-              {formatCurrency(bucket.total, currency)}
+              {formatCurrency(bucket.total, currency, locale)}
             </TableCell>
           </TableRow>
         ))}
+      </TableBody>
+      <TableFooter>
         <TableRow>
           <TableCell className="font-semibold">Total</TableCell>
           <TableCell className="text-muted-foreground text-right tabular-nums">
             {buckets.reduce((sum, bucket) => sum + bucket.count, 0)}
           </TableCell>
           <TableCell className="text-right font-semibold tabular-nums">
-            {formatCurrency(total, currency)}
+            {formatCurrency(total, currency, locale)}
           </TableCell>
         </TableRow>
-      </TableBody>
+      </TableFooter>
     </Table>
   );
 }
