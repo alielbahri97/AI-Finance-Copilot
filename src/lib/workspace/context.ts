@@ -44,7 +44,8 @@ export interface WorkspaceContext {
   memberId: string;
   /**
    * The member's permissions, already narrowed to what the workspace's edition
-   * supports. A Personal workspace never carries `view_invoices` or
+   * grants someone in this role. A Personal workspace never carries
+   * `view_invoices`, and only its owner carries `view_billing` or
    * `manage_members`, so every existing `requireWorkspace(...)` call became an
    * edition guard for free.
    */
@@ -122,7 +123,8 @@ export const getWorkspaceContext = cache(async (): Promise<WorkspaceContext | nu
     memberId: membership.id,
     permissions: applyEditionPermissions(
       membership.workspace.type,
-      resolvePermissions(membership.role, membership.permissions)
+      resolvePermissions(membership.role, membership.permissions),
+      membership.role
     ),
   };
 });

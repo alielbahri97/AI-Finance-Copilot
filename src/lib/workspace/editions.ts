@@ -27,7 +27,7 @@
 
 import type { Edition } from "@/lib/branding";
 
-import { ALL_PERMISSIONS, type Permission } from "./permissions";
+import { ALL_PERMISSIONS, type Permission, type WorkspaceRoleName } from "./permissions";
 
 /** Mirrors the Prisma `WorkspaceType` enum. */
 export type WorkspaceType = "BUSINESS" | "PERSONAL";
@@ -48,6 +48,11 @@ export const ALL_EDITION_FEATURES = [
   "counterparties",
   /** Multi-member sharing: members, roles, invitations, seats. */
   "team",
+  /**
+   * The same sharing, shrunk to a couple: one partner, joining as an equal,
+   * with no role picker and no per-permission overrides.
+   */
+  "household",
   /** Monthly per-category budgets with rollover. */
   "budgets",
   /** Named savings goals with contributions and a projected completion date. */
@@ -68,22 +73,31 @@ export type EditionFeature = (typeof ALL_EDITION_FEATURES)[number];
  */
 export const EDITION_FEATURES: Record<WorkspaceType, readonly EditionFeature[]> = {
   BUSINESS: ["invoices", "counterparties", "team", "accounting"],
-  PERSONAL: ["budgets", "goals", "netWorth", "subscriptions"],
+  PERSONAL: ["budgets", "goals", "netWorth", "subscriptions", "household"],
 };
 
 /**
  * Permissions an edition can grant at all. A Personal workspace is one
- * person's own money: there is nothing to invoice and nobody to invite, so
- * those permissions are removed before any route sees them.
+ * household's money: there is nothing to invoice, so those permissions are
+ * removed before any route sees them.
  */
 export const EDITION_PERMISSIONS: Record<WorkspaceType, readonly Permission[]> = {
   BUSINESS: ALL_PERMISSIONS,
   PERSONAL: ALL_PERMISSIONS.filter(
-    (permission) =>
-      permission !== "view_invoices" &&
-      permission !== "edit_invoices" &&
-      permission !== "manage_members"
+    (permission) => permission !== "view_invoices" && permission !== "edit_invoices"
   ),
+};
+
+/**
+ * Permissions an edition hands to the owner alone, whatever the role says. A
+ * household is two people over one pot of money, not two account
+ * administrators: the partner edits everything and asks the copilot, while the
+ * person whose subscription it is keeps the card and the guest list. Business
+ * is untouched — an admin there is a full admin.
+ */
+export const EDITION_OWNER_ONLY_PERMISSIONS: Record<WorkspaceType, readonly Permission[]> = {
+  BUSINESS: [],
+  PERSONAL: ["view_billing", "manage_members"],
 };
 
 export function editionHasFeature(type: WorkspaceType, feature: EditionFeature): boolean {
@@ -91,16 +105,51 @@ export function editionHasFeature(type: WorkspaceType, feature: EditionFeature):
 }
 
 /**
- * Narrows a member's effective permissions to what the edition supports.
- * Called once in the workspace context, so every `requireWorkspace(...)` and
- * every UI permission check inherits it.
+ * Narrows a member's effective permissions to what the edition grants someone
+ * in that role. Called once in the workspace context, so every
+ * `requireWorkspace(...)` and every UI permission check inherits it.
  */
 export function applyEditionPermissions(
   type: WorkspaceType,
-  permissions: Set<Permission>
+  permissions: Set<Permission>,
+  role: WorkspaceRoleName
 ): Set<Permission> {
   const allowed = EDITION_PERMISSIONS[type];
-  return new Set([...permissions].filter((permission) => allowed.includes(permission)));
+  const ownerOnly: readonly Permission[] =
+    role === "OWNER" ? [] : EDITION_OWNER_ONLY_PERMISSIONS[type];
+  return new Set(
+    [...permissions].filter(
+      (permission) => allowed.includes(permission) && !ownerOnly.includes(permission)
+    )
+  );
+}
+
+/**
+ * The role someone joins with. A Business workspace picks one per invitation;
+ * a Personal household has no picker, because "equal partners" is the whole
+ * product intent and the owner-only list above is what keeps billing and the
+ * guest list out of the partner's hands.
+ */
+export const HOUSEHOLD_PARTNER_ROLE: WorkspaceRoleName = "ADMIN";
+
+/** Default role for a Business invitation that did not name one. */
+const DEFAULT_INVITE_ROLE: WorkspaceRoleName = "MEMBER";
+
+export function inviteRoleFor(
+  type: WorkspaceType,
+  requested?: WorkspaceRoleName | null
+): WorkspaceRoleName {
+  if (type === "PERSONAL") return HOUSEHOLD_PARTNER_ROLE;
+  return requested ?? DEFAULT_INVITE_ROLE;
+}
+
+/**
+ * Whether this edition lets a member's role or per-permission overrides be
+ * edited. A household has neither, so the API refuses rather than quietly
+ * accepting a change the UI never offers.
+ */
+export function editionAllowsRoleChanges(type: WorkspaceType): boolean {
+  return type !== "PERSONAL";
 }
 
 /**
@@ -109,17 +158,19 @@ export function applyEditionPermissions(
  * every navigable path is one the current edition's guards would allow, so the
  * two cannot drift apart.
  *
- * Three features own no route of their own and so appear empty here:
+ * Four features own no route of their own and so appear empty here:
  *   * `counterparties` is a set of sections inside the shared `/reports` page,
  *     which keeps its revenue, expense and category analysis in both editions.
- *   * `team` is a section of `/settings`, gated in place. Its API routes need
- *     `manage_members`, which a Personal workspace never has.
+ *   * `team` and `household` are two framings of the same section of
+ *     `/settings`, gated in place. Both go through the shared member and
+ *     invitation routes, which need `manage_members`.
  *   * `accounting` filters the provider grid on the shared `/integrations`.
  */
 export const FEATURE_PATHS: Record<EditionFeature, readonly string[]> = {
   invoices: ["/invoices"],
   counterparties: [],
   team: [],
+  household: [],
   budgets: ["/budgets"],
   goals: ["/goals"],
   netWorth: ["/net-worth"],

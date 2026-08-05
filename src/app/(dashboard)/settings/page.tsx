@@ -9,6 +9,7 @@ import { ChangePasswordForm } from "@/components/settings/change-password-form";
 import { CurrencySettingsForm } from "@/components/settings/currency-settings-form";
 import { NotificationSettings } from "@/components/settings/notification-settings";
 import { AuditLog, type AuditEntryView } from "@/components/team/audit-log";
+import { HouseholdSettings } from "@/components/team/household-settings";
 import { TeamSettings, type TeamMemberView } from "@/components/team/team-settings";
 import { WorkspaceNameForm } from "@/components/team/workspace-name-form";
 import {
@@ -20,14 +21,15 @@ import {
 } from "@/components/ui/card";
 import { PageHeading } from "@/components/ui/page-heading";
 import { getEntitlements } from "@/lib/billing/entitlements";
-import { BRAND } from "@/lib/branding";
+import { EDITION_PLAN_ORDER, getPlan } from "@/lib/billing/plans";
+import { BRAND, editionBranding } from "@/lib/branding";
 import { getOrCreateProfile } from "@/lib/data";
 import { isEmailConfigured } from "@/lib/notifications/email";
 import { getOrCreatePreferences, serializePreferences } from "@/lib/notifications/preferences";
 import { isPushConfigured } from "@/lib/notifications/push";
 import { prisma } from "@/lib/prisma";
 import { getWorkspaceContext } from "@/lib/workspace/context";
-import { editionHasFeature } from "@/lib/workspace/editions";
+import { editionForWorkspaceType, editionHasFeature } from "@/lib/workspace/editions";
 import { parseOverrides, type WorkspaceRoleName } from "@/lib/workspace/permissions";
 import { SUPPORTED_CURRENCIES } from "@/lib/validations/profile";
 
@@ -41,6 +43,9 @@ export default async function SettingsPage() {
   const canManageMembers = ctx.permissions.has("manage_members");
   const canManageSettings = ctx.permissions.has("manage_settings");
   const sharing = editionHasFeature(workspace.type, "team");
+  const household = editionHasFeature(workspace.type, "household");
+  const edition = editionForWorkspaceType(workspace.type);
+  const sharingCopy = editionBranding(edition).sharing;
 
   const [profile, preferences, businessProfile, entitlements, members, invitations, auditEntries] =
     await Promise.all([
@@ -105,6 +110,14 @@ export default async function SettingsPage() {
     overrides: parseOverrides(member.permissions),
   }));
 
+  // The cheapest tier of this edition with room for a second person — what the
+  // locked household teaser points at, resolved the same way the goals page
+  // resolves its own upgrade target.
+  const upgradePlanName =
+    EDITION_PLAN_ORDER[edition]
+      .map((planId) => getPlan(planId, edition))
+      .find((plan) => plan.limits.seats === null || plan.limits.seats > 1)?.name ?? null;
+
   const auditViews: AuditEntryView[] = auditEntries.map((entry) => ({
     id: entry.id,
     action: entry.action,
@@ -118,26 +131,26 @@ export default async function SettingsPage() {
       <div>
         <PageHeading>Settings</PageHeading>
         <p className="text-muted-foreground text-sm">
-          {sharing
-            ? "Manage your workspace, team, appearance, AI provider and account security."
-            : "Manage your workspace, appearance, AI provider and account security."}
+          Manage your workspace, {sharingCopy.title.toLowerCase()}, appearance, AI provider and
+          account security.
         </p>
       </div>
 
       {/*
-        A Personal workspace is one person's own money: the workspace model is
-        unchanged underneath, but there is nobody to invite, so the Team card
-        collapses to just renaming the workspace. The member APIs need
-        `manage_members`, which this edition never grants.
+        Both editions share one workspace model and one set of member APIs; only
+        the framing differs. Business keeps the full Team card — roles, granular
+        permissions, several seats — while Personal gets the same invitations
+        narrowed to one partner, in its own card so renaming the workspace stays
+        where it has always been.
       */}
       {sharing ? (
         <Card>
           <CardHeader>
-            <CardTitle>Team — {workspace.name}</CardTitle>
+            <CardTitle>
+              {sharingCopy.title} — {workspace.name}
+            </CardTitle>
             <CardDescription>
-              {canManageMembers
-                ? "Invite people to this workspace and control what each member can access."
-                : "People who share this workspace with you."}
+              {canManageMembers ? sharingCopy.description : sharingCopy.readOnlyDescription}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-6">
@@ -159,19 +172,49 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>
       ) : (
-        canManageSettings && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Workspace</CardTitle>
-              <CardDescription>
-                What this workspace is called in the switcher and in emails.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <WorkspaceNameForm defaultName={workspace.name} />
-            </CardContent>
-          </Card>
-        )
+        <>
+          {canManageSettings && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Workspace</CardTitle>
+                <CardDescription>
+                  What this workspace is called in the switcher and in emails.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <WorkspaceNameForm defaultName={workspace.name} />
+              </CardContent>
+            </Card>
+          )}
+          {household && (
+            <Card>
+              <CardHeader>
+                <CardTitle>{sharingCopy.title}</CardTitle>
+                <CardDescription>
+                  {canManageMembers ? sharingCopy.description : sharingCopy.readOnlyDescription}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <HouseholdSettings
+                  currentUserId={user.id}
+                  isOwner={ctx.role === "OWNER"}
+                  canManage={canManageMembers}
+                  members={memberViews}
+                  invitations={invitations.map((invitation) => ({
+                    id: invitation.id,
+                    email: invitation.email,
+                    role: invitation.role as WorkspaceRoleName,
+                    expiresAt: invitation.expiresAt.toISOString(),
+                  }))}
+                  seatLimit={entitlements.plan.limits.seats}
+                  planName={entitlements.plan.name}
+                  upgradePlanName={upgradePlanName}
+                  copy={sharingCopy}
+                />
+              </CardContent>
+            </Card>
+          )}
+        </>
       )}
 
       {canManageMembers && (

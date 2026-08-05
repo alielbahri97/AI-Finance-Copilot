@@ -17,6 +17,35 @@
 
 export type Edition = "business" | "personal";
 
+/**
+ * How an edition talks about sharing a workspace with someone else. The
+ * machinery underneath is identical — members, hashed invitations, seats — but
+ * a company invites colleagues to a *team* and a couple shares a *household*,
+ * and every string the sharing UI renders comes from here so neither edition's
+ * wording is baked into a component.
+ */
+export interface EditionSharingCopy {
+  /** Settings section heading: "Team" / "Household". */
+  title: string;
+  /** Under the heading, for someone who can invite. */
+  description: string;
+  /** Under the heading, for someone who can only look. */
+  readOnlyDescription: string;
+  /** The invite button, and the invite dialog's title. */
+  inviteAction: string;
+  /** The invite dialog's one-line explanation. */
+  inviteDescription: string;
+  /** What one of the other people is called, inside a sentence. */
+  personLabel: string;
+  /** Subject of "… is part of Premium" on the locked teaser. */
+  lockedSubject: string;
+  /** What sharing buys you, listed under the teaser. */
+  lockedHighlights: readonly string[];
+  /** Shown once sharing is unlocked but nobody has been invited yet. */
+  emptyTitle: string;
+  emptyDescription: string;
+}
+
 export interface EditionBranding {
   /** Full product name for this edition, e.g. for plan pages and packaging. */
   name: string;
@@ -38,6 +67,8 @@ export interface EditionBranding {
    * the two are distinguishable without becoming different products.
    */
   accentClassName: string;
+  /** Wording for the members/invitations surface in Settings. */
+  sharing: EditionSharingCopy;
 }
 
 /** Edition-agnostic branding. Safe anywhere the edition is unknown. */
@@ -74,6 +105,25 @@ export const EDITIONS: Record<Edition, EditionBranding> = {
       "Invite your accountant or co-founder",
     ],
     accentClassName: "text-primary",
+    sharing: {
+      title: "Team",
+      description:
+        "Invite people to this workspace and control what each member can access.",
+      readOnlyDescription: "People who share this workspace with you.",
+      inviteAction: "Invite member",
+      inviteDescription:
+        "They get their own login; you control what they can see and do. Invitations expire after 7 days.",
+      personLabel: "member",
+      lockedSubject: "Extra seats",
+      lockedHighlights: [
+        "Your accountant, co-founder or bookkeeper gets their own login.",
+        "Roles and per-permission overrides decide what each of them can reach.",
+        "An audit log records who changed what.",
+      ],
+      emptyTitle: "Nobody else here yet",
+      emptyDescription:
+        "Invite a colleague or your accountant and they get their own login into this workspace.",
+    },
   },
   personal: {
     name: `${BRAND.name} Personal`,
@@ -91,6 +141,26 @@ export const EDITIONS: Record<Edition, EditionBranding> = {
       "Ask the copilot whether you can afford something",
     ],
     accentClassName: "text-success",
+    sharing: {
+      title: "Household",
+      description:
+        "Share this workspace with your partner. You both see the same accounts, transactions, budgets and goals.",
+      readOnlyDescription: "The people you share this workspace with.",
+      inviteAction: "Invite your partner",
+      inviteDescription:
+        "They get their own login and see everything here as an equal. The plan and this list stay with you. The invitation expires after 7 days.",
+      personLabel: "partner",
+      lockedSubject: "Managing money together",
+      lockedHighlights: [
+        "Your partner gets their own login — no shared password, no shared inbox.",
+        "One set of accounts, transactions, budgets and goals for both of you.",
+        "They can import and categorize transactions and ask the copilot.",
+        "The plan stays yours: only you can change it or invite anyone.",
+      ],
+      emptyTitle: "It is just you in here",
+      emptyDescription:
+        "Invite your partner and you will both be working from the same numbers.",
+    },
   },
 };
 

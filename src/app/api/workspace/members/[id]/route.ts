@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/workspace/audit";
 import { requireWorkspace } from "@/lib/workspace/context";
+import { editionAllowsRoleChanges } from "@/lib/workspace/editions";
 import { notifyWorkspaceEvent } from "@/lib/workspace/team";
 import {
   ALL_PERMISSIONS,
@@ -29,6 +30,20 @@ export async function PATCH(request: Request, context: RouteContext) {
   if (!auth.ok) return auth.response;
   const { user, workspace } = auth.ctx;
   const { id } = await context.params;
+
+  // A household has no roles to pick and no per-permission overrides to
+  // fine-tune, so this is refused rather than quietly written to a row the UI
+  // would never show.
+  if (!editionAllowsRoleChanges(workspace.type)) {
+    return NextResponse.json(
+      {
+        error:
+          "Everyone in a household is an equal, so there are no roles or permissions to change. Remove them instead.",
+        code: "WRONG_EDITION",
+      },
+      { status: 400 }
+    );
+  }
 
   const parsed = updateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {

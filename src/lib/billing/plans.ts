@@ -314,12 +314,16 @@ const PREMIUM: Plan = {
     goalsEnabled: true,
     netWorthEnabled: true,
     subscriptionInsightsEnabled: true,
-    seats: 1,
+    // Two seats is the household: you and one partner, each with their own
+    // login. Free and Plus stay at one, which is what makes this the concrete
+    // reason a couple upgrades.
+    seats: 2,
   },
   highlights: [
     "Everything in Plus",
     "Unlimited AI copilot messages",
     "What-if planning: model a raise, a move, a big purchase",
+    "Share it with your partner, each with your own login",
     "20,000 rows per import",
   ],
 };

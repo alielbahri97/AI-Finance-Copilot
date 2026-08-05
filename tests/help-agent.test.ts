@@ -91,7 +91,7 @@ describe("help knowledge base per edition", () => {
 
   it("adds the personal topics and drops the business-only ones", () => {
     const ids = new Set(personalTopics.map((topic) => topic.id));
-    for (const required of ["budgets", "goals", "subscriptions"]) {
+    for (const required of ["budgets", "goals", "subscriptions", "household-sharing"]) {
       expect(ids.has(required), `missing personal topic ${required}`).toBe(true);
     }
     for (const absent of ["invoices", "team-invitations"]) {
@@ -105,9 +105,12 @@ describe("help knowledge base per edition", () => {
 
   it("never mentions a business-only surface to a personal workspace", () => {
     const forbidden = [/\/invoices/, /\bVAT\b/, /\bvendors?\b/i, /invite/i, /\bseats?\b/i];
-    // The workspaces topic is the one place that names the other edition, so
-    // someone asking "can I also track my company here?" gets a real answer.
-    for (const topic of personalTopics.filter((entry) => entry.id !== "workspaces")) {
+    // Two topics are allowed to break the rule. The workspaces topic is the one
+    // place that names the other edition, so someone asking "can I also track my
+    // company here?" gets a real answer; household sharing is the personal
+    // edition's own invitation flow, and cannot be explained without the word.
+    const exempt = new Set(["workspaces", "household-sharing"]);
+    for (const topic of personalTopics.filter((entry) => !exempt.has(entry.id))) {
       for (const pattern of forbidden) {
         expect(pattern.test(topic.content), `${topic.id} mentions ${pattern}`).toBe(false);
       }

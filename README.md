@@ -25,7 +25,7 @@ asks which type to make.
 | Shared core | Transactions, CSV import, categories & rules, bank connections, cash-flow forecast, copilot, reports, notifications, exports, billing | same |
 | Invoices (AI extraction, VAT, payable/receivable, reminders) | ✅ | — |
 | Vendors & customers, AR/AP aging | ✅ | — |
-| Team sharing: members, roles, invitations, seats | ✅ | — (single-user by design) |
+| Team sharing: members, roles, invitations, seats | ✅ | Household sharing: one partner, no roles (Premium) |
 | Accounting integrations (QuickBooks, Xero, Exact) | ✅ | — |
 | Monthly budgets per category, with rollover | — | ✅ |
 | Savings goals with a projected completion date | — | ✅ |
@@ -630,11 +630,8 @@ not to an individual user. Every account owns one, created automatically on firs
 single-user accounts work exactly as before. Business+ plans can share a workspace with
 more people.
 
-This section is about the Business edition. A Personal workspace keeps the same model — it
-is a workspace with one member who owns it — but sharing is not part of the product: the
-`manage_members` permission is stripped from the edition, the Team UI and its API routes
-are gone, and seats are fixed at 1. Everything below therefore applies to Business
-workspaces.
+This section is about the Business edition. A Personal workspace runs on exactly the same
+machinery with two things taken away — see *Household sharing* below.
 
 **Roles.** Each member has one of four roles:
 
@@ -675,11 +672,30 @@ issues a new token and expiry, and is recorded in the audit log. Seat usage is u
 exactly one of the two rows is pending at any moment.
 
 **Seats.** Seats (members + pending invitations) come from the plan: Free/Pro 1, Business
-5, Enterprise custom, and every Personal tier 1. Inviting beyond the limit returns an
-upgrade prompt. The workspace — not the user — carries the subscription.
+5, Enterprise custom; Personal Free and Plus 1, Premium 2. Inviting beyond the limit
+returns an upgrade prompt. The workspace — not the user — carries the subscription.
 
 **Audit log.** Member, permission, billing, export and destructive data changes are
-recorded per workspace (`AuditLog`) and visible to owners/admins in *Settings → Team*.
+recorded per workspace (`AuditLog`) and visible to owners/admins in *Settings → Team*
+(*Settings → Household* in the Personal edition).
+
+**Household sharing (Personal).** A personal workspace is the same workspace with the same
+members, hashed invitations, seat limit and audit log — it just holds a couple instead of a
+company. Two things are taken away, in `src/lib/workspace/editions.ts`:
+
+- **No role picker and no permission overrides.** A partner joins as an equal
+  (`HOUSEHOLD_PARTNER_ROLE`, an admin underneath); the invite route ignores any role the
+  caller sends and `PATCH /api/workspace/members/[id]` refuses outright.
+- **Billing and the guest list stay with the owner.** `EDITION_OWNER_ONLY_PERMISSIONS`
+  withholds `view_billing` and `manage_members` from everyone but the owner of a personal
+  workspace, so the partner cannot reach `/billing` or invite a third person even if a
+  per-member override tries to grant it.
+
+The seat limit is what gates the feature: Premium's 2 seats make the section usable, while
+Free and Plus (1 seat) render it as a locked teaser and the invite route answers 402.
+Downgrading with a partner present keeps their access — Business has never evicted anyone
+over a shrunken seat limit either — and the section says plainly that the next invitation
+needs the plan back. Per-edition wording lives in `sharing` in `src/lib/branding.ts`.
 
 ## Security
 

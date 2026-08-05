@@ -26,12 +26,16 @@ import {
   DEFAULT_WORKSPACE_TYPE,
   EDITION_FEATURES,
   EDITION_METADATA_KEY,
+  EDITION_OWNER_ONLY_PERMISSIONS,
   EDITION_PARAM,
   EDITION_PERMISSIONS,
   editionAllowsPath,
+  editionAllowsRoleChanges,
   editionForWorkspaceType,
   editionHasFeature,
   featureForPath,
+  HOUSEHOLD_PARTNER_ROLE,
+  inviteRoleFor,
   isWorkspaceTypeParam,
   parseWorkspaceType,
   WORKSPACE_TYPES,
@@ -39,6 +43,7 @@ import {
   type EditionFeature,
   type WorkspaceType,
 } from "@/lib/workspace/editions";
+import { canAddSeat } from "@/lib/workspace/invitations";
 import { ALL_PERMISSIONS, resolvePermissions, type Permission } from "@/lib/workspace/permissions";
 
 /* ------------------------------------------------------------------ */
@@ -62,7 +67,13 @@ describe("edition feature matrix", () => {
   });
 
   it("keeps the personal surfaces personal-only", () => {
-    const personalOnly: EditionFeature[] = ["budgets", "goals", "netWorth", "subscriptions"];
+    const personalOnly: EditionFeature[] = [
+      "budgets",
+      "goals",
+      "netWorth",
+      "subscriptions",
+      "household",
+    ];
     for (const feature of personalOnly) {
       expect(editionHasFeature("PERSONAL", feature)).toBe(true);
       expect(editionHasFeature("BUSINESS", feature)).toBe(false);
@@ -85,9 +96,9 @@ describe("edition feature matrix", () => {
 /* ------------------------------------------------------------------ */
 
 describe("edition permissions", () => {
-  it("removes invoice and member management from a personal workspace", () => {
+  it("removes invoicing from a personal workspace", () => {
     const personal = new Set(EDITION_PERMISSIONS.PERSONAL);
-    for (const removed of ["view_invoices", "edit_invoices", "manage_members"] as Permission[]) {
+    for (const removed of ["view_invoices", "edit_invoices"] as Permission[]) {
       expect(personal.has(removed), `${removed} must not exist in Personal`).toBe(false);
     }
   });
@@ -102,6 +113,7 @@ describe("edition permissions", () => {
       "manage_forecast",
       "manage_integrations",
       "view_billing",
+      "manage_members",
       "manage_settings",
     ];
     for (const permission of shared) {
@@ -112,30 +124,158 @@ describe("edition permissions", () => {
 
   /**
    * The load-bearing guarantee: the owner of a Personal workspace — who has
-   * every permission the role system can grant — still cannot touch invoices
-   * or members, because the narrowing happens in the workspace context before
-   * any route sees the set.
+   * every permission the role system can grant — still cannot touch invoices,
+   * because the narrowing happens in the workspace context before any route
+   * sees the set. Members are the exception: a household owner invites their
+   * partner through the very same routes a business owner uses.
    */
   it("narrows an owner's permissions so requireWorkspace already refuses", () => {
     const owner = resolvePermissions("OWNER");
     expect(owner.has("edit_invoices")).toBe(true);
 
-    const personal = applyEditionPermissions("PERSONAL", owner);
+    const personal = applyEditionPermissions("PERSONAL", owner, "OWNER");
     expect(personal.has("edit_invoices")).toBe(false);
     expect(personal.has("view_invoices")).toBe(false);
-    expect(personal.has("manage_members")).toBe(false);
     expect(personal.has("edit_transactions")).toBe(true);
     expect(personal.has("use_copilot")).toBe(true);
+    expect(personal.has("manage_members")).toBe(true);
+    expect(personal.has("view_billing")).toBe(true);
 
-    expect([...applyEditionPermissions("BUSINESS", owner)].sort()).toEqual([...owner].sort());
+    expect([...applyEditionPermissions("BUSINESS", owner, "OWNER")].sort()).toEqual(
+      [...owner].sort()
+    );
   });
 
   it("never grants a permission the member did not already have", () => {
     const viewer = resolvePermissions("VIEWER");
-    const narrowed = applyEditionPermissions("PERSONAL", viewer);
+    const narrowed = applyEditionPermissions("PERSONAL", viewer, "VIEWER");
     for (const permission of narrowed) {
       expect(viewer.has(permission)).toBe(true);
     }
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* Household sharing (Personal)                                        */
+/* ------------------------------------------------------------------ */
+
+/** The partner's effective permissions, as the workspace context builds them. */
+function partnerPermissions(type: WorkspaceType): Set<Permission> {
+  return applyEditionPermissions(
+    type,
+    resolvePermissions(HOUSEHOLD_PARTNER_ROLE),
+    HOUSEHOLD_PARTNER_ROLE
+  );
+}
+
+describe("household sharing", () => {
+  it("lets a personal Premium workspace hold exactly two people", () => {
+    expect(getPlan("PREMIUM", "personal").limits.seats).toBe(2);
+    // The owner alone leaves room for one more; the pair is then full.
+    expect(canAddSeat(1, 0, 2).allowed).toBe(true);
+    expect(canAddSeat(1, 1, 2).allowed).toBe(false);
+    expect(canAddSeat(2, 0, 2).allowed).toBe(false);
+  });
+
+  it("gives Plus and Free no room to invite at all", () => {
+    for (const id of ["FREE", "PLUS"] as PlanId[]) {
+      const seats = getPlan(id, "personal").limits.seats;
+      expect(seats, `${id} must stay single-seat`).toBe(1);
+      // The owner is the seat, so the very first invitation is refused and the
+      // invite route answers with its 402 upgrade prompt.
+      expect(canAddSeat(1, 0, seats).allowed).toBe(false);
+    }
+  });
+
+  it("joins a partner as an equal, whatever the caller asked for", () => {
+    expect(HOUSEHOLD_PARTNER_ROLE).toBe("ADMIN");
+    for (const requested of ["VIEWER", "MEMBER", "ADMIN", undefined] as const) {
+      expect(inviteRoleFor("PERSONAL", requested)).toBe("ADMIN");
+    }
+    // Business keeps its role picker, and an unspecified role stays a member.
+    expect(inviteRoleFor("BUSINESS", "VIEWER")).toBe("VIEWER");
+    expect(inviteRoleFor("BUSINESS", undefined)).toBe("MEMBER");
+  });
+
+  it("gives the partner the money, and the owner the plan", () => {
+    const partner = partnerPermissions("PERSONAL");
+    for (const granted of [
+      "view_transactions",
+      "edit_transactions",
+      "view_reports",
+      "export_data",
+      "use_copilot",
+      "manage_forecast",
+      "manage_integrations",
+      "manage_settings",
+    ] as Permission[]) {
+      expect(partner.has(granted), `partner needs ${granted}`).toBe(true);
+    }
+    for (const withheld of ["view_billing", "manage_members"] as Permission[]) {
+      expect(partner.has(withheld), `partner must not get ${withheld}`).toBe(false);
+    }
+  });
+
+  it("cannot be widened back by a per-member override", () => {
+    // Someone hand-editing the permissions JSON must not be able to hand the
+    // partner the billing page: the edition narrowing runs last.
+    const granted = resolvePermissions(HOUSEHOLD_PARTNER_ROLE, {
+      view_billing: true,
+      manage_members: true,
+    });
+    expect(granted.has("view_billing")).toBe(true);
+
+    const effective = applyEditionPermissions("PERSONAL", granted, HOUSEHOLD_PARTNER_ROLE);
+    expect(effective.has("view_billing")).toBe(false);
+    expect(effective.has("manage_members")).toBe(false);
+  });
+
+  it("offers no roles and no permission overrides to edit", () => {
+    expect(editionAllowsRoleChanges("PERSONAL")).toBe(false);
+    expect(editionAllowsRoleChanges("BUSINESS")).toBe(true);
+  });
+
+  it("names the household in personal copy and the team in business copy", () => {
+    expect(EDITIONS.personal.sharing.title).toBe("Household");
+    expect(EDITIONS.business.sharing.title).toBe("Team");
+    for (const edition of ["business", "personal"] as const) {
+      const sharing = EDITIONS[edition].sharing;
+      expect(sharing.inviteAction.length).toBeGreaterThan(0);
+      expect(sharing.lockedHighlights.length).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("leaves a business workspace exactly as it was", () => {
+    expect(EDITION_OWNER_ONLY_PERMISSIONS.BUSINESS).toEqual([]);
+    // A business admin is still a full admin, billing and members included.
+    const admin = partnerPermissions("BUSINESS");
+    expect(admin.has("view_billing")).toBe(true);
+    expect(admin.has("manage_members")).toBe(true);
+    expect([...admin].sort()).toEqual([...ALL_PERMISSIONS].sort());
+
+    expect(getPlan("FREE", "business").limits.seats).toBe(1);
+    expect(getPlan("PRO", "business").limits.seats).toBe(1);
+    expect(getPlan("BUSINESS", "business").limits.seats).toBe(5);
+    expect(getPlan("ENTERPRISE", "business").limits.seats).toBeNull();
+  });
+
+  /**
+   * Downgrading is a Stripe-portal action the app never gets to veto, and
+   * Business has never removed anyone over a shrunken seat limit either. So a
+   * partner who is already in stays in — they just cannot be joined by anyone
+   * else until the plan grows back.
+   */
+  it("keeps a partner through a downgrade, but blocks the next invitation", () => {
+    const plusSeats = getPlan("PLUS", "personal").limits.seats;
+    expect(canAddSeat(2, 0, plusSeats)).toEqual({
+      allowed: false,
+      seatsUsed: 2,
+      seatLimit: 1,
+    });
+    // The owner keeps manage_members on every tier, which is what lets them
+    // remove the partner themselves instead of being stuck over the limit.
+    const owner = applyEditionPermissions("PERSONAL", resolvePermissions("OWNER"), "OWNER");
+    expect(owner.has("manage_members")).toBe(true);
   });
 });
 

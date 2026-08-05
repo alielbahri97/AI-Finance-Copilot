@@ -6,6 +6,7 @@ import { getAppUrl } from "@/lib/env-url";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/workspace/audit";
 import { requireWorkspace } from "@/lib/workspace/context";
+import { inviteRoleFor } from "@/lib/workspace/editions";
 import {
   canAddSeat,
   generateInviteToken,
@@ -15,9 +16,14 @@ import {
 import { assignableRoles } from "@/lib/workspace/permissions";
 import { countSeats, sendInvitationEmail } from "@/lib/workspace/team";
 
+/**
+ * The role is optional because a Personal household has no role picker: a
+ * partner joins as an equal, and `inviteRoleFor` decides for that edition
+ * whatever the caller asked for.
+ */
 const inviteSchema = z.object({
   email: z.string().trim().toLowerCase().pipe(z.email("Enter a valid email address")),
-  role: z.enum(["ADMIN", "MEMBER", "VIEWER"]),
+  role: z.enum(["ADMIN", "MEMBER", "VIEWER"]).optional(),
 });
 
 function appUrl(path: string): string {
@@ -34,7 +40,8 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
-  const { email, role } = parsed.data;
+  const { email } = parsed.data;
+  const role = inviteRoleFor(workspace.type, parsed.data.role);
 
   if (!assignableRoles(auth.ctx.role).includes(role)) {
     return NextResponse.json({ error: "You can't assign that role." }, { status: 403 });

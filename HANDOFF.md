@@ -607,6 +607,7 @@ between them in the header.
 | `budgets` | — | ✅ |
 | `goals` | — | ✅ |
 | `subscriptions` | — | ✅ |
+| `household` (the same sharing, one partner, no roles) | — | ✅ |
 
 Everything else is shared: transactions, CSV import, categories and rules, bank
 connections, forecast, copilot, reports, notifications, exports, billing, help.
@@ -614,8 +615,9 @@ connections, forecast, copilot, reports, notifications, exports, billing, help.
 ### How it is enforced (three layers, one predicate)
 
 - **Permissions**: `applyEditionPermissions()` runs inside
-  `getWorkspaceContext()`, so a Personal workspace never has `view_invoices`,
-  `edit_invoices` or `manage_members`. Every existing `requireWorkspace(...)`
+  `getWorkspaceContext()`, so a Personal workspace never has `view_invoices` or
+  `edit_invoices`, and only its owner has `view_billing` or `manage_members`
+  (`EDITION_OWNER_ONLY_PERMISSIONS`). Every existing `requireWorkspace(...)`
   call therefore gates correctly without knowing editions exist.
 - **Routes**: each edition-specific page checks `editionHasFeature()` and calls
   `notFound()`, so a typed-in `/budgets` is rejected by the server; API routes
@@ -629,7 +631,8 @@ connections, forecast, copilot, reports, notifications, exports, billing, help.
 
 Sections inside shared pages are gated in place: `/reports` drops its vendor,
 customer and AR/AP blocks and renames its KPIs, `/settings` swaps the Team card
-for a simpler Workspace card, `/integrations` filters the provider grid.
+for a Workspace card plus a Household card, `/integrations` filters the provider
+grid.
 
 ### What Personal changes beyond gating
 
@@ -654,9 +657,10 @@ for a simpler Workspace card, `/integrations` filters the provider grid.
 | Business | €0 | Pro €19 | Business €49 | Enterprise (contact sales) |
 | Personal | €0, 1 bank, 50 AI msgs, budgets | Plus €4.99: unlimited banks, 500 AI msgs, goals, subscription insights, exports | Premium €8.99: unlimited AI, what-if assumptions | — |
 
-Personal is single-user: `seats: 1` on every tier, and
-`invoiceExtractionsPerMonth: 0` (the usage meter hides itself rather than
-showing 0/0). Bank-connection quota is enforced in
+Personal seats are 1 on Free and Plus and 2 on Premium — the household, which is
+the concrete reason a couple upgrades — and `invoiceExtractionsPerMonth: 0` on
+every tier (the usage meter hides itself rather than showing 0/0).
+Bank-connection quota is enforced in
 `src/lib/integrations/bank-quota.ts`, checked at the connect route *before* the
 OAuth round trip as well as at save time.
 

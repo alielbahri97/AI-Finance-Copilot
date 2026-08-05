@@ -117,7 +117,7 @@ function billingContent(edition: Edition): string {
   const trialName = edition === "personal" ? "Plus" : "Pro";
   const seatNote =
     edition === "personal"
-      ? "- A personal workspace is just you, so there is nothing to share and nobody to add."
+      ? "- Premium covers two people, so you and your partner each get your own login; Free and Plus are one person."
       : "- Members plus pending invitations use up your plan's seats; the Billing page shows how many you have left.";
 
   return `Plans and billing are managed on the [Billing](/billing) page (sidebar → Billing).
@@ -511,8 +511,34 @@ function personalTopics(): EditionTopic[] {
     "personal",
     (limits) => limits.subscriptionInsightsEnabled
   );
+  const householdGate = planGate(
+    "personal",
+    (limits) => limits.seats !== null && limits.seats > 1
+  );
 
   return [
+    {
+      id: "household-sharing",
+      title: "Sharing with your partner",
+      editions: ["personal"],
+      keywords: [
+        "partner", "husband", "wife", "spouse", "boyfriend", "girlfriend",
+        "share", "sharing", "together", "couple", "household", "family",
+        "two people", "invite", "second login", "joint",
+      ],
+      content: `You can share a personal workspace with one other person — your partner — with ${householdGate}. Both of you then see the same accounts, transactions, budgets and goals, each from your own login.
+
+1. Open [Settings](/settings) → **Household** → *Invite your partner* and enter their email address.
+2. The dialog shows an invite link with a Copy button. **That link is what gets them in** — send it however you like. We also email it if email delivery is configured on the server.
+3. They open the link and sign in or sign up **with the invited email address**. The link is single-use and expires after 7 days.
+4. Once they join, both of you can add, import and categorize transactions, set budgets and goals, and ask the copilot.
+
+Things worth knowing:
+- **Your plan stays yours.** Only you can see the Billing page or change the plan, and only you can invite or remove someone.
+- There are no roles to choose and nothing to configure — a partner is an equal.
+- To take access away, use the remove button next to their name; to cancel an invitation before it is accepted, use **Revoke**. An invite link cannot be shown twice, so use **Get link** to issue a fresh one (the old link stops working).
+- If they already use the app for something else, that is fine — one account can belong to several workspaces, and the switcher at the top of the sidebar moves between them.`,
+    },
     {
       id: "budgets",
       title: "Monthly budgets per category",
