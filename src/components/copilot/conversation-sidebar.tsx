@@ -14,6 +14,8 @@ import {
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -100,9 +102,12 @@ export function ConversationSidebar({
 
       <div className="flex-1 space-y-0.5 overflow-y-auto pr-1">
         {conversations.length === 0 && (
-          <p className="text-muted-foreground px-2 py-6 text-center text-xs">
-            No conversations yet.
-          </p>
+          <EmptyState
+            className="gap-2 px-2 py-8"
+            icon={MessageSquareIcon}
+            title="No conversations yet"
+            description="Anything you ask is saved here so you can pick it back up."
+          />
         )}
         {conversations.map((conversation) => {
           const isActive = conversation.id === activeId;
@@ -176,20 +181,27 @@ export function ConversationSidebar({
                   >
                     <PencilIcon />
                   </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="text-muted-foreground hover:text-destructive size-7 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-                    disabled={busyId === conversation.id}
-                    onClick={() => remove(conversation.id)}
-                    aria-label={`Delete ${conversation.title}`}
-                  >
-                    {busyId === conversation.id ? (
-                      <Loader2Icon className="animate-spin" />
-                    ) : (
-                      <Trash2Icon />
-                    )}
-                  </Button>
+                  <ConfirmDialog
+                    trigger={
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="text-muted-foreground hover:text-destructive size-7 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+                        disabled={busyId === conversation.id}
+                        aria-label={`Delete ${conversation.title}`}
+                      >
+                        {busyId === conversation.id ? (
+                          <Loader2Icon className="animate-spin" />
+                        ) : (
+                          <Trash2Icon />
+                        )}
+                      </Button>
+                    }
+                    title={`Delete “${conversation.title}”?`}
+                    description="The whole thread goes for good, your questions and the answers both. Your transactions, budgets and goals are untouched."
+                    confirmLabel="Delete conversation"
+                    onConfirm={() => remove(conversation.id)}
+                  />
                 </>
               )}
             </div>
