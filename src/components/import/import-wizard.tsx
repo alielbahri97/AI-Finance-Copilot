@@ -7,6 +7,7 @@ import {
   ArrowLeftIcon,
   ArrowRightIcon,
   CheckCircle2Icon,
+  CheckIcon,
   Loader2Icon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -36,7 +37,7 @@ import {
 import { BRAND } from "@/lib/branding";
 import { normalizeRows } from "@/lib/csv/normalize";
 import type { ColumnMapping, ColumnRole, NormalizedRow, RowError, StatementCurrencyInfo } from "@/lib/csv/types";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency, localeForCurrency } from "@/lib/utils";
 
 interface ParseResponse {
   fileName: string;
@@ -101,13 +102,80 @@ function roleOfColumn(mapping: UiMapping, columnIndex: number): ColumnRole {
   return "ignore";
 }
 
+type WizardStep = "upload" | "map" | "done";
+
+const STEPS: { id: WizardStep; label: string }[] = [
+  { id: "upload", label: "Upload file" },
+  { id: "map", label: "Map columns" },
+  { id: "done", label: "Import" },
+];
+
+/**
+ * Where the user is in upload → map → import. Worded the same way as the
+ * onboarding wizard's progress bar so the two feel like the same product.
+ */
+function StepIndicator({ step }: { step: WizardStep }) {
+  const index = STEPS.findIndex((entry) => entry.id === step);
+  const current = index + 1;
+
+  return (
+    <div className="space-y-2">
+      <div
+        role="progressbar"
+        aria-label="Import progress"
+        aria-valuemin={1}
+        aria-valuemax={STEPS.length}
+        aria-valuenow={current}
+        aria-valuetext={`Step ${current} of ${STEPS.length}: ${STEPS[index].label}`}
+        className="bg-muted h-1.5 overflow-hidden rounded-full"
+      >
+        <div
+          className="bg-primary h-full transition-all duration-300"
+          style={{ width: `${(current / STEPS.length) * 100}%` }}
+        />
+      </div>
+      <ol className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs">
+        {STEPS.map((entry, entryIndex) => (
+          <li
+            key={entry.id}
+            aria-current={entryIndex === index ? "step" : undefined}
+            className={cn(
+              "flex items-center gap-1.5",
+              entryIndex === index && "text-foreground font-medium"
+            )}
+          >
+            {entryIndex < index ? (
+              <CheckIcon aria-hidden className="text-success size-3.5" />
+            ) : (
+              <span aria-hidden className="numeric w-3.5 text-center">
+                {entryIndex + 1}
+              </span>
+            )}
+            {entry.label}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+/** Every step gets the same frame, so the indicator never jumps or disappears. */
+function WizardShell({ step, children }: { step: WizardStep; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-4">
+      <StepIndicator step={step} />
+      {children}
+    </div>
+  );
+}
+
 interface ImportWizardProps {
   currency: string;
 }
 
 export function ImportWizard({ currency }: ImportWizardProps) {
   const router = useRouter();
-  const [step, setStep] = useState<"upload" | "map" | "done">("upload");
+  const [step, setStep] = useState<WizardStep>("upload");
   const [file, setFile] = useState<File | null>(null);
   const [parseResult, setParseResult] = useState<ParseResponse | null>(null);
   const [mapping, setMapping] = useState<UiMapping | null>(null);
@@ -126,6 +194,7 @@ export function ImportWizard({ currency }: ImportWizardProps) {
     applyStatementCurrency && parseResult?.statementCurrency.code
       ? parseResult.statementCurrency.code
       : (parseResult?.profileCurrency ?? currency);
+  const displayLocale = localeForCurrency(displayCurrency);
 
   const preview = useMemo(() => {
     if (!parseResult || !mapping || !mappingValid) return null;
@@ -234,55 +303,61 @@ export function ImportWizard({ currency }: ImportWizardProps) {
 
   /* ---------------- Step: upload ---------------- */
   if (step === "upload") {
-    return <CsvDropzone onFile={handleFile} isLoading={isParsing} />;
+    return (
+      <WizardShell step="upload">
+        <CsvDropzone onFile={handleFile} isLoading={isParsing} />
+      </WizardShell>
+    );
   }
 
   /* ---------------- Step: done ---------------- */
   if (step === "done" && result) {
     return (
-      <Card>
-        <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
-          <div className="bg-success/15 text-success flex size-14 items-center justify-center rounded-full">
-            <CheckCircle2Icon className="size-7" />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold">Import complete</h2>
-            <p className="text-muted-foreground mt-1 text-sm">
-              {result.imported} imported · {result.duplicates} duplicates skipped
-              {result.aiCategorized ? ` · ${result.aiCategorized} auto-categorized by AI` : ""}
-              {result.failed > 0 && ` · ${result.failed} rows could not be read`}
-            </p>
-          </div>
-          {result.aiCategorizationNote && (
-            <Alert className="max-w-lg text-left">
-              <AlertTitle>AI categorization paused</AlertTitle>
-              <AlertDescription>{result.aiCategorizationNote}</AlertDescription>
-            </Alert>
-          )}
-          {result.rowErrors.length > 0 && (
-            <Alert className="max-w-lg text-left">
-              <AlertTitle>Some rows were skipped</AlertTitle>
-              <AlertDescription>
-                <ul className="list-disc pl-4">
-                  {result.rowErrors.slice(0, 5).map((error) => (
-                    <li key={error.rowNumber}>
-                      Row {error.rowNumber}: {error.message}
-                    </li>
-                  ))}
-                </ul>
-              </AlertDescription>
-            </Alert>
-          )}
-          <div className="flex gap-2">
-            <Button asChild>
-              <Link href="/transactions">View transactions</Link>
-            </Button>
-            <Button variant="outline" onClick={reset}>
-              Import another file
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <WizardShell step="done">
+        <Card>
+          <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
+            <div className="bg-success/10 text-success flex size-14 items-center justify-center rounded-full">
+              <CheckCircle2Icon className="size-7" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold">Import complete</h2>
+              <p className="text-muted-foreground mt-1 text-sm">
+                {result.imported} imported · {result.duplicates} duplicates skipped
+                {result.aiCategorized ? ` · ${result.aiCategorized} auto-categorized by AI` : ""}
+                {result.failed > 0 && ` · ${result.failed} rows could not be read`}
+              </p>
+            </div>
+            {result.aiCategorizationNote && (
+              <Alert className="max-w-lg text-left">
+                <AlertTitle>AI categorization paused</AlertTitle>
+                <AlertDescription>{result.aiCategorizationNote}</AlertDescription>
+              </Alert>
+            )}
+            {result.rowErrors.length > 0 && (
+              <Alert className="max-w-lg text-left">
+                <AlertTitle>Some rows were skipped</AlertTitle>
+                <AlertDescription>
+                  <ul className="list-disc pl-4">
+                    {result.rowErrors.slice(0, 5).map((error) => (
+                      <li key={error.rowNumber}>
+                        Row {error.rowNumber}: {error.message}
+                      </li>
+                    ))}
+                  </ul>
+                </AlertDescription>
+              </Alert>
+            )}
+            <div className="flex gap-2">
+              <Button asChild>
+                <Link href="/transactions">View transactions</Link>
+              </Button>
+              <Button variant="outline" onClick={reset}>
+                Import another file
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </WizardShell>
     );
   }
 
@@ -290,8 +365,14 @@ export function ImportWizard({ currency }: ImportWizardProps) {
   if (!parseResult || !mapping) return null;
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <WizardShell step="map">
+      {/*
+       * Sticks under the 4rem app header. Checking the mapping means scrolling
+       * through the column table and the preview below, and the whole point of
+       * the step is to act on what you just checked — so the action goes with
+       * you instead of staying at the top of the page.
+       */}
+      <div className="bg-background/95 sticky top-16 z-30 -mx-4 flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
         <div className="flex items-center gap-2 text-sm">
           <Badge variant="secondary">{parseResult.fileName}</Badge>
           <span className="text-muted-foreground">
@@ -458,8 +539,13 @@ export function ImportWizard({ currency }: ImportWizardProps) {
                         key={columnIndex}
                         className={cn(
                           "max-w-56 truncate text-xs",
+                          // Ignored columns are de-emphasised by dropping from
+                          // `--foreground` to `--muted-foreground`, not by an
+                          // alpha on top of it: at /60 this preview text was
+                          // 2.45:1 and unreadable, and the user still has to be
+                          // able to check *which* columns they are skipping.
                           roleOfColumn(mapping, columnIndex) === "ignore" &&
-                            "text-muted-foreground/60"
+                            "text-muted-foreground"
                         )}
                         title={row[columnIndex]}
                       >
@@ -517,7 +603,7 @@ export function ImportWizard({ currency }: ImportWizardProps) {
                         )}
                       >
                         {row.type === "INCOME" ? "+" : "-"}
-                        {formatCurrency(row.amount, displayCurrency)}
+                        {formatCurrency(row.amount, displayCurrency, displayLocale)}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -536,6 +622,6 @@ export function ImportWizard({ currency }: ImportWizardProps) {
           </CardContent>
         </Card>
       )}
-    </div>
+    </WizardShell>
   );
 }

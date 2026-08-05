@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2Icon } from "lucide-react";
+import { AlertCircleIcon, Loader2Icon } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -21,18 +22,43 @@ import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 import { loginSchema, type LoginValues } from "@/lib/validations/auth";
 
+/**
+ * Supabase reports a wrong password and an unconfirmed address with the same
+ * generic wording, which leaves the user guessing which one they are looking
+ * at. These say what to do instead.
+ */
+function describeSignInError(message: string): string {
+  const normalized = message.toLowerCase();
+  if (normalized.includes("invalid login credentials")) {
+    return "That email and password do not match an account. Check for typos, or reset your password below.";
+  }
+  if (normalized.includes("email not confirmed")) {
+    return "This account still needs confirming. Open the link in the email we sent you, then sign in.";
+  }
+  return message;
+}
+
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: "", password: "" },
   });
 
+  // A toast disappears before a screen reader user reaches it and leaves the
+  // form looking untouched. The alert stays, and focus lands on it.
+  useEffect(() => {
+    if (formError) errorRef.current?.focus();
+  }, [formError]);
+
   async function onSubmit(values: LoginValues) {
     setIsLoading(true);
+    setFormError(null);
     try {
       const supabase = createClient();
       const { error } = await supabase.auth.signInWithPassword({
@@ -41,7 +67,7 @@ export function LoginForm() {
       });
 
       if (error) {
-        toast.error("Sign in failed", { description: error.message });
+        setFormError(describeSignInError(error.message));
         return;
       }
 
@@ -49,7 +75,7 @@ export function LoginForm() {
       router.push(searchParams.get("next") ?? "/dashboard");
       router.refresh();
     } catch {
-      toast.error("Something went wrong", { description: "Please try again." });
+      setFormError("We could not reach the server. Check your connection and try again.");
     } finally {
       setIsLoading(false);
     }
@@ -102,6 +128,13 @@ export function LoginForm() {
             </FormItem>
           )}
         />
+        {formError ? (
+          <Alert variant="destructive" ref={errorRef} tabIndex={-1} className="outline-none">
+            <AlertCircleIcon />
+            <AlertTitle>Sign in failed</AlertTitle>
+            <AlertDescription>{formError}</AlertDescription>
+          </Alert>
+        ) : null}
         <Button type="submit" className="w-full" disabled={isLoading}>
           {isLoading && <Loader2Icon className="animate-spin" />}
           Sign in
