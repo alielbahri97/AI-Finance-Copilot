@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { CheckIcon, Loader2Icon, Trash2Icon, UndoIcon } from "lucide-react";
 import { toast } from "sonner";
 
+import { RemindCustomerDialog } from "@/components/invoices/remind-customer-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -70,6 +71,10 @@ export function InvoiceActions({ invoice }: InvoiceActionsProps) {
 
   return (
     <div className="flex items-center gap-2">
+      {/* Chasing money is only a thing for invoices we issued and nobody paid. */}
+      {invoice.direction === "RECEIVABLE" && invoice.status === "UNPAID" && (
+        <RemindCustomerDialog invoice={invoice} />
+      )}
       {invoice.status === "PAID" ? (
         <Button size="sm" variant="outline" onClick={() => setStatus("UNPAID")} disabled={isBusy}>
           <UndoIcon />

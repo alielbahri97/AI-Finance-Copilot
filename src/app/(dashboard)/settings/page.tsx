@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { AiCategorizationForm } from "@/components/settings/ai-categorization-form";
 import { AiProviderForm } from "@/components/settings/ai-provider-form";
 import { AppearanceForm } from "@/components/settings/appearance-form";
+import { AutoDunningForm } from "@/components/settings/auto-dunning-form";
 import { ChangePasswordForm } from "@/components/settings/change-password-form";
 import { CurrencySettingsForm } from "@/components/settings/currency-settings-form";
 import { NotificationSettings } from "@/components/settings/notification-settings";
@@ -239,6 +240,30 @@ export default async function SettingsPage() {
               monthlyLimit={entitlements.plan.limits.aiCategorizationPerMonth}
               used={entitlements.usage.aiCategorizations}
             />
+          </CardContent>
+        </Card>
+      )}
+
+      {canManageSettings && editionHasFeature(workspace.type, "invoices") && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Customer payment reminders</CardTitle>
+            <CardDescription>
+              Whether {BRAND.name} chases your unpaid invoices for you, or only when you ask.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {entitlements.plan.limits.dunningEnabled ? (
+              <AutoDunningForm
+                defaultEnabled={workspace.autoDunningEnabled}
+                emailConfigured={isEmailConfigured()}
+              />
+            ) : (
+              <p className="text-muted-foreground text-sm">
+                Reminding customers is part of the paid plans. Upgrade on the Billing page to
+                have {BRAND.name} draft and send them for you.
+              </p>
+            )}
           </CardContent>
         </Card>
       )}

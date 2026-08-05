@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { runNotificationCron } from "@/lib/notifications/cron";
 import { apiError } from "@/lib/api/response";
+import { runAutoDunning } from "@/lib/invoices/dunning";
 import { logger } from "@/lib/logger";
 
 export const maxDuration = 300;
@@ -28,12 +29,18 @@ export async function GET(request: Request) {
   const startedAt = Date.now();
   try {
     const stats = await runNotificationCron();
+    // Customer-facing reminders ride the same hourly tick but are evaluated
+    // per workspace rather than per member, so they run as their own pass
+    // instead of inside the per-user loop. Idempotent either way: eligibility
+    // is a function of the due date and the reminder log.
+    const dunning = await runAutoDunning();
     logger.info("cron_notifications_completed", {
       route: "/api/cron/notifications",
       durationMs: Date.now() - startedAt,
       ...stats,
+      customerRemindersSent: dunning.sent,
     });
-    return NextResponse.json({ ok: true, stats });
+    return NextResponse.json({ ok: true, stats, dunning });
   } catch (error) {
     return apiError("GET /api/cron/notifications", "Cron run failed", error, {
       durationMs: Date.now() - startedAt,

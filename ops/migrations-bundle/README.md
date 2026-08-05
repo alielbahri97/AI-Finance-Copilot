@@ -3,7 +3,7 @@
 Applying pending Prisma migrations from any browser (including a phone),
 because the machine that has the repo cannot reach Postgres directly.
 
-There have been four rounds. Each has its own file to paste:
+There have been five rounds. Each has its own file to paste:
 
 | Round | Migrations | File |
 | --- | --- | --- |
@@ -11,11 +11,65 @@ There have been four rounds. Each has its own file to paste:
 | 2 (done) | `0016_multi_bank_connections` | [`apply-0016.sql`](./apply-0016.sql) |
 | 3 | `0017_workspace_editions` | [`apply-0017.sql`](./apply-0017.sql) |
 | 4 | `0018_ai_categorization` | [`apply-0018.sql`](./apply-0018.sql) |
+| 5 | `0019_customer_dunning` | [`apply-0019.sql`](./apply-0019.sql) |
 
 Run them in order; each round checks for the previous round's schema and
 refuses to run without it. Everything from "Step A" onwards describes round 1,
 but the mechanics — backup, paste the whole file, press Run, read the last
 result table — are the same for all of them.
+
+---
+
+## Round 5: `0019_customer_dunning`
+
+Customer-facing payment reminders. Unpaid invoices the workspace issued can be
+chased by email — drafted by AI, reviewed by a human, or (once switched on in
+Settings) sent by the hourly cron. Four things go into the database:
+
+- `DunningStep` — an enum of the four escalation rungs (`DUE_SOON`,
+  `OVERDUE_1`, `OVERDUE_2`, `FINAL`).
+- `invoices.customer_email` (`TEXT`, nullable) — where a reminder goes. Every
+  existing invoice keeps `NULL`, and `NULL` means it is never chased.
+- `workspaces.auto_dunning_enabled` (`BOOLEAN NOT NULL DEFAULT false`) — the
+  opt-in for automatic sending. Off for everyone until switched on.
+- `reminder_logs` — one row per delivered reminder, with a
+  `UNIQUE (invoice_id, kind)` that is what stops the same escalation step
+  going out twice, even if two cron runs overlap.
+
+Purely additive: one nullable column, one column with a constant default
+(metadata only on PostgreSQL 11+ — no rewrite, no backfill, no long lock), one
+enum and one new table. Nothing is dropped, narrowed or renamed, and no
+statement in the file changes a row of existing data.
+
+File to paste:
+
+```text
+ops/migrations-bundle/apply-0019.sql
+```
+
+What to do:
+
+1. **Back up.** Supabase → **Database → Backups**. Note the latest
+   Point-in-Time Recovery timestamp.
+2. **Paste all of it** into Supabase → **SQL Editor → New query**, in the
+   **production** project, and press **Run**.
+3. **Read the last result table.** It has 14 rows; every one should say `OK` in
+   the `result` column. Scroll up for the migration history (expect 19 rows,
+   `0001`–`0019`) and the shape of the new column and table.
+4. **Load the site**, and check `https://app.ballastmoney.com/api/health` —
+   `status: "ok"`, `schema: "ok"`, empty `missingTables`, `missingColumns` and
+   `pendingMigrations`.
+
+If it errors: nothing was changed (single transaction), so send me the full
+error. One error has a specific answer here:
+
+- **`This database is missing "workspaces"."ai_categorization_enabled" …`** —
+  round 4 was never applied. Run [`apply-0018.sql`](./apply-0018.sql) first,
+  then this file. The refusal happens before anything is changed.
+
+**Instant Rollback is safe for this one.** The pre-0019 code never reads the
+enum, the columns or the table, and 0019 removes nothing, so an older
+deployment runs unchanged on the new schema.
 
 ---
 
@@ -458,6 +512,7 @@ SHA-256, hex, of the exact `migration.sql` file bytes — the same thing
 | `0016_multi_bank_connections` | `f92b0da30a50ac653bd603aa512c1a5fdb3fdd9227cb02218b503ae4d72b5fb8` | `apply-0016.sql` |
 | `0017_workspace_editions` | `6ea302ea168c82af6f8f6e627f879809a4ea48cecc2b5c47d83f1ee9422d681d` | `apply-0017.sql` |
 | `0018_ai_categorization` | `3a670714d7c810ec2a5756b1f1ba214422e79bc2b3f310eb0a80165141079500` | `apply-0018.sql` |
+| `0019_customer_dunning` | `0cd9e7a2a9099cc862fa4323ccbe5305921cc52b7f683bc4c912ba98460a2364` | `apply-0019.sql` |
 
 **Important:** these checksums describe the migration files as they were when
 this bundle was generated. They were re-verified against the migration files as

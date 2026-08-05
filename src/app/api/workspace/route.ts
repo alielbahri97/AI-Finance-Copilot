@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { apiError } from "@/lib/api/response";
+import { getEntitlements, upgradeError } from "@/lib/billing/entitlements";
 import { ensureDefaultCategories } from "@/lib/categories";
 import { logger, serializeError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
@@ -19,11 +20,11 @@ const settingsSchema = z
   .object({
     name: z.string().trim().min(1, "Name is required").max(80).optional(),
     aiCategorizationEnabled: z.boolean().optional(),
+    autoDunningEnabled: z.boolean().optional(),
   })
-  .refine(
-    (value) => value.name !== undefined || value.aiCategorizationEnabled !== undefined,
-    { message: "Nothing to update" }
-  );
+  .refine((value) => Object.values(value).some((field) => field !== undefined), {
+    message: "Nothing to update",
+  });
 
 const createSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
@@ -126,12 +127,30 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
 
+  // Turning automatic reminders on is the one setting here that spends the
+  // product's reputation on the customer's behalf, so it carries the plan gate
+  // the send routes carry. Turning it off is always allowed.
+  if (parsed.data.autoDunningEnabled === true) {
+    const entitlements = await getEntitlements(workspace.id);
+    if (!entitlements.plan.limits.dunningEnabled) {
+      return NextResponse.json(
+        upgradeError("Automatic payment reminders", entitlements.planId, entitlements.edition),
+        { status: 402 }
+      );
+    }
+  }
+
   const previous = workspace.name;
   const updated = await prisma.workspace.update({
     where: { id: workspace.id },
     data: parsed.data,
-    select: { id: true, name: true, aiCategorizationEnabled: true },
+    select: { id: true, name: true, aiCategorizationEnabled: true, autoDunningEnabled: true },
   });
+  if (parsed.data.autoDunningEnabled !== undefined) {
+    await recordAudit(workspace.id, user.id, "workspace.auto_dunning_changed", {
+      enabled: parsed.data.autoDunningEnabled,
+    });
+  }
   if (parsed.data.name !== undefined && updated.name !== previous) {
     await recordAudit(workspace.id, user.id, "workspace.renamed", {
       from: previous,

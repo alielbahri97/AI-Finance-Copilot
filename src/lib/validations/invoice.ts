@@ -17,6 +17,7 @@ export const invoiceLineItemSchema = z.object({
 export const invoiceUpdateSchema = z
   .object({
     vendor: z.string().trim().max(200),
+    customerEmail: z.union([z.email().max(320), z.literal("")]).nullable(),
     invoiceNumber: z.string().trim().max(100).nullable(),
     invoiceDate: z.coerce.date().nullable(),
     dueDate: z.coerce.date().nullable(),
@@ -38,6 +39,20 @@ export const invoiceUpdateSchema = z
   .refine((data) => Object.keys(data).length > 0, { message: "Nothing to update" });
 
 export type InvoiceUpdateValues = z.infer<typeof invoiceUpdateSchema>;
+
+/**
+ * Sending one customer-facing payment reminder. The recipient is validated
+ * here rather than trusted from the draft, because the dialog lets it be
+ * edited and an empty or malformed address must fail loudly instead of
+ * quietly emailing nobody.
+ */
+export const invoiceReminderSchema = z.object({
+  toEmail: z.email("Enter the customer's email address").max(320),
+  subject: z.string().trim().min(1, "The subject can't be empty").max(200),
+  body: z.string().trim().min(1, "The message can't be empty").max(4000),
+});
+
+export type InvoiceReminderValues = z.infer<typeof invoiceReminderSchema>;
 
 export const invoiceLinkSchema = z.object({
   transactionId: z.string().min(1, "Pick a transaction"),

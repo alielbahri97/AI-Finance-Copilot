@@ -93,7 +93,8 @@ export async function sendEmail(
   to: string,
   subject: string,
   html: string,
-  channel = "notifications"
+  channel = "notifications",
+  options: { replyTo?: string } = {}
 ): Promise<EmailDeliveryResult> {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.EMAIL_FROM;
@@ -109,7 +110,15 @@ export async function sendEmail(
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ from, to: [to], subject, html }),
+      body: JSON.stringify({
+        from,
+        to: [to],
+        subject,
+        html,
+        // Mail sent on a customer's behalf comes from our domain, so without a
+        // reply-to their customer's answer lands in a mailbox nobody reads.
+        ...(options.replyTo ? { reply_to: options.replyTo } : {}),
+      }),
     });
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
@@ -171,7 +180,18 @@ function textToHtml(text: string): string {
     .join("");
 }
 
-function emailShell(title: string, contentHtml: string): string {
+interface EmailShellOptions {
+  /** Overrides the name in the header bar. Defaults to the product. */
+  brandLabel?: string;
+  /** Overrides the footer. Defaults to the notification-settings note. */
+  footerHtml?: string;
+}
+
+function emailShell(title: string, contentHtml: string, options: EmailShellOptions = {}): string {
+  const footer =
+    options.footerHtml ??
+    `You are receiving this because email notifications are enabled in your
+                  <a href="${appUrl("/settings")}" style="color:#64748b;">${escapeHtml(BRAND.name)} settings</a>.`;
   return `<!doctype html>
 <html>
   <body style="margin:0;padding:0;background-color:#f1f5f9;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
@@ -181,7 +201,7 @@ function emailShell(title: string, contentHtml: string): string {
           <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;">
             <tr>
               <td style="background-color:#0f172a;padding:20px 32px;">
-                <span style="color:#ffffff;font-size:18px;font-weight:700;">${escapeHtml(BRAND.name)}</span>
+                <span style="color:#ffffff;font-size:18px;font-weight:700;">${escapeHtml(options.brandLabel ?? BRAND.name)}</span>
               </td>
             </tr>
             <tr>
@@ -193,8 +213,7 @@ function emailShell(title: string, contentHtml: string): string {
             <tr>
               <td style="padding:16px 32px;border-top:1px solid #e2e8f0;">
                 <p style="margin:0;color:#94a3b8;font-size:12px;line-height:1.5;">
-                  You are receiving this because email notifications are enabled in your
-                  <a href="${appUrl("/settings")}" style="color:#64748b;">${escapeHtml(BRAND.name)} settings</a>.
+                  ${footer}
                 </p>
               </td>
             </tr>
@@ -246,6 +265,44 @@ export function renderDigestEmail(options: DigestEmailOptions): string {
     ${textToHtml(options.bodyText)}
     ${ctaButton("Open your dashboard", appUrl("/dashboard"))}`;
   return emailShell(options.title, content);
+}
+
+export interface CustomerReminderEmailOptions {
+  /** The business chasing the invoice — this mail is theirs, not ours. */
+  senderName: string;
+  subject: string;
+  bodyText: string;
+  details: { label: string; value: string }[];
+  /** Where the customer's reply lands, when one is configured. */
+  replyTo?: string;
+}
+
+/**
+ * A payment reminder addressed to somebody else's customer. Deliberately not
+ * the alert template: the recipient has no Ballast account, so there is no
+ * dashboard to link them to and no settings page the footer could send them
+ * to. The header and footer name the business instead of the product.
+ */
+export function renderCustomerReminderEmail(options: CustomerReminderEmailOptions): string {
+  const detailRows = options.details
+    .map(
+      (row) => `<tr>
+        <td style="padding:8px 0;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:13px;">${escapeHtml(row.label)}</td>
+        <td align="right" style="padding:8px 0;border-bottom:1px solid #f1f5f9;color:#0f172a;font-size:13px;font-weight:600;">${escapeHtml(row.value)}</td>
+      </tr>`
+    )
+    .join("");
+
+  const content = `
+    ${textToHtml(options.bodyText)}
+    ${detailRows ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 8px;">${detailRows}</table>` : ""}`;
+
+  const reply = options.replyTo ? ` Replies go to ${escapeHtml(options.replyTo)}.` : "";
+
+  return emailShell(options.subject, content, {
+    brandLabel: options.senderName,
+    footerHtml: `This payment reminder was sent by ${escapeHtml(options.senderName)}.${reply}`,
+  });
 }
 
 export interface AlertEmailOptions {

@@ -41,6 +41,20 @@ enum InvoiceDirection {
   RECEIVABLE
 }
 
+/// Rungs of the customer-facing payment-reminder ladder, picked from how far
+/// an unpaid receivable is from its due date. Each rung is sent at most once
+/// per invoice — see the ReminderLog uniqueness below.
+enum DunningStep {
+  /// Due within the next 7 days: a friendly heads-up before anything is late.
+  DUE_SOON
+  /// 1-14 days late.
+  OVERDUE_1
+  /// 15-30 days late.
+  OVERDUE_2
+  /// More than 30 days late: the last reminder Ballast sends by itself.
+  FINAL
+}
+
 enum ExtractionStatus {
   /// AI extraction succeeded; fields were pre-filled for review.
   EXTRACTED
@@ -168,6 +182,10 @@ model Workspace {
   /// Opt-out for AI categorization of imported transactions. On by default;
   /// rule matching and manual categorization are unaffected either way.
   aiCategorizationEnabled Boolean @default(true) @map("ai_categorization_enabled")
+  /// Whether the hourly cron may email customers about overdue receivables on
+  /// the workspace's behalf. Off by default: nothing leaves the building under
+  /// someone's own name until they ask for it.
+  autoDunningEnabled      Boolean @default(false) @map("auto_dunning_enabled")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -278,6 +296,7 @@ model Profile {
   conversations          Conversation[]
   assumptions            Assumption[]
   invoices               Invoice[]
+  remindersSent          ReminderLog[]
   notifications          Notification[]
   notificationPreference NotificationPreference?
   pushSubscriptions      PushSubscription[]
@@ -604,6 +623,9 @@ model Invoice {
   /// The member who uploaded/created the invoice.
   userId           String           @map("user_id") @db.Uuid
   vendor           String           @default("")
+  /// Where payment reminders for a receivable go. Null means this invoice has
+  /// nobody to remind, which is what keeps it out of the dunning queue.
+  customerEmail    String?          @map("customer_email")
   invoiceNumber    String?          @map("invoice_number")
   invoiceDate      DateTime?        @map("invoice_date")
   dueDate          DateTime?        @map("due_date")
@@ -643,12 +665,38 @@ model Invoice {
   profile     Profile           @relation(fields: [userId], references: [id], onDelete: Cascade)
   transaction Transaction?      @relation(fields: [transactionId], references: [id], onDelete: SetNull)
   lineItems   InvoiceLineItem[]
+  reminderLogs ReminderLog[]
 
   @@index([workspaceId, status])
   @@index([workspaceId, dueDate])
   @@index([workspaceId, createdAt(sort: Desc)])
   @@index([workspaceId, externalRef])
   @@map("invoices")
+}
+
+/// One payment reminder that actually reached a customer. Two jobs: it is the
+/// audit trail ("what exactly did we send them, and when"), and it is the
+/// escalation ladder's memory — the unique key below is what makes "each step
+/// at most once per invoice" a fact of the database rather than a race the
+/// cron might lose. Rows are written only for delivered mail, so an unsent
+/// draft never burns a rung.
+model ReminderLog {
+  id        String      @id @default(cuid())
+  invoiceId String      @map("invoice_id")
+  kind      DunningStep
+  toEmail   String      @map("to_email")
+  subject   String
+  body      String
+  /// Who sent it. Null means the hourly cron did, with nobody in the loop.
+  sentBy    String?     @map("sent_by") @db.Uuid
+  sentAt    DateTime    @default(now()) @map("sent_at")
+
+  invoice Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  sender  Profile? @relation(fields: [sentBy], references: [id], onDelete: SetNull)
+
+  @@unique([invoiceId, kind])
+  @@index([invoiceId, sentAt(sort: Desc)])
+  @@map("reminder_logs")
 }
 
 model InvoiceLineItem {

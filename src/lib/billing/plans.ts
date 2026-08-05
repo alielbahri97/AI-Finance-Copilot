@@ -40,6 +40,14 @@ export interface PlanLimits {
   aiCategorizationPerMonth: number | null;
   /** AI invoice extractions per calendar month; null = unlimited. 0 on Personal, which has no invoices. */
   invoiceExtractionsPerMonth: number | null;
+  /**
+   * AI-drafted payment reminders sent to a customer, manually or by the
+   * hourly pass. Paid Business tiers only: it emails third parties under the
+   * workspace's name, which is not something a free account should do, and
+   * getting paid faster is the clearest reason to pay for the product.
+   * Personal has no invoices and therefore no reminders.
+   */
+  dunningEnabled: boolean;
   /** PDF/Excel/CSV report exports. */
   exportsEnabled: boolean;
   /** What-if assumptions on the forecast page. */
@@ -86,6 +94,7 @@ const BUSINESS_FREE: Plan = {
     aiMessagesPerMonth: 50,
     aiCategorizationPerMonth: 100,
     invoiceExtractionsPerMonth: 5,
+    dunningEnabled: false,
     exportsEnabled: false,
     assumptionsEnabled: false,
     integrationsEnabled: false,
@@ -116,6 +125,7 @@ const PRO: Plan = {
     aiMessagesPerMonth: 500,
     aiCategorizationPerMonth: null,
     invoiceExtractionsPerMonth: 50,
+    dunningEnabled: true,
     exportsEnabled: true,
     assumptionsEnabled: true,
     integrationsEnabled: false,
@@ -147,6 +157,7 @@ const BUSINESS: Plan = {
     aiMessagesPerMonth: null,
     aiCategorizationPerMonth: null,
     invoiceExtractionsPerMonth: 500,
+    dunningEnabled: true,
     exportsEnabled: true,
     assumptionsEnabled: true,
     integrationsEnabled: true,
@@ -177,6 +188,7 @@ const ENTERPRISE: Plan = {
     aiMessagesPerMonth: null,
     aiCategorizationPerMonth: null,
     invoiceExtractionsPerMonth: null,
+    dunningEnabled: true,
     exportsEnabled: true,
     assumptionsEnabled: true,
     integrationsEnabled: true,
@@ -214,6 +226,7 @@ const PERSONAL_FREE: Plan = {
     aiMessagesPerMonth: 50,
     aiCategorizationPerMonth: 100,
     invoiceExtractionsPerMonth: 0,
+    dunningEnabled: false,
     exportsEnabled: false,
     assumptionsEnabled: false,
     integrationsEnabled: true,
@@ -244,6 +257,7 @@ const PLUS: Plan = {
     aiMessagesPerMonth: 500,
     aiCategorizationPerMonth: null,
     invoiceExtractionsPerMonth: 0,
+    dunningEnabled: false,
     exportsEnabled: true,
     assumptionsEnabled: false,
     integrationsEnabled: true,
@@ -275,6 +289,7 @@ const PREMIUM: Plan = {
     aiMessagesPerMonth: null,
     aiCategorizationPerMonth: null,
     invoiceExtractionsPerMonth: 0,
+    dunningEnabled: false,
     exportsEnabled: true,
     assumptionsEnabled: true,
     integrationsEnabled: true,
