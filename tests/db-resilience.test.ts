@@ -1,3 +1,6 @@
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -155,5 +158,25 @@ describe("schema expectations", () => {
     expect(migrations).toContain("0013_help_messages");
     expect(migrations).toContain("0014_workspaces");
     expect(migrations).toContain("0015_extraction_telemetry");
+    expect(migrations).toContain("0016_multi_bank_connections");
+    expect(migrations).toContain("0017_workspace_editions");
+  });
+
+  it("names real migrations, and every one from the oldest it names onwards", () => {
+    const covered = new Set(SCHEMA_CHECKS.map((check) => check.migration));
+    const directories = readdirSync(join(__dirname, "..", "prisma", "migrations"), {
+      withFileTypes: true,
+    })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+
+    expect([...covered].filter((migration) => !directories.includes(migration))).toEqual([]);
+
+    // The list starts at 0013 by design, so the cut-off is the oldest migration
+    // it names rather than 0001. Past that point a gap means /api/health would
+    // report `ok` for a schema the deployed code has already moved past.
+    const cutoff = [...covered].sort()[0];
+    expect(directories.filter((name) => name >= cutoff && !covered.has(name))).toEqual([]);
   });
 });
