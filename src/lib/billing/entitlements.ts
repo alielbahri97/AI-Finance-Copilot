@@ -166,11 +166,17 @@ export function checkLimit(
   return { allowed: used < limit, remaining: Math.max(0, limit - used) };
 }
 
-/** Standard 402 payload for gated features, with an upgrade hint for the UI. */
+/**
+ * Standard 402 payload for gated features, with an upgrade hint for the UI.
+ *
+ * `edition` is required rather than defaulted: these messages name a plan on a
+ * screen whose job is to sell it, so naming a tier the workspace's edition does
+ * not sell has to be a compile error, not a silent fallback.
+ */
 export function upgradeError(
   feature: string,
   planId: PlanId,
-  edition: Edition = DEFAULT_EDITION
+  edition: Edition
 ): {
   error: string;
   code: string;
@@ -189,7 +195,7 @@ export function upgradeError(
 export function limitError(
   feature: string,
   planId: PlanId,
-  edition: Edition = DEFAULT_EDITION
+  edition: Edition
 ): {
   error: string;
   code: string;

@@ -9,7 +9,7 @@ import {
   upgradeError,
   type Entitlements,
 } from "@/lib/billing/entitlements";
-import { getPlan, PLANS } from "@/lib/billing/plans";
+import { getPlan, planOrder, PLANS } from "@/lib/billing/plans";
 
 const NOW = new Date("2026-07-27T10:00:00Z");
 
@@ -128,11 +128,24 @@ describe("period and error payloads", () => {
   });
 
   it("produces machine-readable upgrade and limit errors", () => {
-    expect(upgradeError("Report exports", "FREE").code).toBe("UPGRADE_REQUIRED");
-    expect(limitError("AI messages", "PRO")).toMatchObject({
+    expect(upgradeError("Report exports", "FREE", "business").code).toBe("UPGRADE_REQUIRED");
+    expect(limitError("AI messages", "PRO", "business")).toMatchObject({
       code: "LIMIT_REACHED",
       feature: "AI messages",
       plan: "PRO",
     });
+  });
+
+  // The two editions currently happen to share tier names ("Free" both sides,
+  // "Plus"/"Premium" reachable from either via the getPlan fallback), so this
+  // guards the wiring rather than a visible difference: it starts failing the
+  // moment an edition renames a tier, which is when a wrong edition would ship
+  // a Business plan name onto a Personal upgrade screen.
+  it("names the plan from the workspace's own edition", () => {
+    for (const planId of planOrder("personal")) {
+      const { name } = getPlan(planId, "personal");
+      expect(upgradeError("Savings goals", planId, "personal").error).toContain(name);
+      expect(limitError("AI message", planId, "personal").error).toContain(name);
+    }
   });
 });
