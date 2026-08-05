@@ -147,6 +147,30 @@ enum AssumptionKind {
   PERCENT_GROWTH
 }
 
+/// What a manually tracked holding is. The first six are things a person
+/// owns, the last four things they owe. Which side of the balance a kind
+/// falls on is decided in exactly one place — `isLiabilityKind()` in
+/// src/lib/personal/net-worth.ts — rather than stored per row, so a holding
+/// can never disagree with its own kind.
+enum AssetKind {
+  /// A house, a flat, land.
+  PROPERTY
+  VEHICLE
+  /// Brokerage accounts, funds, pensions: a balance the user reads off a
+  /// statement, not a holdings-level feed.
+  INVESTMENT
+  CRYPTO
+  /// Money held somewhere no bank connection reaches — cash, a foreign
+  /// account, a savings pot at a bank Ballast cannot sync.
+  CASH
+  OTHER_ASSET
+  LOAN
+  MORTGAGE
+  /// A credit card or overdraft: the outstanding balance, entered positive.
+  CREDIT_LINE
+  OTHER_LIABILITY
+}
+
 enum BusinessType {
   RESTAURANT
   RETAIL
@@ -204,6 +228,7 @@ model Workspace {
   conversations          Conversation[]
   budgets                Budget[]
   savingsGoals           SavingsGoal[]
+  assets                 Asset[]
   integrationConnections IntegrationConnection[]
 
   @@index([type])
@@ -289,6 +314,7 @@ model Profile {
   transactions           Transaction[]
   budgets                Budget[]
   savingsGoals           SavingsGoal[]
+  assets                 Asset[]
   chatMessages           ChatMessage[]
   categories             Category[]
   categoryRules          CategoryRule[]
@@ -918,6 +944,56 @@ model SavingsContribution {
   @@unique([goalId, transactionId])
   @@index([goalId, date(sort: Desc)])
   @@map("savings_contributions")
+}
+
+/// Something the workspace owns or owes that no bank connection reports: a
+/// house, a car, an index fund, a mortgage. Bank balances already arrive
+/// through BankAccount and are added to net worth from there, so an asset row
+/// exists precisely for what is *not* synced — which is what keeps the two
+/// from double-counting the same money.
+///
+/// The row itself holds no value. Worth changes over time and the history is
+/// the interesting part, so every figure lives in AssetValuation and the
+/// latest one is the current value.
+model Asset {
+  id          String    @id @default(cuid())
+  workspaceId String    @map("workspace_id")
+  userId      String    @map("user_id") @db.Uuid
+  name        String
+  kind        AssetKind
+  /// Held in this currency. Null means the workspace currency. A holding in
+  /// another currency is shown but never summed — there is no FX rate
+  /// anywhere in this app and inventing one would misstate net worth.
+  currency    String?
+  note        String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  workspace  Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  profile    Profile          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  valuations AssetValuation[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@map("assets")
+}
+
+/// What an asset was worth on a date. Append-only: a correction is a new row,
+/// not an edit, because the history is what draws the net-worth line and
+/// rewriting it would quietly change the past. Liabilities are stored
+/// positive and subtracted, so a value is never negative.
+model AssetValuation {
+  id        String   @id @default(cuid())
+  assetId   String   @map("asset_id")
+  value     Decimal  @db.Decimal(14, 2)
+  /// The day the figure describes, not the day it was entered.
+  asOf      DateTime @map("as_of")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([assetId, asOf(sort: Desc)])
+  @@map("asset_valuations")
 }
 
 /// A copilot conversation, shared across the workspace's members.

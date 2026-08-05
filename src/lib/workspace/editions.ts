@@ -52,6 +52,8 @@ export const ALL_EDITION_FEATURES = [
   "budgets",
   /** Named savings goals with contributions and a projected completion date. */
   "goals",
+  /** What is owned and owed beyond the banks, and net worth over time. */
+  "netWorth",
   /** Recurring-subscription detection and its cost insights. */
   "subscriptions",
   /** Accounting integrations (QuickBooks, Xero, Exact) — irrelevant to a person. */
@@ -66,7 +68,7 @@ export type EditionFeature = (typeof ALL_EDITION_FEATURES)[number];
  */
 export const EDITION_FEATURES: Record<WorkspaceType, readonly EditionFeature[]> = {
   BUSINESS: ["invoices", "counterparties", "team", "accounting"],
-  PERSONAL: ["budgets", "goals", "subscriptions"],
+  PERSONAL: ["budgets", "goals", "netWorth", "subscriptions"],
 };
 
 /**
@@ -120,6 +122,7 @@ export const FEATURE_PATHS: Record<EditionFeature, readonly string[]> = {
   team: [],
   budgets: ["/budgets"],
   goals: ["/goals"],
+  netWorth: ["/net-worth"],
   subscriptions: ["/subscriptions"],
   accounting: [],
 };

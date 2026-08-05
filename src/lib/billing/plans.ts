@@ -58,6 +58,15 @@ export interface PlanLimits {
   bankConnections: number | null;
   /** Savings goals (Personal edition). */
   goalsEnabled: boolean;
+  /**
+   * Manually tracked assets and liabilities on the net-worth page (Personal
+   * edition). This gates the *manual* half only: `/net-worth` exists on every
+   * personal tier and always reports net worth from synced bank balances, so
+   * Free sees a real figure and an upgrade hint rather than a locked page.
+   * False on the Business tiers, where the edition gate means the page and its
+   * API do not exist at all.
+   */
+  netWorthEnabled: boolean;
   /** Recurring-subscription insights (Personal edition). */
   subscriptionInsightsEnabled: boolean;
   /** Workspace seats (members + pending invitations); null = custom/unlimited. */
@@ -100,6 +109,7 @@ const BUSINESS_FREE: Plan = {
     integrationsEnabled: false,
     bankConnections: 0,
     goalsEnabled: false,
+    netWorthEnabled: false,
     subscriptionInsightsEnabled: false,
     seats: 1,
   },
@@ -131,6 +141,7 @@ const PRO: Plan = {
     integrationsEnabled: false,
     bankConnections: 0,
     goalsEnabled: false,
+    netWorthEnabled: false,
     subscriptionInsightsEnabled: false,
     seats: 1,
   },
@@ -163,6 +174,7 @@ const BUSINESS: Plan = {
     integrationsEnabled: true,
     bankConnections: null,
     goalsEnabled: false,
+    netWorthEnabled: false,
     subscriptionInsightsEnabled: false,
     seats: 5,
   },
@@ -194,6 +206,7 @@ const ENTERPRISE: Plan = {
     integrationsEnabled: true,
     bankConnections: null,
     goalsEnabled: false,
+    netWorthEnabled: false,
     subscriptionInsightsEnabled: false,
     seats: null,
   },
@@ -232,6 +245,7 @@ const PERSONAL_FREE: Plan = {
     integrationsEnabled: true,
     bankConnections: 1,
     goalsEnabled: false,
+    netWorthEnabled: false,
     subscriptionInsightsEnabled: false,
     seats: 1,
   },
@@ -241,6 +255,7 @@ const PERSONAL_FREE: Plan = {
     "AI categorization for 100 transactions per month",
     "Dashboard, spending breakdown & forecast",
     "Monthly budgets per category",
+    "Net worth from your connected accounts",
   ],
 };
 
@@ -263,6 +278,7 @@ const PLUS: Plan = {
     integrationsEnabled: true,
     bankConnections: null,
     goalsEnabled: true,
+    netWorthEnabled: true,
     subscriptionInsightsEnabled: true,
     seats: 1,
   },
@@ -271,6 +287,7 @@ const PLUS: Plan = {
     "500 AI copilot messages per month",
     "Unlimited AI transaction categorization",
     "Savings goals with projected completion dates",
+    "Net worth: property, investments and debts, tracked over time",
     "Subscription insights: monthly cost, price rises, unused",
     "PDF, Excel & CSV exports",
   ],
@@ -295,6 +312,7 @@ const PREMIUM: Plan = {
     integrationsEnabled: true,
     bankConnections: null,
     goalsEnabled: true,
+    netWorthEnabled: true,
     subscriptionInsightsEnabled: true,
     seats: 1,
   },

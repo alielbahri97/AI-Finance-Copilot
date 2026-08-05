@@ -3,7 +3,7 @@
 Applying pending Prisma migrations from any browser (including a phone),
 because the machine that has the repo cannot reach Postgres directly.
 
-There have been five rounds. Each has its own file to paste:
+There have been six rounds. Each has its own file to paste:
 
 | Round | Migrations | File |
 | --- | --- | --- |
@@ -12,11 +12,70 @@ There have been five rounds. Each has its own file to paste:
 | 3 | `0017_workspace_editions` | [`apply-0017.sql`](./apply-0017.sql) |
 | 4 | `0018_ai_categorization` | [`apply-0018.sql`](./apply-0018.sql) |
 | 5 | `0019_customer_dunning` | [`apply-0019.sql`](./apply-0019.sql) |
+| 6 | `0020_net_worth` | [`apply-0020.sql`](./apply-0020.sql) |
 
 Run them in order; each round checks for the previous round's schema and
 refuses to run without it. Everything from "Step A" onwards describes round 1,
 but the mechanics — backup, paste the whole file, press Run, read the last
 result table — are the same for all of them.
+
+---
+
+## Round 6: `0020_net_worth`
+
+Net worth tracking for the Personal edition. Bank balances already tell the app
+what is in the current account; this is everything else a person owns and owes —
+a house, a car, an index fund, a mortgage, a credit card — with the worth of
+each recorded on a date so the net-worth line has a history to draw. Three
+things go into the database:
+
+- `AssetKind` — an enum of the ten kinds of holding (`PROPERTY`, `VEHICLE`,
+  `INVESTMENT`, `CRYPTO`, `CASH`, `OTHER_ASSET`, `LOAN`, `MORTGAGE`,
+  `CREDIT_LINE`, `OTHER_LIABILITY`). The first six are owned, the last four
+  owed; the app derives which from the kind rather than storing it twice.
+- `assets` — the holdings, workspace-scoped like every other business table,
+  with a `UNIQUE (workspace_id, name)` so the same mortgage cannot be entered
+  twice and quietly counted twice. The row carries no value of its own.
+- `asset_valuations` — append-only worth-on-a-date rows, cascading with their
+  asset. The latest one is the current value; the rest are the history.
+
+Purely additive: one enum and two new tables. No existing table is altered,
+nothing is dropped, narrowed or renamed, and no statement in the file reads or
+writes a row of existing data — so there is nothing to backfill and no lock
+worth naming.
+
+File to paste:
+
+```text
+ops/migrations-bundle/apply-0020.sql
+```
+
+What to do:
+
+1. **Back up.** Supabase → **Database → Backups**. Note the latest
+   Point-in-Time Recovery timestamp. This one only creates new objects, but the
+   habit is cheap.
+2. **Paste all of it** into Supabase → **SQL Editor → New query**, in the
+   **production** project, and press **Run**.
+3. **Read the last result table.** It has 18 rows; every one should say `OK` in
+   the `result` column. Scroll up for the migration history (expect 20 rows,
+   `0001`–`0020`) and the shape of the two new tables.
+4. **Load the site**, and check `https://app.ballastmoney.com/api/health` —
+   `status: "ok"`, `schema: "ok"`, empty `missingTables`, `missingColumns` and
+   `pendingMigrations`.
+
+If it errors: nothing was changed (single transaction), so send me the full
+error. One error has a specific answer here:
+
+- **`This database is missing "reminder_logs" …`** — round 5 was never applied.
+  Run [`apply-0019.sql`](./apply-0019.sql) first, then this file. The refusal
+  happens before anything is changed.
+
+**Instant Rollback is safe for this one.** The pre-0020 code never reads the
+enum or either table, and 0020 removes nothing, so an older deployment runs
+unchanged on the new schema. Until it is applied, the deployed code degrades
+rather than failing: `/net-worth` reports net worth from synced bank balances
+alone and the copilot's snapshot simply has no net-worth section.
 
 ---
 
@@ -513,6 +572,7 @@ SHA-256, hex, of the exact `migration.sql` file bytes — the same thing
 | `0017_workspace_editions` | `6ea302ea168c82af6f8f6e627f879809a4ea48cecc2b5c47d83f1ee9422d681d` | `apply-0017.sql` |
 | `0018_ai_categorization` | `3a670714d7c810ec2a5756b1f1ba214422e79bc2b3f310eb0a80165141079500` | `apply-0018.sql` |
 | `0019_customer_dunning` | `0cd9e7a2a9099cc862fa4323ccbe5305921cc52b7f683bc4c912ba98460a2364` | `apply-0019.sql` |
+| `0020_net_worth` | `ef31084c0ebfb00083cff17b112c6f02216cb5d5a51f72e1cf8ec47d1cc453c7` | `apply-0020.sql` |
 
 **Important:** these checksums describe the migration files as they were when
 this bundle was generated. They were re-verified against the migration files as

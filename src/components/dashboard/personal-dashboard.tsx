@@ -19,6 +19,7 @@ import {
 import { StatCard } from "@/components/dashboard/stat-card";
 import { UpcomingBills } from "@/components/forecast/upcoming-bills";
 import { GoalsWidget } from "@/components/goals/goals-widget";
+import { NetWorthDashboardCard } from "@/components/net-worth/net-worth-dashboard-card";
 import { SubscriptionsWidget } from "@/components/subscriptions/subscriptions-widget";
 import {
   Card,
@@ -85,20 +86,30 @@ export function PersonalDashboard({
         </div>
       )}
 
-      {canViewTransactions && (limits.goalsEnabled || limits.subscriptionInsightsEnabled) && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {limits.goalsEnabled && (
-            <Suspense fallback={<TableCardSkeleton rows={4} />}>
-              <GoalsSection workspaceId={workspaceId} currency={currency} />
-            </Suspense>
-          )}
-          {limits.subscriptionInsightsEnabled && (
-            <Suspense fallback={<TableCardSkeleton rows={4} />}>
-              <SubscriptionsSection workspaceId={workspaceId} currency={currency} />
-            </Suspense>
-          )}
-        </div>
-      )}
+      {canViewTransactions &&
+        (limits.goalsEnabled ||
+          limits.subscriptionInsightsEnabled ||
+          limits.netWorthEnabled) && (
+          <div className="grid gap-4 lg:grid-cols-2">
+            {limits.goalsEnabled && (
+              <Suspense fallback={<TableCardSkeleton rows={4} />}>
+                <GoalsSection workspaceId={workspaceId} currency={currency} />
+              </Suspense>
+            )}
+            {limits.subscriptionInsightsEnabled && (
+              <Suspense fallback={<TableCardSkeleton rows={4} />}>
+                <SubscriptionsSection workspaceId={workspaceId} currency={currency} />
+              </Suspense>
+            )}
+            {/* Renders nothing until a holding exists: with none, net worth is
+                the cash figure the stat row already shows. */}
+            {limits.netWorthEnabled && (
+              <Suspense fallback={<TableCardSkeleton rows={3} />}>
+                <NetWorthDashboardCard workspaceId={workspaceId} currency={currency} />
+              </Suspense>
+            )}
+          </div>
+        )}
 
       {canViewReports && (
         <Suspense

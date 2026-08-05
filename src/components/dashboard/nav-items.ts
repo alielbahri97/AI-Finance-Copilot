@@ -10,6 +10,7 @@ import {
   PlugIcon,
   ReceiptTextIcon,
   RepeatIcon,
+  ScaleIcon,
   SettingsIcon,
   ShieldIcon,
   TagsIcon,
@@ -47,6 +48,7 @@ export const NAV_ITEMS: NavItem[] = [
   { title: "Invoices", href: "/invoices", icon: ReceiptTextIcon, feature: "invoices" },
   { title: "Budgets", href: "/budgets", icon: WalletIcon, feature: "budgets" },
   { title: "Goals", href: "/goals", icon: PiggyBankIcon, feature: "goals" },
+  { title: "Net worth", href: "/net-worth", icon: ScaleIcon, feature: "netWorth" },
   {
     title: "Subscriptions",
     href: "/subscriptions",

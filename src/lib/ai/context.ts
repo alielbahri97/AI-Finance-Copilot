@@ -5,6 +5,8 @@ import { mapAssumptionRow } from "@/lib/finance/data";
 import { computeForecast, type AssumptionInput, type ForecastResult } from "@/lib/finance/forecast";
 import { detectRecurring, type FinanceTransaction, type RecurringItem } from "@/lib/finance/recurrence";
 import { renderForecastText } from "@/lib/finance/render";
+import { ASSET_KIND_LABELS } from "@/lib/personal/net-worth";
+import { loadNetWorthSnapshot, type NetWorthSnapshot } from "@/lib/personal/net-worth-data";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -66,6 +68,13 @@ export interface FinancialSnapshot {
   forecast: ForecastResult;
   assumptions: AssumptionInput[];
   unusual: UnusualTransaction[];
+  /**
+   * Net worth, or null when the workspace tracks no holdings — which is every
+   * Business workspace, since the feature is Personal-only. Null leaves the
+   * section out of the prompt entirely rather than spending tokens restating
+   * the cash balance under a second heading.
+   */
+  netWorth: NetWorthSnapshot | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -289,6 +298,18 @@ export async function buildFinancialSnapshot(
     .sort((a, b) => b.zScore - a.zScore)
     .slice(0, 8);
 
+  /* ---- Net worth (Personal; null when nothing is tracked) ---- */
+  // Reuses the monthly nets already accumulated above, so grounding the model
+  // in net worth costs one query for the holdings and nothing else.
+  const netWorth = await loadNetWorthSnapshot({
+    workspaceId,
+    currency,
+    months: months.map((month) => ({ month: month.key, net: month.net })),
+    openingBalance: priorNet,
+    cashAnchor: cash.source === "bank" ? cash.total : null,
+    cash: cash.total,
+  });
+
   return {
     currency,
     generatedAt: now.toISOString().slice(0, 10),
@@ -307,6 +328,7 @@ export async function buildFinancialSnapshot(
     forecast,
     assumptions,
     unusual,
+    netWorth,
   };
 }
 
@@ -325,6 +347,32 @@ export function renderSnapshot(snapshot: FinancialSnapshot): string {
   lines.push(
     `As of ${snapshot.generatedAt} | currency: ${snapshot.currency} | current balance: ${money(snapshot.currentBalance)} | transactions in last 12 months: ${snapshot.transactionCount}`
   );
+
+  if (snapshot.netWorth) {
+    const netWorth = snapshot.netWorth;
+    lines.push(
+      "",
+      "NET WORTH (assets and debts the user tracks by hand, plus bank cash):",
+      `now: ${money(netWorth.total)} = assets ${money(netWorth.assetTotal)} + cash ${money(netWorth.cash)} − debts ${money(netWorth.liabilityTotal)}`
+    );
+    if (netWorth.largestAssets.length > 0) {
+      lines.push(
+        `largest assets: ${netWorth.largestAssets
+          .map((asset) => `${asset.name} (${ASSET_KIND_LABELS[asset.kind]}) ${money(asset.value)}`)
+          .join("; ")}`
+      );
+    }
+    if (netWorth.trend.length > 1) {
+      lines.push(
+        `trend: ${netWorth.trend.map((point) => `${point.label} ${money(point.netWorth)}`).join(" | ")}`
+      );
+    }
+    if (netWorth.otherCurrencyCount > 0) {
+      lines.push(
+        `note: ${netWorth.otherCurrencyCount} holding(s) are held in another currency and excluded from every figure above — there are no exchange rates in this app.`
+      );
+    }
+  }
 
   lines.push("", "MONTHLY SUMMARY (income / expenses / net):");
   for (const month of snapshot.months) {
