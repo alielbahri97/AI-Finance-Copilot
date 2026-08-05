@@ -1,18 +1,12 @@
 import "server-only";
 
 import type { FinanceTransaction } from "@/lib/finance/recurrence";
+import { RECURRING_LOOKBACK_DAYS } from "@/lib/finance/recurring-spend";
 import { prisma } from "@/lib/prisma";
 
 import { analyzeSubscriptions, type SubscriptionAnalysis } from "./subscriptions";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-/**
- * The same lookback the forecast loads (`buildForecast`): a year plus a small
- * margin, so a monthly charge that lands early in one month and late in the
- * next still contributes twelve samples to the price comparison.
- */
-const LOOKBACK_DAYS = 370;
 
 /**
  * Loads the workspace's expense history and returns the subscription picture.
@@ -23,7 +17,7 @@ export async function getSubscriptionsOverview(
   workspaceId: string,
   now: Date = new Date()
 ): Promise<SubscriptionAnalysis> {
-  const windowStart = new Date(now.getTime() - LOOKBACK_DAYS * MS_PER_DAY);
+  const windowStart = new Date(now.getTime() - RECURRING_LOOKBACK_DAYS * MS_PER_DAY);
 
   const rows = await prisma.transaction.findMany({
     where: { workspaceId, type: "EXPENSE", date: { gte: windowStart } },

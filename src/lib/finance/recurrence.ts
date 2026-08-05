@@ -31,7 +31,8 @@ export interface RecurringItem {
   monthlyAmount: number;
 }
 
-const DAYS_PER_MONTH = 30.44;
+/** Mean month length, used to normalise any cadence to a monthly equivalent. */
+export const DAYS_PER_MONTH = 30.44;
 
 const CADENCES: { cadence: Cadence; min: number; max: number; canonical: number }[] = [
   { cadence: "weekly", min: 5, max: 10, canonical: 7 },
@@ -147,8 +148,15 @@ export function detectRecurring(transactions: FinanceTransaction[]): RecurringIt
  * Projects the next occurrence dates of a recurring item within [from, to].
  * If the item is overdue (next expected date already passed), the schedule is
  * rolled forward so the first projection lands on or after `from`.
+ *
+ * Takes only the two fields it schedules from, so a caller holding a derived
+ * summary of an item can project from it without reconstructing the item.
  */
-export function nextOccurrences(item: RecurringItem, from: Date, to: Date): Date[] {
+export function nextOccurrences(
+  item: Pick<RecurringItem, "lastDate" | "intervalDays">,
+  from: Date,
+  to: Date
+): Date[] {
   const occurrences: Date[] = [];
   const intervalMs = item.intervalDays * MS_PER_DAY;
   let next = new Date(`${item.lastDate}T00:00:00.000Z`).getTime() + intervalMs;

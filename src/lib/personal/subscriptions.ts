@@ -2,16 +2,18 @@
  * Subscription insights for the Personal edition — pure logic, no database,
  * no Prisma types.
  *
- * Nothing here re-implements recurrence detection: `detectRecurring` already
- * decides what is a repeating charge and at what cadence, and this module adds
- * only what a person (rather than a business) needs on top of it —
+ * Nothing here re-implements recurrence detection or measurement:
+ * `detectRecurring` decides what is a repeating charge and at what cadence,
+ * `@/lib/finance/recurring-spend` measures each one (monthly cost, price move,
+ * whether it has stopped, when it is due next), and this module adds only what
+ * a person (rather than a business) needs on top of that —
  *
  *   * whether the charge is a subscription they could cancel or a bill they
  *     could not (rent is recurring, but telling someone to review their rent
  *     is not advice),
- *   * whether the price moved between the first and the most recent charge,
  *   * whether the charge has quietly stopped, so it does not inflate the
  *     monthly total of things they are still paying for,
+ *   * whether it looks like one they have forgotten about,
  *   * what is due in the next month.
  *
  * On what the data can and cannot say: bank transactions show that money left
@@ -19,39 +21,30 @@
  * is a prompt to look, not a conclusion.
  */
 
+import type { FinanceTransaction } from "@/lib/finance/recurrence";
 import {
-  detectRecurring,
-  nextOccurrences,
-  normalizeMerchant,
-  type Cadence,
-  type FinanceTransaction,
-  type RecurringItem,
-} from "@/lib/finance/recurrence";
+  chargeOccurrences,
+  MONTHS_PER_YEAR,
+  round2,
+  summarizeRecurringCharges,
+  utcDay,
+  type PriceChange,
+  type RecurringCharge,
+} from "@/lib/finance/recurring-spend";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
-const MONTHS_PER_YEAR = 12;
 
 /**
- * Smallest relative price move worth reporting. Below this, a change is
- * usually a rounding difference, a card-scheme FX rate or a partial-month
- * proration rather than the merchant putting the price up.
+ * The price-move and stopped-charge thresholds are shared with the Business
+ * recurring-spend audit, and re-exported here so this module stays the one
+ * import the personal subscriptions feature needs.
  */
-export const PRICE_CHANGE_MIN_PERCENT = 5;
-
-/**
- * Smallest absolute price move worth reporting, in workspace currency. A
- * cheap subscription clears the 5% test on a few cents; both thresholds must
- * be met so a 0.20 drift on a 3.00 charge stays quiet.
- */
-export const PRICE_CHANGE_MIN_AMOUNT = 0.5;
-
-/**
- * How far past its expected date a charge may be before the subscription is
- * treated as stopped. Payment dates drift by a few days (weekends, month
- * lengths, retries), so one interval is too tight; half an interval of slack
- * on top of it is late enough to mean something.
- */
-export const OVERDUE_INTERVAL_MULTIPLIER = 1.5;
+export {
+  OVERDUE_INTERVAL_MULTIPLIER,
+  PRICE_CHANGE_MIN_AMOUNT,
+  PRICE_CHANGE_MIN_PERCENT,
+  detectPriceChange,
+} from "@/lib/finance/recurring-spend";
 
 /**
  * Minimum number of charges before a subscription is worth a second look.
@@ -110,34 +103,16 @@ export type SubscriptionKind = "subscription" | "bill";
  */
 export type SubscriptionFlag = "price_increase" | "unused_looking" | "overdue";
 
-export interface SubscriptionPriceChange {
-  /** Amount of the earliest charge in the window. */
-  from: number;
-  /** Amount of the most recent charge. */
-  to: number;
-  /** Signed change as a percentage of `from`. */
-  percent: number;
-}
+/** The shared price comparison, under the name this feature has always used. */
+export type SubscriptionPriceChange = PriceChange;
 
-export interface DetectedSubscription {
-  /** Matches the `RecurringItem` key: `${type}:${normalizedMerchant}`. */
-  key: string;
-  label: string;
-  category: string;
+/**
+ * A measured recurring charge plus the two personal judgements: what kind of
+ * commitment it is, and what about it is worth the user's attention. `overdue`
+ * is dropped because it is carried by the flags.
+ */
+export interface DetectedSubscription extends Omit<RecurringCharge, "overdue"> {
   kind: SubscriptionKind;
-  cadence: Cadence;
-  intervalDays: number;
-  timesSeen: number;
-  monthsSeen: number;
-  /** Mean charge amount across the window. */
-  averageAmount: number;
-  /** `averageAmount` normalised to a monthly equivalent. */
-  monthlyAmount: number;
-  /** ISO yyyy-mm-dd of the most recent charge. */
-  lastChargedAt: string;
-  /** ISO yyyy-mm-dd of the next projected charge. */
-  nextChargeAt: string;
-  priceChange: SubscriptionPriceChange | null;
   flags: SubscriptionFlag[];
 }
 
@@ -164,23 +139,6 @@ export interface SubscriptionAnalysis {
   annualisedCost: number;
 }
 
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
-}
-
-function isoDay(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
-function utcDay(date: Date): Date {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-}
-
-/** The merchant key `detectRecurring` groups by, recomputed for joining. */
-function recurringKeyOf(transaction: FinanceTransaction): string {
-  return `${transaction.type}:${normalizeMerchant(transaction.counterparty?.trim() || transaction.description)}`;
-}
-
 /**
  * Whether a category name means a commitment rather than a subscription.
  * Unrecognised names degrade to `subscription`, which is the safer default:
@@ -191,66 +149,21 @@ export function classifySubscriptionKind(category: string): SubscriptionKind {
   return BILL_CATEGORY_NAMES.includes(category.trim().toLowerCase()) ? "bill" : "subscription";
 }
 
-/**
- * Compares the earliest and most recent charge of one merchant. Returns null
- * unless the move clears both thresholds, so noise never raises a flag.
- */
-export function detectPriceChange(
-  amountsOldestFirst: readonly number[]
-): SubscriptionPriceChange | null {
-  if (amountsOldestFirst.length < 2) return null;
-
-  const from = amountsOldestFirst[0];
-  const to = amountsOldestFirst[amountsOldestFirst.length - 1];
-  if (from <= 0) return null;
-
-  const delta = to - from;
-  const percent = (delta / from) * 100;
-  if (Math.abs(delta) < PRICE_CHANGE_MIN_AMOUNT) return null;
-  if (Math.abs(percent) < PRICE_CHANGE_MIN_PERCENT) return null;
-
-  return { from: round2(from), to: round2(to), percent: round2(percent) };
-}
-
-/** Days since the last charge, measured in whole UTC days. */
-function daysSince(lastDate: string, now: Date): number {
-  const last = new Date(`${lastDate}T00:00:00.000Z`).getTime();
-  return (utcDay(now).getTime() - last) / MS_PER_DAY;
-}
-
-function isOverdue(item: RecurringItem, now: Date): boolean {
-  return daysSince(item.lastDate, now) > item.intervalDays * OVERDUE_INTERVAL_MULTIPLIER;
-}
-
-function subscriptionFlags(
-  item: RecurringItem,
-  priceChange: SubscriptionPriceChange | null,
-  overdue: boolean
-): SubscriptionFlag[] {
+function subscriptionFlags(charge: RecurringCharge): SubscriptionFlag[] {
   const flags: SubscriptionFlag[] = [];
+  const { priceChange, overdue } = charge;
   if (priceChange !== null && priceChange.to > priceChange.from) flags.push("price_increase");
   if (overdue) flags.push("overdue");
   // A stopped charge is not worth reviewing — it has already stopped.
   if (
     !overdue &&
     priceChange === null &&
-    item.timesSeen >= REVIEW_MIN_CHARGES &&
-    item.monthlyAmount <= REVIEW_MAX_MONTHLY_AMOUNT
+    charge.timesSeen >= REVIEW_MIN_CHARGES &&
+    charge.monthlyAmount <= REVIEW_MAX_MONTHLY_AMOUNT
   ) {
     flags.push("unused_looking");
   }
   return flags;
-}
-
-/**
- * The next projected charge date. Built with `nextOccurrences` so an overdue
- * item rolls forward the same way it does on the forecast, rather than
- * reporting a date in the past.
- */
-function nextChargeDate(item: RecurringItem, from: Date): Date {
-  const windowEnd = new Date(from.getTime() + (item.intervalDays * 2 + 1) * MS_PER_DAY);
-  const [next] = nextOccurrences(item, from, windowEnd);
-  return next ?? windowEnd;
 }
 
 /**
@@ -264,47 +177,18 @@ export function analyzeSubscriptions(
 ): SubscriptionAnalysis {
   const today = utcDay(now);
 
-  // Amount history per merchant, oldest first, for the price comparison.
-  const amountsByKey = new Map<string, { amount: number; time: number }[]>();
-  for (const transaction of transactions) {
-    if (transaction.type !== "EXPENSE") continue;
-    const key = recurringKeyOf(transaction);
-    const history = amountsByKey.get(key) ?? [];
-    history.push({ amount: transaction.amount, time: transaction.date.getTime() });
-    amountsByKey.set(key, history);
-  }
-
   const detected: DetectedSubscription[] = [];
-  const activeItems: { item: RecurringItem; kind: SubscriptionKind }[] = [];
+  const activeCharges: { charge: RecurringCharge; kind: SubscriptionKind }[] = [];
 
-  for (const item of detectRecurring(transactions)) {
-    if (item.type !== "EXPENSE") continue;
+  for (const charge of summarizeRecurringCharges(transactions, now)) {
+    const kind = classifySubscriptionKind(charge.category);
+    const { overdue, ...measured } = charge;
 
-    const history = [...(amountsByKey.get(item.key) ?? [])].sort((a, b) => a.time - b.time);
-    const priceChange = detectPriceChange(history.map((entry) => entry.amount));
-    const overdue = isOverdue(item, now);
-    const kind = classifySubscriptionKind(item.category);
-
-    detected.push({
-      key: item.key,
-      label: item.label,
-      category: item.category,
-      kind,
-      cadence: item.cadence,
-      intervalDays: item.intervalDays,
-      timesSeen: item.timesSeen,
-      monthsSeen: item.monthsSeen,
-      averageAmount: item.averageAmount,
-      monthlyAmount: item.monthlyAmount,
-      lastChargedAt: item.lastDate,
-      nextChargeAt: isoDay(nextChargeDate(item, today)),
-      priceChange,
-      flags: subscriptionFlags(item, priceChange, overdue),
-    });
+    detected.push({ ...measured, kind, flags: subscriptionFlags(charge) });
 
     // Overdue items are excluded from the totals and the schedule: projecting
     // charges for something that has stopped billing invents future spend.
-    if (!overdue) activeItems.push({ item, kind });
+    if (!overdue) activeCharges.push({ charge, kind });
   }
 
   const subscriptions = detected.filter((entry) => entry.kind === "subscription");
@@ -312,21 +196,21 @@ export function analyzeSubscriptions(
 
   const monthlyTotal = (kind: SubscriptionKind): number =>
     round2(
-      activeItems
+      activeCharges
         .filter((entry) => entry.kind === kind)
-        .reduce((sum, entry) => sum + entry.item.monthlyAmount, 0)
+        .reduce((sum, entry) => sum + entry.charge.monthlyAmount, 0)
     );
   const totalMonthlyCost = monthlyTotal("subscription");
 
   const horizonEnd = new Date(today.getTime() + UPCOMING_HORIZON_DAYS * MS_PER_DAY);
   const upcomingCharges: UpcomingCharge[] = [];
-  for (const { item, kind } of activeItems) {
-    for (const occurrence of nextOccurrences(item, today, horizonEnd)) {
+  for (const { charge, kind } of activeCharges) {
+    for (const occurrence of chargeOccurrences(charge, today, horizonEnd)) {
       upcomingCharges.push({
-        key: item.key,
-        label: item.label,
-        amount: item.averageAmount,
-        date: isoDay(occurrence),
+        key: charge.key,
+        label: charge.label,
+        amount: charge.averageAmount,
+        date: occurrence.toISOString().slice(0, 10),
         kind,
       });
     }
