@@ -4,6 +4,7 @@ import { loadCashPosition } from "@/lib/finance/cash-data";
 import { mapAssumptionRow } from "@/lib/finance/data";
 import { computeForecast, type AssumptionInput, type ForecastResult } from "@/lib/finance/forecast";
 import { detectRecurring, type FinanceTransaction, type RecurringItem } from "@/lib/finance/recurrence";
+import { summarizeDetectedCharges } from "@/lib/finance/recurring-spend";
 import { renderForecastText } from "@/lib/finance/render";
 import { ASSET_KIND_LABELS } from "@/lib/personal/net-worth";
 import { loadNetWorthSnapshot, type NetWorthSnapshot } from "@/lib/personal/net-worth-data";
@@ -46,6 +47,25 @@ export interface LargeExpense {
   amount: number;
 }
 
+/**
+ * A recurring charge whose price has risen since the first charge in the
+ * window. The recurring charges themselves are already in the snapshot (the
+ * forecast section lists each one with its cadence and monthly cost), but only
+ * as an average — so without this the model can see that a vendor costs €54 a
+ * month and not that it used to cost €39, which is the part a user asks about.
+ */
+export interface RecurringPriceRise {
+  label: string;
+  category: string;
+  /** Amount of the earliest charge in the window. */
+  from: number;
+  /** Amount of the most recent charge. */
+  to: number;
+  /** Rise as a percentage of `from`. */
+  percent: number;
+  lastChargedAt: string;
+}
+
 export interface UnusualTransaction {
   date: string;
   description: string;
@@ -65,6 +85,7 @@ export interface FinancialSnapshot {
   topCounterparties: CounterpartySpend[];
   largestExpenses: LargeExpense[];
   recurring: RecurringItem[];
+  recurringPriceRises: RecurringPriceRise[];
   forecast: ForecastResult;
   assumptions: AssumptionInput[];
   unusual: UnusualTransaction[];
@@ -298,6 +319,32 @@ export async function buildFinancialSnapshot(
     .sort((a, b) => b.zScore - a.zScore)
     .slice(0, 8);
 
+  /* ---- Recurring charges whose price moved ---- */
+  // Detection runs once and both the raw items and the price comparison are
+  // derived from it. Stopped charges are left out: a vendor that raised its
+  // price and then stopped billing is not something to act on.
+  const recurring = detectRecurring(transactions);
+  const recurringPriceRises: RecurringPriceRise[] = summarizeDetectedCharges(
+    recurring,
+    transactions,
+    now
+  )
+    .flatMap((charge) => {
+      const change = charge.priceChange;
+      if (charge.overdue || change === null || change.to <= change.from) return [];
+      return [
+        {
+          label: charge.label,
+          category: charge.category,
+          from: change.from,
+          to: change.to,
+          percent: change.percent,
+          lastChargedAt: charge.lastChargedAt,
+        },
+      ];
+    })
+    .slice(0, 8);
+
   /* ---- Net worth (Personal; null when nothing is tracked) ---- */
   // Reuses the monthly nets already accumulated above, so grounding the model
   // in net worth costs one query for the holdings and nothing else.
@@ -324,7 +371,8 @@ export async function buildFinancialSnapshot(
     categorySpend,
     topCounterparties,
     largestExpenses,
-    recurring: detectRecurring(transactions),
+    recurring,
+    recurringPriceRises,
     forecast,
     assumptions,
     unusual,
@@ -401,6 +449,18 @@ export function renderSnapshot(snapshot: FinancialSnapshot): string {
     for (const expense of snapshot.largestExpenses) {
       lines.push(
         `${expense.date} ${money(expense.amount)} ${expense.category} — ${expense.description}${expense.counterparty ? ` (${expense.counterparty})` : ""}`
+      );
+    }
+  }
+
+  if (snapshot.recurringPriceRises.length > 0) {
+    lines.push(
+      "",
+      "RECURRING CHARGES WHOSE PRICE HAS RISEN (first charge in the window vs the latest):"
+    );
+    for (const rise of snapshot.recurringPriceRises) {
+      lines.push(
+        `${rise.label} (${rise.category}): ${money(rise.from)} -> ${money(rise.to)}, up ${rise.percent}%, last charged ${rise.lastChargedAt}`
       );
     }
   }

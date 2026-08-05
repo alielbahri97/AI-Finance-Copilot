@@ -69,6 +69,15 @@ export interface PlanLimits {
   netWorthEnabled: boolean;
   /** Recurring-subscription insights (Personal edition). */
   subscriptionInsightsEnabled: boolean;
+  /**
+   * The recurring-spend audit (Business edition): every recurring vendor with
+   * its annual cost, its share of expenses, price-creep flags and AI-labelled
+   * overlap candidates. Free gets a locked teaser rather than the page, because
+   * unlike net worth there is no honest half of it to show — the value is the
+   * flags, not the list. False on every Personal tier: the edition gate already
+   * means the page and its data loader do not exist there.
+   */
+  recurringSpendEnabled: boolean;
   /** Workspace seats (members + pending invitations); null = custom/unlimited. */
   seats: number | null;
 }
@@ -111,6 +120,7 @@ const BUSINESS_FREE: Plan = {
     goalsEnabled: false,
     netWorthEnabled: false,
     subscriptionInsightsEnabled: false,
+    recurringSpendEnabled: false,
     seats: 1,
   },
   highlights: [
@@ -143,6 +153,7 @@ const PRO: Plan = {
     goalsEnabled: false,
     netWorthEnabled: false,
     subscriptionInsightsEnabled: false,
+    recurringSpendEnabled: true,
     seats: 1,
   },
   highlights: [
@@ -152,6 +163,7 @@ const PRO: Plan = {
     "50 AI invoice extractions per month",
     "PDF, Excel & CSV exports",
     "What-if forecast assumptions",
+    "Recurring spend audit: annual cost, price rises, duplicate tools",
   ],
 };
 
@@ -176,6 +188,7 @@ const BUSINESS: Plan = {
     goalsEnabled: false,
     netWorthEnabled: false,
     subscriptionInsightsEnabled: false,
+    recurringSpendEnabled: true,
     seats: 5,
   },
   highlights: [
@@ -208,6 +221,7 @@ const ENTERPRISE: Plan = {
     goalsEnabled: false,
     netWorthEnabled: false,
     subscriptionInsightsEnabled: false,
+    recurringSpendEnabled: true,
     seats: null,
   },
   highlights: [
@@ -247,6 +261,7 @@ const PERSONAL_FREE: Plan = {
     goalsEnabled: false,
     netWorthEnabled: false,
     subscriptionInsightsEnabled: false,
+    recurringSpendEnabled: false,
     seats: 1,
   },
   highlights: [
@@ -280,6 +295,7 @@ const PLUS: Plan = {
     goalsEnabled: true,
     netWorthEnabled: true,
     subscriptionInsightsEnabled: true,
+    recurringSpendEnabled: false,
     seats: 1,
   },
   highlights: [
@@ -314,6 +330,7 @@ const PREMIUM: Plan = {
     goalsEnabled: true,
     netWorthEnabled: true,
     subscriptionInsightsEnabled: true,
+    recurringSpendEnabled: false,
     seats: 1,
   },
   highlights: [

@@ -85,6 +85,13 @@ export const NAV_ITEMS: NavItem[] = [
   },
   { title: "Forecast", href: "/forecast", icon: ChartSplineIcon, section: "analyze" },
   { title: "Reports", href: "/reports", icon: ChartNoAxesCombinedIcon, section: "analyze" },
+  {
+    title: "Recurring spend",
+    href: "/recurring-spend",
+    icon: RepeatIcon,
+    section: "analyze",
+    feature: "recurringSpend",
+  },
   { title: "Copilot", href: "/copilot", icon: BotIcon, section: "analyze" },
   { title: "Integrations", href: "/integrations", icon: PlugIcon, section: "account" },
   { title: "Billing", href: "/billing", icon: CreditCardIcon, section: "account" },

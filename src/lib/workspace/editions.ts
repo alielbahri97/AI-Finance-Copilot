@@ -58,6 +58,8 @@ export const ALL_EDITION_FEATURES = [
   "subscriptions",
   /** Accounting integrations (QuickBooks, Xero, Exact) — irrelevant to a person. */
   "accounting",
+  /** The vendor-by-vendor recurring-spend audit: annual cost, price creep, overlap. */
+  "recurringSpend",
 ] as const;
 
 export type EditionFeature = (typeof ALL_EDITION_FEATURES)[number];
@@ -67,7 +69,7 @@ export type EditionFeature = (typeof ALL_EDITION_FEATURES)[number];
  * nothing was taken away from it and nothing personal was added to it.
  */
 export const EDITION_FEATURES: Record<WorkspaceType, readonly EditionFeature[]> = {
-  BUSINESS: ["invoices", "counterparties", "team", "accounting"],
+  BUSINESS: ["invoices", "counterparties", "team", "accounting", "recurringSpend"],
   PERSONAL: ["budgets", "goals", "netWorth", "subscriptions"],
 };
 
@@ -125,6 +127,7 @@ export const FEATURE_PATHS: Record<EditionFeature, readonly string[]> = {
   netWorth: ["/net-worth"],
   subscriptions: ["/subscriptions"],
   accounting: [],
+  recurringSpend: ["/recurring-spend"],
 };
 
 /** Which feature, if any, owns a dashboard path. */

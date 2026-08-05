@@ -73,6 +73,7 @@ describe("help knowledge base", () => {
       "/dashboard", "/transactions", "/import", "/categories", "/invoices",
       "/forecast", "/reports", "/copilot", "/integrations", "/billing",
       "/profile", "/settings", "/help", "/budgets", "/goals", "/subscriptions",
+      "/recurring-spend",
     ]);
     for (const topic of [...topics, ...personalTopics]) {
       for (const match of topic.content.matchAll(/\]\((\/[a-z-]*)\)/g)) {

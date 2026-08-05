@@ -54,7 +54,13 @@ describe("edition feature matrix", () => {
   });
 
   it("keeps the business surfaces business-only", () => {
-    const businessOnly: EditionFeature[] = ["invoices", "counterparties", "team", "accounting"];
+    const businessOnly: EditionFeature[] = [
+      "invoices",
+      "counterparties",
+      "team",
+      "accounting",
+      "recurringSpend",
+    ];
     for (const feature of businessOnly) {
       expect(editionHasFeature("BUSINESS", feature)).toBe(true);
       expect(editionHasFeature("PERSONAL", feature)).toBe(false);
@@ -69,11 +75,12 @@ describe("edition feature matrix", () => {
     }
   });
 
-  it("leaves the Business edition exactly as it shipped", () => {
+  it("keeps every Business surface it shipped with, and what has been added since", () => {
     expect([...EDITION_FEATURES.BUSINESS].sort()).toEqual([
       "accounting",
       "counterparties",
       "invoices",
+      "recurringSpend",
       "team",
     ]);
     expect(EDITION_PERMISSIONS.BUSINESS).toEqual(ALL_PERMISSIONS);
@@ -176,6 +183,15 @@ describe("edition route guards", () => {
     }
   });
 
+  it("blocks the recurring-spend audit in a personal workspace", () => {
+    expect(editionAllowsPath("BUSINESS", "/recurring-spend")).toBe(true);
+    expect(editionAllowsPath("PERSONAL", "/recurring-spend")).toBe(false);
+    expect(featureForPath("/recurring-spend")).toBe("recurringSpend");
+    // The personal Subscriptions page reads the same detector; the two pages
+    // must not gate each other.
+    expect(featureForPath("/subscriptions")).toBe("subscriptions");
+  });
+
   it("blocks the personal routes in a business workspace", () => {
     for (const path of ["/budgets", "/goals", "/goals/g_1", "/net-worth", "/subscriptions"]) {
       expect(editionAllowsPath("PERSONAL", path)).toBe(true);
@@ -210,8 +226,10 @@ describe("edition navigation", () => {
 
   it("shows invoices only to business and the personal pages only to personal", () => {
     expect(hrefs("BUSINESS")).toContain("/invoices");
+    expect(hrefs("BUSINESS")).toContain("/recurring-spend");
     expect(hrefs("BUSINESS")).not.toContain("/budgets");
     expect(hrefs("PERSONAL")).not.toContain("/invoices");
+    expect(hrefs("PERSONAL")).not.toContain("/recurring-spend");
     expect(hrefs("PERSONAL")).toEqual(
       expect.arrayContaining(["/budgets", "/goals", "/net-worth", "/subscriptions"])
     );
@@ -516,6 +534,7 @@ function snapshot() {
         occurrences: 6,
       },
     ],
+    recurringPriceRises: [],
     forecast: forecastFixture(),
     assumptions: [],
     unusual: [],

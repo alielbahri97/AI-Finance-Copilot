@@ -382,6 +382,29 @@ Each plan includes a monthly extraction quota (see [Billing](/billing)).`,
     content: reportsContent(edition),
   },
   {
+    id: "recurring-spend",
+    title: "Auditing recurring vendor spend",
+    editions: ["business"],
+    keywords: [
+      "recurring", "recurring spend", "vendor", "vendors", "supplier", "saas",
+      "software", "subscription", "licence", "license", "renewal", "duplicate",
+      "overlap", "price increase", "price rise", "annual cost", "cancel",
+    ],
+    content: `The [Recurring spend](/recurring-spend) page (sidebar → Recurring spend) needs ${planGate(
+      "business",
+      (limits) => limits.recurringSpendEnabled
+    )} and is built from your transactions — nothing to set up:
+
+1. Every vendor that charges you on a schedule is detected automatically and normalised to a **monthly cost**, so a quarterly licence sits comparably beside a monthly tool.
+2. Each row also shows the **cost per year** and the vendor's **share of your total expenses** — the two figures that make a small monthly charge arguable.
+3. **Price up** flags a vendor charging meaningfully more than it first did, with the old and new amounts.
+4. **Possible duplicate** flags two or more active vendors that appear to do the same job (two storage providers, two project trackers). The grouping is the only part of the page an AI decides — the vendors and amounts come from your transactions — so treat a group as a question, not an answer.
+5. **No recent charge** marks something that has stopped billing; it stays listed but is left out of every total in case it was cancelled.
+6. Payroll, tax and internal transfers are left off the vendor list — they repeat like a subscription but are not one — while still counting towards your total spend.
+
+Detection needs a few repeats to be confident, so a vendor you started paying last month may not appear yet, and a licence billed once a year does not appear at all. Cancelling happens with the vendor: the app is read-only and can never move or stop money.`,
+  },
+  {
     id: "notifications",
     title: "Setting up notifications and alerts",
     keywords: [
