@@ -72,7 +72,23 @@ function createPrismaClient(): PrismaClient {
   });
 }
 
-export const prisma = globalForPrisma.prisma ?? createPrismaClient();
+function getPrismaClient(): PrismaClient {
+  // Cache across hot reloads (dev) and warm serverless isolates (prod).
+  const client = globalForPrisma.prisma ?? createPrismaClient();
+  globalForPrisma.prisma = client;
+  return client;
+}
 
-// Cache across hot reloads (dev) and warm serverless isolates (prod).
-globalForPrisma.prisma = prisma;
+/**
+ * Built on first use, not at import time. `next build` imports every route
+ * module to collect page data, and a build environment legitimately has no
+ * DATABASE_URL — connecting eagerly turned that into a failed build instead of
+ * a request-time error. Same rule as getServerEnv() in @/lib/env.
+ */
+export const prisma = new Proxy({} as PrismaClient, {
+  get(_target, property) {
+    const client = getPrismaClient();
+    const value = Reflect.get(client, property);
+    return typeof value === "function" ? value.bind(client) : value;
+  },
+});
