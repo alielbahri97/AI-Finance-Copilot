@@ -43,9 +43,9 @@ function appMap(edition: Edition): string {
 /** What this edition does not have, so the agent never offers it. */
 const ABSENT: Record<Edition, string> = {
   business:
-    "This workspace has no budgets, savings goals or subscription tracking — those are Ballast Personal features. If asked, say a personal workspace has them and can be created from the workspace switcher.",
+    "This workspace has no budgets, savings goals or subscription tracking — those are Ballast Personal features. If asked, say a personal workspace has them. Creating one alongside a company workspace needs Enterprise or Premium.",
   personal:
-    "This is a personal workspace: it has no invoices, no VAT extraction, no vendors/customers or AR/AP reporting, and no team members or invitations — those are Ballast Business features. Never give steps for them. If asked, say they belong to a business workspace, which can be created from the workspace switcher.",
+    "This is a personal workspace: it has no invoices, no VAT extraction, no vendors/customers or AR/AP reporting, and no team members or invitations — those are Ballast Business features. Never give steps for them. If asked, say they belong to a business workspace; adding one alongside Personal needs Premium or Enterprise.",
 };
 
 export interface HelpUserContext {

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PiggyBankIcon, PlusIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -27,8 +28,27 @@ export function GoalsManager({
   currency,
   canEdit,
 }: GoalsManagerProps) {
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const suggest = useMemo(() => {
+    const name = searchParams.get("suggest")?.trim();
+    if (!name) return null;
+    return {
+      name,
+      targetAmount: searchParams.get("amount")?.trim() || undefined,
+      targetDate: searchParams.get("date")?.trim() || undefined,
+    };
+  }, [searchParams]);
+
+  const [dialogOpen, setDialogOpen] = useState(Boolean(suggest) && canEdit);
   const [editing, setEditing] = useState<GoalCardData | null>(null);
+
+  useEffect(() => {
+    if (suggest && canEdit) {
+      setEditing(null);
+      setDialogOpen(true);
+    }
+  }, [suggest, canEdit]);
 
   function openCreate() {
     setEditing(null);
@@ -38,6 +58,14 @@ export function GoalsManager({
   function openEdit(goal: GoalCardData) {
     setEditing(goal);
     setDialogOpen(true);
+  }
+
+  function handleDialogOpenChange(open: boolean) {
+    setDialogOpen(open);
+    if (!open && suggest) {
+      // Clear suggestion query params so refreshing does not reopen the dialog.
+      router.replace("/goals");
+    }
   }
 
   return (
@@ -106,12 +134,13 @@ export function GoalsManager({
       ) : null}
 
       <GoalDialog
-        key={editing?.id ?? "new"}
+        key={editing?.id ?? `new-${suggest?.name ?? "blank"}`}
         open={dialogOpen}
-        onOpenChange={setDialogOpen}
+        onOpenChange={handleDialogOpenChange}
         goal={editing}
         categories={categories}
         accounts={accounts}
+        suggest={editing ? null : suggest}
       />
     </div>
   );

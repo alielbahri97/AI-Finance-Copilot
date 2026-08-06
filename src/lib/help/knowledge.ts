@@ -479,7 +479,7 @@ Members plus pending invitations use up your plan's seats — see [Billing](/bil
 - **${editionBranding("business").name}** — invoices, vendors and customers, executive reports and a shared team workspace.
 - **${editionBranding("personal").name}** — budgets, savings goals and subscription tracking for your own money.
 
-Use the **workspace switcher** at the top of the sidebar to move between them, or choose **Create workspace** in that menu and pick which kind you want. Each workspace has its own transactions, categories, bank connections and plan — nothing is shared between them, so your company books and your household spending never mix.
+Use the **workspace switcher** at the top of the sidebar to move between workspaces you already own, or choose **Create workspace** in that menu. You can own only **one Personal** workspace. A company (Business) account cannot also open an individual workspace — and the reverse — unless you are on **Enterprise** or **Premium**, which unlock both editions. Each workspace has its own transactions, categories, bank connections and plan.
 
 A workspace's kind is fixed when it's created. To have both, create the second one; to move data, export from one and import into the other.`,
   },

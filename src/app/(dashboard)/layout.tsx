@@ -10,6 +10,7 @@ import { getOrCreateProfile } from "@/lib/data";
 import { classifyDatabaseFailure, describeDatabaseError } from "@/lib/db-errors";
 import { logger } from "@/lib/logger";
 import { isOnboardingDone } from "@/lib/onboarding/benchmarks";
+import { isPersonalOnboardingDone } from "@/lib/onboarding/personal";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 import { localeForCurrency } from "@/lib/utils";
@@ -28,10 +29,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }
 
   try {
-    const [profile, businessProfile, ctx, workspaces] = await Promise.all([
+    const [profile, businessProfile, personalProfile, ctx, workspaces] = await Promise.all([
       getOrCreateProfile(user),
       // First-run business onboarding — skip once the user completes or dismisses it.
       prisma.businessProfile.findUnique({
+        where: { userId: user.id },
+        select: { completedAt: true, skippedAt: true },
+      }),
+      prisma.personalProfile.findUnique({
         where: { userId: user.id },
         select: { completedAt: true, skippedAt: true },
       }),
@@ -41,10 +46,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
     if (!ctx) {
       redirect("/login");
     }
-    // The onboarding wizard asks for business type, headcount and rent to pick
-    // industry benchmarks. None of that applies to a person's own money, so a
-    // Personal workspace goes straight to the dashboard.
-    if (ctx.workspace.type !== "PERSONAL" && !isOnboardingDone(businessProfile)) {
+    // Business workspaces get industry benchmarks; Personal workspaces get a
+    // short goals questionnaire. Both are skippable and revisit-able later.
+    if (ctx.workspace.type === "PERSONAL") {
+      if (!isPersonalOnboardingDone(personalProfile)) {
+        redirect("/onboarding");
+      }
+    } else if (!isOnboardingDone(businessProfile)) {
       redirect("/onboarding");
     }
 

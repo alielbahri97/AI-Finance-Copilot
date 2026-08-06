@@ -10,6 +10,10 @@ import { getUser } from "@/lib/supabase/server";
 import { recordAudit } from "@/lib/workspace/audit";
 import { requireWorkspace, WORKSPACE_COOKIE } from "@/lib/workspace/context";
 import { defaultWorkspaceName, WORKSPACE_TYPES } from "@/lib/workspace/editions";
+import {
+  creationBlockReason,
+  getWorkspaceCreationPolicy,
+} from "@/lib/workspace/limits";
 
 /**
  * Workspace-level settings the owner/admin can change. Every field is
@@ -32,17 +36,9 @@ const createSchema = z.object({
 });
 
 /**
- * How many workspaces one account may own. Holding both editions is the point;
- * an unbounded loop of free workspaces is not, since each one carries its own
- * trial and quota.
- */
-const MAX_OWNED_WORKSPACES = 5;
-
-/**
- * Creates an additional workspace, of either edition, owned by the caller and
- * seeded with the default categories. This is how a business owner adds their
- * personal finances (or the reverse) without a second account: the workspace
- * switcher already handles several, and every query is workspace-scoped.
+ * Creates an additional workspace owned by the caller. Personal is capped at
+ * one; mixing Business and Personal needs Enterprise or Premium. See
+ * `getWorkspaceCreationPolicy`.
  */
 export async function POST(request: Request) {
   try {
@@ -57,16 +53,10 @@ export async function POST(request: Request) {
     }
     const { type } = parsed.data;
 
-    const owned = await prisma.workspaceMember.count({
-      where: { userId: user.id, role: "OWNER" },
-    });
-    if (owned >= MAX_OWNED_WORKSPACES) {
-      return NextResponse.json(
-        {
-          error: `You can own up to ${MAX_OWNED_WORKSPACES} workspaces. Leave or delete one first.`,
-        },
-        { status: 400 }
-      );
+    const policy = await getWorkspaceCreationPolicy(user.id);
+    const blocked = creationBlockReason(policy, type);
+    if (blocked) {
+      return NextResponse.json({ error: blocked, policy }, { status: 403 });
     }
 
     const profile = await prisma.profile.findUnique({

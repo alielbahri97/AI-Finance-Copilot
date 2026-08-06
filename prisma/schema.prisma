@@ -335,6 +335,7 @@ model Profile {
   analyticsEvents        AnalyticsEvent[]
   integrationConnections IntegrationConnection[]
   businessProfile        BusinessProfile?
+  personalProfile        PersonalProfile?
   helpMessages           HelpMessage[]
   workspaceMemberships   WorkspaceMember[]
   invitationsSent        WorkspaceInvitation[]   @relation("Inviter")
@@ -383,6 +384,35 @@ model BusinessProfile {
   profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("business_profiles")
+}
+
+/// First-run questionnaire for Personal workspaces. Answers drive suggested
+/// savings goals and planning tips — the Personal equivalent of BusinessProfile.
+model PersonalProfile {
+  id                     String    @id @default(cuid())
+  userId                 String    @unique @map("user_id") @db.Uuid
+  /// Where they are in life (affects goal templates and time horizons).
+  lifeStage              String    @map("life_stage")
+  /// Main money focus right now (emergency fund, debt, home, etc.).
+  primaryFocus           String    @map("primary_focus")
+  /// Approximate take-home income per month (optional).
+  monthlyIncome          Decimal?  @map("monthly_income") @db.Decimal(14, 2)
+  /// Approximate essential living costs per month (optional).
+  monthlyEssentials      Decimal?  @map("monthly_essentials") @db.Decimal(14, 2)
+  /// Whether they currently carry consumer / student / mortgage debt.
+  hasDebt                Boolean   @default(false) @map("has_debt")
+  /// Self-reported emergency buffer in months of essentials (0–12+).
+  emergencyMonths        Int       @default(0) @map("emergency_months")
+  /// Optional free-text note (e.g. "saving for a wedding in 2027").
+  notes                  String?
+  completedAt            DateTime? @map("completed_at")
+  skippedAt              DateTime? @map("skipped_at")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+
+  profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("personal_profiles")
 }
 
 /// A user's link to an external provider (bank, accounting, productivity).

@@ -79,6 +79,12 @@ export interface PlanLimits {
   subscriptionInsightsEnabled: boolean;
   /** Workspace seats (members + pending invitations); null = custom/unlimited. */
   seats: number | null;
+  /**
+   * Owning a workspace on this plan unlocks creating a workspace of the *other*
+   * edition (Business + Personal). Lower tiers stay single-edition: company and
+   * individual money do not mix unless the account is on Enterprise or Premium.
+   */
+  crossEditionEnabled: boolean;
 }
 
 export interface Plan {
@@ -121,6 +127,7 @@ const BUSINESS_FREE: Plan = {
     netWorthEnabled: false,
     subscriptionInsightsEnabled: false,
     seats: 1,
+    crossEditionEnabled: false,
   },
   highlights: [
     "1 CSV import per month (100 rows)",
@@ -155,6 +162,7 @@ const PRO: Plan = {
     netWorthEnabled: false,
     subscriptionInsightsEnabled: false,
     seats: 1,
+    crossEditionEnabled: false,
   },
   highlights: [
     "Unlimited CSV imports (5,000 rows each)",
@@ -189,6 +197,7 @@ const BUSINESS: Plan = {
     netWorthEnabled: false,
     subscriptionInsightsEnabled: false,
     seats: 5,
+    crossEditionEnabled: false,
   },
   highlights: [
     "Everything in Pro",
@@ -223,10 +232,12 @@ const ENTERPRISE: Plan = {
     netWorthEnabled: false,
     subscriptionInsightsEnabled: false,
     seats: null,
+    crossEditionEnabled: true,
   },
   highlights: [
     "Everything in Business",
     "Unlimited usage across all features",
+    "Business + Personal workspaces on one account",
     "Custom contracts & invoicing",
     "Dedicated support",
   ],
@@ -263,6 +274,7 @@ const PERSONAL_FREE: Plan = {
     netWorthEnabled: false,
     subscriptionInsightsEnabled: false,
     seats: 1,
+    crossEditionEnabled: false,
   },
   highlights: [
     "1 bank connection",
@@ -298,6 +310,7 @@ const PLUS: Plan = {
     netWorthEnabled: true,
     subscriptionInsightsEnabled: true,
     seats: 1,
+    crossEditionEnabled: false,
   },
   highlights: [
     "Unlimited bank connections",
@@ -333,11 +346,13 @@ const PREMIUM: Plan = {
     netWorthEnabled: true,
     subscriptionInsightsEnabled: true,
     seats: 1,
+    crossEditionEnabled: true,
   },
   highlights: [
     "Everything in Plus",
     "Unlimited AI copilot messages",
     "What-if planning: model a raise, a move, a big purchase — in up to 3 scenarios you can compare",
+    "Business + Personal workspaces on one account",
     "20,000 rows per import",
   ],
 };

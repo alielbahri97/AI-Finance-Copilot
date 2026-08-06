@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Building2Icon,
   CheckIcon,
@@ -162,6 +162,41 @@ function CreateWorkspaceDialog({
   const [type, setType] = useState<WorkspaceType>("BUSINESS");
   const [name, setName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [policy, setPolicy] = useState<{
+    canCreatePersonal: boolean;
+    canCreateBusiness: boolean;
+    personalBlockedReason: string | null;
+    businessBlockedReason: string | null;
+    crossEditionUnlocked: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch("/api/workspace/creation-policy");
+        const data = await response.json().catch(() => null);
+        if (!cancelled && response.ok && data?.policy) {
+          setPolicy(data.policy);
+          if (data.policy.canCreateBusiness) setType("BUSINESS");
+          else if (data.policy.canCreatePersonal) setType("PERSONAL");
+        }
+      } catch {
+        /* keep dialog usable; API still enforces */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  const typeBlocked =
+    type === "PERSONAL" ? policy?.personalBlockedReason : policy?.businessBlockedReason;
+  const canSubmit =
+    type === "PERSONAL"
+      ? policy?.canCreatePersonal !== false
+      : policy?.canCreateBusiness !== false;
 
   async function create() {
     setIsSaving(true);
@@ -194,8 +229,8 @@ function CreateWorkspaceDialog({
         <DialogHeader>
           <DialogTitle>Create a workspace</DialogTitle>
           <DialogDescription>
-            Its type decides which edition of Ballast it runs. This cannot be changed later, so
-            pick the one that matches whose money lives in it.
+            Company and individual money stay on separate editions unless you are on Enterprise or
+            Premium. You can own only one Personal workspace.
           </DialogDescription>
         </DialogHeader>
 
@@ -205,14 +240,22 @@ function CreateWorkspaceDialog({
               const branding = EDITIONS[editionForWorkspaceType(option)];
               const Icon = TYPE_ICONS[option];
               const isSelected = type === option;
+              const blocked =
+                option === "PERSONAL"
+                  ? policy?.personalBlockedReason
+                  : policy?.businessBlockedReason;
+              const disabled = Boolean(blocked);
               return (
                 <button
                   key={option}
                   type="button"
+                  disabled={disabled}
                   onClick={() => setType(option)}
                   aria-pressed={isSelected}
+                  title={blocked ?? undefined}
                   className={cn(
                     "flex flex-col gap-1 rounded-lg border p-3 text-left transition-colors",
+                    disabled && "cursor-not-allowed opacity-50",
                     isSelected
                       ? "border-primary bg-accent/50"
                       : "hover:bg-accent/40 border-input"
@@ -223,12 +266,22 @@ function CreateWorkspaceDialog({
                     {branding.choiceLabel}
                   </span>
                   <span className="text-muted-foreground text-xs">
-                    {branding.choiceDescription}
+                    {blocked ?? branding.choiceDescription}
                   </span>
                 </button>
               );
             })}
           </div>
+
+          {typeBlocked ? (
+            <p className="text-muted-foreground text-xs">{typeBlocked}</p>
+          ) : null}
+
+          {!policy?.crossEditionUnlocked ? (
+            <p className="text-muted-foreground text-xs">
+              Need both? Upgrade to Enterprise (Business) or Premium (Personal).
+            </p>
+          ) : null}
 
           <div className="grid gap-1.5">
             <Label htmlFor="workspace-name">Name (optional)</Label>
@@ -246,7 +299,7 @@ function CreateWorkspaceDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
             Cancel
           </Button>
-          <Button onClick={() => void create()} disabled={isSaving}>
+          <Button onClick={() => void create()} disabled={isSaving || !canSubmit}>
             {isSaving && <Loader2Icon className="size-4 animate-spin" />}
             Create workspace
           </Button>

@@ -49,7 +49,7 @@ export function SignupForm() {
   // Post-confirmation destination (e.g. back to a workspace invitation).
   // Personal skips the business onboarding wizard entirely.
   const rawNext = searchParams.get("next");
-  const fallbackNext = workspaceType === "PERSONAL" ? "/dashboard" : "/onboarding";
+  const fallbackNext = "/onboarding";
   const next = rawNext && rawNext.startsWith("/") ? rawNext : fallbackNext;
 
   const form = useForm<SignupValues>({

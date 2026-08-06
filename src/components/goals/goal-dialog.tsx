@@ -40,12 +40,15 @@ interface FormState {
   note: string;
 }
 
-function initialForm(goal: GoalCardData | null): FormState {
+function initialForm(
+  goal: GoalCardData | null,
+  suggest?: { name?: string; targetAmount?: string; targetDate?: string } | null
+): FormState {
   if (!goal) {
     return {
-      name: "",
-      targetAmount: "",
-      targetDate: "",
+      name: suggest?.name ?? "",
+      targetAmount: suggest?.targetAmount ?? "",
+      targetDate: suggest?.targetDate ?? "",
       startingAmount: "",
       categoryId: NONE,
       bankAccountId: NONE,
@@ -70,11 +73,20 @@ interface GoalDialogProps {
   goal: GoalCardData | null;
   categories: GoalOption[];
   accounts: GoalOption[];
+  /** Prefill when opening from the personal questionnaire suggestions. */
+  suggest?: { name?: string; targetAmount?: string; targetDate?: string } | null;
 }
 
-export function GoalDialog({ open, onOpenChange, goal, categories, accounts }: GoalDialogProps) {
+export function GoalDialog({
+  open,
+  onOpenChange,
+  goal,
+  categories,
+  accounts,
+  suggest = null,
+}: GoalDialogProps) {
   const router = useRouter();
-  const [form, setForm] = useState<FormState>(() => initialForm(goal));
+  const [form, setForm] = useState<FormState>(() => initialForm(goal, suggest));
   const [isSaving, setIsSaving] = useState(false);
 
   const formValid = form.name.trim().length > 0 && Number(form.targetAmount) > 0;

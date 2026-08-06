@@ -62,6 +62,7 @@ export const SCHEMA_CHECKS: SchemaCheck[] = [
   // reads the column.
   { table: "scenarios", columns: [], migration: "0021_forecast_scenarios" },
   { table: "assumptions", columns: ["scenario_id"], migration: "0021_forecast_scenarios" },
+  { table: "personal_profiles", columns: [], migration: "0022_personal_profile" },
 ];
 
 export interface SchemaDrift {
