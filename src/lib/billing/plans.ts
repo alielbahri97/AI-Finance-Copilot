@@ -25,9 +25,9 @@ import { BRAND, DEFAULT_EDITION, type Edition } from "@/lib/branding";
 export type PlanId = "FREE" | "PRO" | "BUSINESS" | "ENTERPRISE" | "PLUS" | "PREMIUM";
 
 export interface PlanLimits {
-  /** CSV imports per calendar month; null = unlimited. */
+  /** Statement imports per calendar month; null = unlimited. */
   csvImportsPerMonth: number | null;
-  /** Max rows accepted in a single CSV import; null = unlimited (engine cap applies). */
+  /** Max rows accepted in a single statement import; null = unlimited (engine cap applies). */
   rowsPerImport: number | null;
   /** AI copilot messages per calendar month; null = unlimited. */
   aiMessagesPerMonth: number | null;
@@ -378,6 +378,9 @@ export const EDITION_CHECKOUT_PLANS: Record<Edition, readonly PlanId[]> = {
 
 export const TRIAL_DAYS = 14;
 
+/** Days of trial credit a converted referral adds to the referrer's account. */
+export const REFERRAL_REWARD_DAYS = 30;
+
 /**
  * The plan granted during the card-free signup trial: the middle tier of the
  * edition, so a trial shows off what the product does without handing over
@@ -407,6 +410,17 @@ export function trialPlan(edition: Edition = DEFAULT_EDITION): PlanId {
  */
 export function getPlan(id: PlanId, edition: Edition = DEFAULT_EDITION): Plan {
   return EDITION_PLANS[edition][id] ?? PLANS[id];
+}
+
+/**
+ * The tier a converted referral credits the referrer with. The reward is a
+ * trial extension, so it is worth whatever the card-free trial grants — which
+ * is why every surface that promises it has to read the plan from the edition
+ * rather than name one tier: Pro is a Business plan, and a Personal account
+ * cannot be given it.
+ */
+export function referralRewardPlan(edition: Edition = DEFAULT_EDITION): Plan {
+  return getPlan(trialPlan(edition), edition);
 }
 
 /** Whether a tier belongs to an edition's line-up. */

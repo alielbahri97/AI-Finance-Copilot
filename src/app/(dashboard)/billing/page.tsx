@@ -26,8 +26,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getEntitlements } from "@/lib/billing/entitlements";
-import { getPlan, planOrder, trialPlan } from "@/lib/billing/plans";
-import { getReferralStats, REFERRAL_REWARD_DAYS } from "@/lib/billing/referrals";
+import {
+  getPlan,
+  planOrder,
+  referralRewardPlan,
+  REFERRAL_REWARD_DAYS,
+} from "@/lib/billing/plans";
+import { getReferralStats } from "@/lib/billing/referrals";
 import { getStripe, isBillingConfigured } from "@/lib/billing/stripe";
 import { editionBranding } from "@/lib/branding";
 import { getAppUrl } from "@/lib/env-url";
@@ -106,7 +111,7 @@ export default async function BillingPage({
   // Only the workspace's own edition is offered: a Personal workspace has no
   // use for seats and a Business one has no use for a €4.99 single-user tier.
   const availablePlans = planOrder(edition).map((id) => getPlan(id, edition));
-  const rewardPlanName = getPlan(trialPlan(edition), edition).name;
+  const rewardPlanName = referralRewardPlan(edition).name;
   const trialDaysLeft = entitlements.trialEndsAt
     ? Math.max(
         0,
@@ -211,7 +216,7 @@ export default async function BillingPage({
                   limit: plan.limits.aiMessagesPerMonth,
                 },
                 {
-                  label: "CSV imports",
+                  label: "Statement imports",
                   used: usage.csvImports,
                   limit: plan.limits.csvImportsPerMonth,
                 },
@@ -257,6 +262,7 @@ export default async function BillingPage({
             total={referralStats.total}
             converted={referralStats.converted}
             rewardDays={REFERRAL_REWARD_DAYS}
+            rewardPlanName={rewardPlanName}
           />
         </CardContent>
       </Card>

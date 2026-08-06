@@ -48,7 +48,9 @@ predicate. `src/lib/branding.ts` holds the per-edition naming and copy.
 - **Dashboard** — current-month income/expense cards with month-over-month trends, total
   balance and savings rate, monthly cashflow chart (income/expense bars + net line),
   spending-by-category donut, largest expenses, cash-balance history (Recharts)
-- **CSV bank statement import** — drag & drop upload; automatic detection of delimiter
+- **Bank statement import (CSV, Excel, PDF, MT940)** — drag & drop upload; the format is
+  detected from the file's own bytes, then CSV/TSV, `.xlsx`/`.xls`, PDF text layers and
+  MT940/SWIFT files all funnel into one representation. Automatic detection of delimiter
   (comma/semicolon/tab/pipe), encoding (UTF-8/UTF-16/Windows-1252), US vs European number
   formats and date layouts; automatic column detection (date, description, amount or
   debit/credit pair, balance, counterparty) with a correctable mapping preview; duplicate
@@ -112,8 +114,10 @@ predicate. `src/lib/branding.ts` holds the per-edition naming and copy.
   assumptions). A workspace is only ever shown and sold the tiers of its own edition.
   Stripe Checkout for upgrades, a webhook keeping the local subscription in sync, the Stripe Billing Portal
   for payment methods/cancellation, and a `/billing` page with the current plan, usage
-  meters, plan matrix, invoice history and a referral program (share a link, earn +30 days
-  of Pro per converted referral). Every new account gets a card-free 14-day Pro trial.
+  meters, plan matrix, invoice history and a referral program (share a link, earn 30 days
+  per converted referral). Every new account gets a card-free 14-day trial of its
+  edition's middle tier (Pro for Business, Plus for Personal), which is also what the
+  referral credit extends.
   Limits are enforced server-side in the API routes (friendly 402 responses with upgrade
   hints) and reflected in the UI (disabled export buttons, locked assumptions card, copilot
   quota banner). Without Stripe keys everything still works on Free/trial.
@@ -329,7 +333,8 @@ The app uploads with the user's own session (no service key needed) and views/do
 go through short-lived signed URLs from `GET /api/invoices/[id]/document`. Upload failures
 that mean the bucket is missing return a distinct 502 message (see
 `src/lib/invoices/storage.ts` and `POST /api/invoices/upload`). `GET /api/health` reports
-`storage: "up"|"down"` for this bucket.
+`storage: "up"|"down"` for this bucket — or `"not_applicable"` when `DATABASE_URL` points
+at a non-Supabase Postgres, which cannot be asked about a Supabase catalog.
 
 ### 6. Run the app
 
@@ -526,6 +531,14 @@ curl -H "Authorization: Bearer $CRON_SECRET" "https://<app>/api/health?probe=ema
 `fromDomainVerified: false` is the mismatch behind the 403 in step 3. Email is optional, so
 none of this changes the endpoint's HTTP status — it stays informational.
 
+**5. Prove an actual delivery.** Configuration being right is not the same as mail
+arriving. `npm run verify:email -- --url https://<app>` runs both checks above and then
+triggers the notification cron, reporting `SENT` with Resend's message id — the receipt you
+can look up under *Resend → Emails* — or naming exactly which of `not_configured`,
+`domainRestricted` or a provider failure happened. Step-by-step, including how to put an
+account into a state where a digest is due:
+[DEPLOYMENT.md → Verifying notification email in production](DEPLOYMENT.md#verifying-notification-email-in-production).
+
 **How failures surface.** Every send goes through `sendEmail()` in
 `src/lib/notifications/email.ts`, which returns `sent`, `not_configured`, or `failed` (with
 the provider message, sanitized, and a `domainRestricted` flag for the case above) and logs
@@ -544,6 +557,7 @@ implying the channel works.
 | `npm run typecheck`  | TypeScript `tsc --noEmit`                |
 | `npm test`           | Run the Vitest suite once                |
 | `npm run test:watch` | Run Vitest in watch mode                 |
+| `npm run verify:email` | Prove a deployment really sends notification email (see [DEPLOYMENT.md](DEPLOYMENT.md#verifying-notification-email-in-production)) |
 | `npm run db:push`    | Push the Prisma schema to the database   |
 | `npm run db:migrate` | Create/apply a development migration     |
 | `npm run db:deploy`  | Apply migrations in production           |
@@ -696,8 +710,8 @@ recorded per workspace (`AuditLog`) and visible to owners/admins in *Settings �
   exports, billing sessions, manual syncs) returning 429 + `Retry-After`. In-memory by
   default (single instance); set the Upstash env vars to share limits across instances.
   Login/signup attempts hit Supabase Auth directly, which applies its own rate limits.
-- **Upload limits** — CSV imports are capped at 8 MB / 20k rows, invoice documents at
-  10 MB, with plan-based row caps on top.
+- **Upload limits** — statement imports are capped at 20 MB / 10k rows and restricted to the
+  accepted extensions server-side, invoice documents at 10 MB, with plan-based row caps on top.
 - **Webhooks** — Stripe events are verified with `constructEventAsync` against
   `STRIPE_WEBHOOK_SECRET`; cron endpoints require the `CRON_SECRET` bearer token.
 - **Secrets at rest** — integration OAuth tokens are AES-256-GCM encrypted with
@@ -719,7 +733,11 @@ recorded per workspace (`AuditLog`) and visible to owners/admins in *Settings �
 - `GET /api/health` checks database connectivity, that the schema matches the deployed code,
   and the private `invoices` Storage bucket (`storage.buckets`). It returns
   `200 {status:"ok",db:"up",schema:"ok",storage:"up"}`, or `503` with `db` / `storage` set to
-  `"down"` — point your uptime monitor or container healthcheck at it.
+  `"down"` — point your uptime monitor or container healthcheck at it. Against a
+  non-Supabase Postgres (the Docker Compose path) the bucket cannot be checked from SQL at
+  all, since `storage.buckets` is a Supabase catalog: `storage` then reads
+  `"not_applicable"` with a `storageNote`, and the status stays `ok`. Only `"down"` means
+  the bucket is genuinely missing or unreadable.
 - **AI configuration** — the same response carries an `ai` section listing, per provider,
   whether a key is configured and which text/vision model ids requests will use, plus the
   resolved default provider. API keys are never included, only a boolean. Add
@@ -840,10 +858,12 @@ via PWABuilder or an optional WebView2 host, see **[WINDOWS_APP.md](WINDOWS_APP.
   changes are reflected immediately. The engine is covered by `tests/forecast.test.ts`.
 - **Data isolation**: every query and mutation is scoped to the authenticated user id in the
   API routes; the AI copilot only ever sees the requesting user's aggregated data.
-- **CSV import**: `/api/import/parse` analyzes the upload (delimiter, encoding, number/date
-  formats, column roles) and returns a suggested mapping with a preview; the client lets the
-  user correct the mapping (re-normalizing samples locally with the same shared `lib/csv`
-  code) and then re-uploads the file with the confirmed mapping to `/api/import/commit`.
+- **Statement import**: `/api/import/parse` detects the format (`lib/import/format.ts`), runs
+  the matching parser — delimited text, Excel via `exceljs`, PDF text layers via `unpdf`, or
+  the in-house MT940 reader — and analyzes the resulting grid (encoding, number/date formats,
+  column roles), returning a suggested mapping with a preview; the client lets the user correct
+  the mapping (re-normalizing samples locally with the same shared `lib/csv` code) and then
+  re-uploads the file with the confirmed mapping to `/api/import/commit`.
   Each imported row gets a SHA-256 fingerprint (date, type, amount, description,
   counterparty, in-file occurrence index) that is unique per user, so re-importing the same
   statement skips duplicates. Deleting an `ImportBatch` cascades to its transactions, which
@@ -902,14 +922,17 @@ via PWABuilder or an optional WebView2 host, see **[WINDOWS_APP.md](WINDOWS_APP.
   via upsert. The Stripe integration uses the official `stripe` package: Checkout Sessions
   carry the `userId` in metadata, and `/api/webhooks/stripe` verifies signatures and syncs
   plan, status, period end and cancel-at-period-end onto the local `Subscription` row
-  (price id → plan via the env-configured price ids). The 14-day Pro trial is purely local
+  (price id → plan via the env-configured price ids). The 14-day trial is purely local
   (`trialEndsAt` set when the subscription row is first created) so it needs no card and no
   Stripe account.
 - **Referrals**: each profile gets a collision-safe 8-character code on first billing-page
   visit. `/signup?ref=CODE` stores the code in Supabase signup metadata; the first
   authenticated visit creates the `Referral` row (self-referrals ignored). When the referred
   user completes a paid checkout, the webhook marks the referral converted exactly once and
-  extends the referrer's `trialEndsAt` by 30 days.
+  extends the referrer's `trialEndsAt` by 30 days. Because it is a trial extension, the
+  credit is worth the tier that workspace's edition trials — `referralRewardPlan()` in
+  `plans.ts` is what every surface promising the reward reads, so the copy can never name a
+  plan the account cannot have.
 - **Admin & analytics**: `trackEvent()` writes fire-and-forget rows to `analytics_events`
   (signup, import, ai_message, export, upgrade, invoice_upload, referral events). `/admin`
   (server-guarded by `profiles.is_admin`, plus admin-only `GET /api/admin/stats` and

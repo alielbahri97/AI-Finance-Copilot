@@ -503,7 +503,8 @@ model Subscription {
   stripePriceId        String?            @map("stripe_price_id")
   currentPeriodEnd     DateTime?          @map("current_period_end")
   cancelAtPeriodEnd    Boolean            @default(false) @map("cancel_at_period_end")
-  /// Local card-free Pro trial: 14 days on signup, extended by referral rewards.
+  /// Local card-free trial of the edition's middle tier: 14 days on signup,
+  /// extended by referral rewards.
   trialEndsAt          DateTime?          @map("trial_ends_at")
   createdAt            DateTime           @default(now()) @map("created_at")
   updatedAt            DateTime           @updatedAt @map("updated_at")
@@ -537,8 +538,8 @@ model UsageRecord {
   @@map("usage_records")
 }
 
-/// One row per referred signup. Converted referrals grant the referrer
-/// +1 month of Pro credit (applied as a trial extension).
+/// One row per referred signup. Converted referrals grant the referrer 30 more
+/// days of trial credit, worth whatever tier their edition trials.
 model Referral {
   id             String         @id @default(cuid())
   referrerId     String         @map("referrer_id") @db.Uuid

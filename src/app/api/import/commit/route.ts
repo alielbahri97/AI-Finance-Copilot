@@ -14,23 +14,27 @@ import { loadRuleMatchers, matchCategory } from "@/lib/categories";
 import { detectStatementCurrency } from "@/lib/csv/detect";
 import { fingerprintRows } from "@/lib/csv/fingerprint";
 import { normalizeRows } from "@/lib/csv/normalize";
-import { parseCsv } from "@/lib/csv/parse";
+import { parseStatement } from "@/lib/import/parse-statement";
+import { StatementParseError } from "@/lib/import/types";
 import { evaluateLargeTransactions } from "@/lib/notifications/alerts";
 import { prisma } from "@/lib/prisma";
 import { requireWorkspace } from "@/lib/workspace/context";
 import {
   columnMappingSchema,
+  MAX_IMPORT_FILE_MB,
   MAX_IMPORT_FILE_BYTES,
   MAX_IMPORT_ROWS,
 } from "@/lib/validations/import";
 import { SUPPORTED_CURRENCIES } from "@/lib/validations/profile";
 
+// Excel and PDF parsing need Node APIs, so this route must not run on edge.
+export const runtime = "nodejs";
 export const maxDuration = 60;
 
 /**
- * Imports a CSV using the confirmed column mapping. Rows already imported in
- * a previous batch (same fingerprint) are skipped; the whole import is stored
- * as an ImportBatch so it can be undone in one click.
+ * Imports a statement using the confirmed column mapping. Rows already
+ * imported in a previous batch (same fingerprint) are skipped; the whole
+ * import is stored as an ImportBatch so it can be undone in one click.
  */
 export async function POST(request: Request) {
   try {
@@ -49,7 +53,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing file or mapping" }, { status: 400 });
     }
     if (file.size > MAX_IMPORT_FILE_BYTES) {
-      return NextResponse.json({ error: "File is too large (max 8 MB)" }, { status: 413 });
+      return NextResponse.json(
+        { error: `File is too large (max ${MAX_IMPORT_FILE_MB} MB)` },
+        { status: 413 }
+      );
     }
 
     let mappingJson: unknown;
@@ -72,26 +79,31 @@ export async function POST(request: Request) {
     const quota = checkLimit(entitlements, "csvImports", entitlements.plan.limits.csvImportsPerMonth);
     if (!quota.allowed) {
       return NextResponse.json(
-        limitError("CSV import", entitlements.planId, entitlements.edition),
+        limitError("statement import", entitlements.planId, entitlements.edition),
         { status: 402 }
       );
     }
 
-    const csv = parseCsv(await file.arrayBuffer());
-    if (csv.rows.length === 0) {
-      return NextResponse.json({ error: "No data rows found" }, { status: 422 });
+    let statement;
+    try {
+      statement = await parseStatement(file.name, await file.arrayBuffer());
+    } catch (error) {
+      if (error instanceof StatementParseError) {
+        return NextResponse.json({ error: error.message }, { status: error.status });
+      }
+      throw error;
     }
-    if (csv.rows.length > MAX_IMPORT_ROWS) {
+    if (statement.rows.length > MAX_IMPORT_ROWS) {
       return NextResponse.json(
         { error: `Too many rows (max ${MAX_IMPORT_ROWS.toLocaleString()})` },
         { status: 413 }
       );
     }
     const rowCap = entitlements.plan.limits.rowsPerImport;
-    if (rowCap !== null && csv.rows.length > rowCap) {
+    if (rowCap !== null && statement.rows.length > rowCap) {
       return NextResponse.json(
         {
-          error: `This file has ${csv.rows.length.toLocaleString()} rows, but the ${entitlements.plan.name} plan allows ${rowCap.toLocaleString()} per import. Upgrade on the Billing page for larger imports.`,
+          error: `This file has ${statement.rows.length.toLocaleString()} rows, but the ${entitlements.plan.name} plan allows ${rowCap.toLocaleString()} per import. Upgrade on the Billing page for larger imports.`,
           code: "LIMIT_REACHED",
           feature: "rows per import",
           plan: entitlements.planId,
@@ -109,14 +121,14 @@ export async function POST(request: Request) {
       mapping.counterparty,
       mapping.currency,
     ].filter((index): index is number => index !== null);
-    if (columnIndexes.some((index) => index >= csv.columnCount)) {
+    if (columnIndexes.some((index) => index >= statement.columnCount)) {
       return NextResponse.json(
         { error: "Mapping refers to columns that do not exist in this file" },
         { status: 400 }
       );
     }
 
-    const statementCurrency = detectStatementCurrency(csv, mapping);
+    const statementCurrency = detectStatementCurrency(statement, mapping);
 
     let workingCurrency = workspace.currency;
     if (
@@ -133,7 +145,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const { ok: rows, errors } = normalizeRows(csv.rows, mapping, {
+    const { ok: rows, errors } = normalizeRows(statement.rows, mapping, {
       expectedCurrency: mapping.currency !== null ? workingCurrency : null,
     });
     if (rows.length === 0) {

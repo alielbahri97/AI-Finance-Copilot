@@ -9,7 +9,7 @@ import { sendSlackMessage } from "@/lib/integrations/providers/slack";
 import { sendTeamsMessage } from "@/lib/integrations/providers/teams";
 import { prisma } from "@/lib/prisma";
 
-import { sendEmail } from "./email";
+import { sendEmail, type EmailDeliveryResult } from "./email";
 import { sendPushToUser } from "./push";
 
 export interface NotificationEvent {
@@ -35,6 +35,16 @@ export interface DispatchTarget {
   email: string;
 }
 
+export interface DispatchResult {
+  /**
+   * What the email channel did, when it ran at all. Absent means the channel
+   * was skipped — switched off, or the event carried no rendered HTML. The
+   * cron aggregates these so an operator can tell a real send apart from a
+   * silently skipped one without reading the logs.
+   */
+  email?: EmailDeliveryResult;
+}
+
 /**
  * Fans one event out to the channels the user has enabled. The in-app
  * notification is the primary record; email and push are best-effort and
@@ -44,7 +54,9 @@ export async function dispatchNotification(
   user: DispatchTarget,
   prefs: NotificationPreference,
   event: NotificationEvent
-): Promise<void> {
+): Promise<DispatchResult> {
+  const result: DispatchResult = {};
+
   if (prefs.channelInApp) {
     await prisma.notification.create({
       data: {
@@ -58,20 +70,21 @@ export async function dispatchNotification(
   }
 
   if (prefs.channelEmail && event.emailHtml) {
-    const result = await sendEmail(
+    const email = await sendEmail(
       user.email,
       event.emailSubject ?? event.title,
       event.emailHtml,
       `notification:${event.type.toLowerCase()}`
-    ).catch((error) => {
+    ).catch((error): EmailDeliveryResult => {
       logger.error("[notifications] email channel", { error: serializeError(error) });
-      return null;
+      return { status: "failed", error: "email channel threw" };
     });
-    if (result?.status === "failed") {
+    result.email = email;
+    if (email.status === "failed") {
       logger.warn("[notifications] email channel undelivered", {
         type: event.type,
-        domainRestricted: result.domainRestricted,
-        providerError: result.error,
+        domainRestricted: email.domainRestricted,
+        providerError: email.error,
       });
     }
   }
@@ -89,6 +102,8 @@ export async function dispatchNotification(
       logger.error("[notifications] chat channel", { error: serializeError(error) })
     );
   }
+
+  return result;
 }
 
 const APP_URL = () => getAppUrl();

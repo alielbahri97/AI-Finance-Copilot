@@ -2,9 +2,10 @@
 # Multi-stage build producing a minimal Next.js standalone image.
 #
 # Corporate-network caveat: this build resolves packages from the public npm
-# registry and Prisma engines from binaries.prisma.sh. Behind a proxy/mirror,
-# copy in an .npmrc (registry + cafile) before `npm ci` and export the proxy
-# CA to the build.
+# registry. Behind a proxy/mirror, copy in an .npmrc (registry + cafile) before
+# `npm ci` and export the proxy CA to the build. Prisma engine downloads from
+# binaries.prisma.sh are not required: scripts/prisma-generate.mjs falls back to
+# a placeholder engine when they are blocked.
 
 FROM node:20-alpine AS deps
 WORKDIR /app
@@ -18,7 +19,18 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-ENV NEXT_TELEMETRY_DISABLED=1
+# Next.js inlines NEXT_PUBLIC_* at build time, so these cannot be supplied at
+# `docker run` time the way every other variable can. Without them the image
+# ships the fallback origin — notification emails would link to the wrong host
+# and the browser would have no Supabase credentials. docker-compose.yml
+# forwards them from .env.
+ARG NEXT_PUBLIC_APP_URL
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL \
+    NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL \
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
 RUN npm run build
 
 FROM node:20-alpine AS runner

@@ -13,9 +13,18 @@ interface ReferralCardProps {
   total: number;
   converted: number;
   rewardDays: number;
+  /** The tier the reward is worth in this workspace's edition. */
+  rewardPlanName: string;
 }
 
-export function ReferralCard({ code, link, total, converted, rewardDays }: ReferralCardProps) {
+export function ReferralCard({
+  code,
+  link,
+  total,
+  converted,
+  rewardDays,
+  rewardPlanName,
+}: ReferralCardProps) {
   const [copied, setCopied] = useState(false);
 
   async function copy() {
@@ -33,8 +42,10 @@ export function ReferralCard({ code, link, total, converted, rewardDays }: Refer
     <div className="flex flex-col gap-4">
       <p className="text-muted-foreground text-sm">
         Share your link — every referral that upgrades to a paid plan earns you{" "}
-        <span className="text-foreground font-medium">{rewardDays} days of Pro</span>, applied
-        automatically.
+        <span className="text-foreground font-medium">
+          {rewardDays} days of {rewardPlanName}
+        </span>
+        , applied automatically.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <Input readOnly value={link} className="max-w-md font-mono text-xs" />
@@ -57,7 +68,7 @@ export function ReferralCard({ code, link, total, converted, rewardDays }: Refer
           <p className="text-sm font-semibold tabular-nums">{converted}</p>
         </div>
         <div>
-          <p className="text-muted-foreground text-xs">Pro credit earned</p>
+          <p className="text-muted-foreground text-xs">{rewardPlanName} credit earned</p>
           <p className="text-sm font-semibold tabular-nums">{converted * rewardDays} days</p>
         </div>
       </div>

@@ -21,5 +21,7 @@ export const columnMappingSchema = z
 
 export type ColumnMappingValues = z.infer<typeof columnMappingSchema>;
 
-export const MAX_IMPORT_FILE_BYTES = 8 * 1024 * 1024; // 8 MB
+/** Excel and PDF statements are an order of magnitude heavier than CSV. */
+export const MAX_IMPORT_FILE_MB = 20;
+export const MAX_IMPORT_FILE_BYTES = MAX_IMPORT_FILE_MB * 1024 * 1024;
 export const MAX_IMPORT_ROWS = 10_000;

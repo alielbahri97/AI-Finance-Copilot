@@ -54,6 +54,35 @@ export interface GcInstitution {
 /** Documented requisition statuses (docs: Statuses and Error Code). */
 export type RequisitionStatus = "CR" | "GC" | "UA" | "RJ" | "SA" | "GA" | "LN" | "EX";
 
+/**
+ * The two-letter status code out of a requisition payload.
+ *
+ * The API returns `status` as a plain string ("LN"), but the endpoint reference
+ * types it as an object and the older Nordigen shape was
+ * `{ short, long, description }`. Normalizing both here means a shape change
+ * cannot silently turn a linked requisition into an "unknown" failure.
+ */
+export function requisitionStatusCode(status: unknown): string {
+  if (typeof status === "string") return status;
+  if (status && typeof status === "object") {
+    const record = status as { short?: unknown; long?: unknown };
+    if (typeof record.short === "string") return record.short;
+    if (typeof record.long === "string") return LONG_TO_SHORT_STATUS[record.long] ?? record.long;
+  }
+  return "";
+}
+
+const LONG_TO_SHORT_STATUS: Record<string, string> = {
+  CREATED: "CR",
+  GIVING_CONSENT: "GC",
+  UNDERGOING_AUTHENTICATION: "UA",
+  REJECTED: "RJ",
+  SELECTING_ACCOUNTS: "SA",
+  GRANTING_ACCESS: "GA",
+  LINKED: "LN",
+  EXPIRED: "EX",
+};
+
 export interface RequisitionAssessment {
   ok: boolean;
   /** "in_progress" | "rejected" | "expired" — drives the friendly message. */
@@ -207,6 +236,41 @@ export function pickBalance(balances: GcBalance[]): PickedBalance | null {
   };
 }
 
+// ------------------------------------------------------- error classification
+
+/**
+ * What an error from an account-scoped endpoint (/transactions/, /balances/)
+ * means for the caller:
+ *   - "auth":        access is gone; the user must reconnect
+ *   - "rate_limit":  the bank's daily budget is spent; retry after the reset
+ *   - "unavailable": this account cannot be read *right now*, but the others
+ *                    can and the connection is fine
+ *   - "error":       anything else, treated as a real failure
+ *
+ * Mapped from the documented messages (docs: Statuses and Error Code):
+ *   401 EUA expired / AccessExpiredError / AccountInactiveError / Invalid token
+ *   403 AccountAccessForbidden / AccountResourceUnavailable
+ *   409 Account Suspended (reconnect) | AccountProcessing (not ready yet)
+ *   429 RateLimitError
+ *   500 UnknownRequestError · 503 ServiceError / ConnectionError
+ */
+export type GcErrorKind = "auth" | "rate_limit" | "unavailable" | "error";
+
+export function classifyAccountError(status: number, summary?: string): GcErrorKind {
+  if (status === 429) return "rate_limit";
+  if (status === 401) return "auth";
+  if (status === 409) {
+    // Suspension follows ten consecutive failures and only a reconnect clears
+    // it; AccountProcessing resolves on its own within minutes.
+    return /suspend/i.test(summary ?? "") ? "auth" : "unavailable";
+  }
+  // A per-account permission gap (the user did not grant transactions on this
+  // account) must not condemn the whole connection.
+  if (status === 403) return "unavailable";
+  if (status >= 500) return "unavailable";
+  return "error";
+}
+
 // ---------------------------------------------------------------- rate limit
 
 /**
@@ -279,6 +343,26 @@ export interface ConsentState {
 
 /** Warn this many days before the end-user agreement lapses. */
 export const CONSENT_WARNING_DAYS = 14;
+
+/**
+ * Absolute consent expiry from an end-user agreement: `access_valid_for_days`
+ * counted from `accepted`.
+ *
+ * `accepted` is `""` until the user approves at the bank, and returns null for
+ * any value that will not parse — building an Invalid Date here used to throw
+ * out of the enrichment block and take `maxHistoricalDays` down with it, so the
+ * first sync silently fell back to the 90-day default.
+ */
+export function agreementConsentExpiry(
+  accepted: string | null | undefined,
+  accessValidForDays: number | null | undefined,
+  now: Date = new Date()
+): string | null {
+  if (!Number.isFinite(accessValidForDays) || (accessValidForDays ?? 0) <= 0) return null;
+  const anchor = accepted ? Date.parse(accepted) : now.getTime();
+  if (!Number.isFinite(anchor)) return null;
+  return new Date(anchor + (accessValidForDays as number) * 24 * 60 * 60 * 1000).toISOString();
+}
 
 export function consentState(
   consentExpiresAt: string | null | undefined,

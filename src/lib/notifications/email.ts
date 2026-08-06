@@ -17,6 +17,12 @@ export type EmailDeliveryStatus = "sent" | "not_configured" | "failed";
 
 export interface EmailDeliveryResult {
   status: EmailDeliveryStatus;
+  /**
+   * Resend's id for the accepted message. Only set when status is "sent", and
+   * the one piece of evidence that a send really left the building: it can be
+   * looked up in Resend's dashboard or via their API. Not a secret.
+   */
+  id?: string;
   /** Provider message, sanitized for display. Only set when status is "failed". */
   error?: string;
   /**
@@ -86,6 +92,17 @@ export function classifyEmailFailure(status: number, body: string): EmailDeliver
 }
 
 /**
+ * Reads the message id out of an accepted send. A body that does not parse
+ * costs nothing: the send was still accepted, there is just no receipt to
+ * quote back.
+ */
+async function readMessageId(response: Response): Promise<{ id?: string }> {
+  const body: unknown = await response.json().catch(() => null);
+  const id = (body as { id?: unknown } | null)?.id;
+  return typeof id === "string" && id.length > 0 ? { id } : {};
+}
+
+/**
  * Sends one email and reports what happened. Never throws: callers treat email
  * as best-effort, but they are expected to surface or log the result.
  */
@@ -132,7 +149,7 @@ export async function sendEmail(
       });
       return result;
     }
-    return { status: "sent" };
+    return { status: "sent", ...(await readMessageId(response)) };
   } catch (error) {
     const serialized = serializeError(error);
     logger.error("[email] send failed", { channel, subject, error: serialized });
@@ -297,7 +314,9 @@ export function renderCustomerReminderEmail(options: CustomerReminderEmailOption
     ${textToHtml(options.bodyText)}
     ${detailRows ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 8px;">${detailRows}</table>` : ""}`;
 
-  const reply = options.replyTo ? ` Replies go to ${escapeHtml(options.replyTo)}.` : "";
+  const reply = options.replyTo
+    ? ` Replies go to ${escapeHtml(options.replyTo)}.`
+    : "";
 
   return emailShell(options.subject, content, {
     brandLabel: options.senderName,

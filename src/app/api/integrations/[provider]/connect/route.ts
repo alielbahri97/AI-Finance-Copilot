@@ -100,9 +100,13 @@ export async function GET(
       // another bank the user started connecting in a different tab.
       response.cookies.set(GC_REQUISITION_COOKIE, `${requisitionId}.${reference}`, {
         httpOnly: true,
+        // "lax" rather than "strict": the bank sends the user back with a
+        // top-level cross-site GET, which a strict cookie would not survive.
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
-        maxAge: 900,
+        // Approving in a banking app (push notification, then a code) regularly
+        // takes longer than the 15 minutes this used to allow.
+        maxAge: 1800,
         path: "/",
       });
       return response;

@@ -129,7 +129,7 @@ const NUMBER_LIKE = /^\s*[-+(]?\s*[\d.,\s']+\s*[-)]?\s*$/;
  * Heuristic: a header row contains no dates and no numbers while at least
  * one of the following rows does.
  */
-function looksLikeHeader(first: string[], rest: string[][]): boolean {
+export function looksLikeHeader(first: string[], rest: string[][]): boolean {
   if (rest.length === 0) return true;
   const firstHasData = first.some(
     (cell) => DATE_LIKE.test(cell) || (NUMBER_LIKE.test(cell) && /\d/.test(cell))

@@ -112,14 +112,29 @@ describe("sendEmail", () => {
     );
   });
 
-  it("reports sent on a 2xx response", async () => {
+  it("reports sent on a 2xx response, with Resend's message id as the receipt", async () => {
     process.env.RESEND_API_KEY = "re_test_key";
     process.env.EMAIL_FROM = "Ballast <hi@example.com>";
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ id: "abc" }), { status: 200 })
     );
 
-    expect(await sendEmail("partner@example.com", "Hi", "<p>Hi</p>")).toEqual({ status: "sent" });
+    expect(await sendEmail("partner@example.com", "Hi", "<p>Hi</p>")).toEqual({
+      status: "sent",
+      id: "abc",
+    });
+  });
+
+  it("still reports sent when the accepted response carries no usable id", async () => {
+    process.env.RESEND_API_KEY = "re_test_key";
+    process.env.EMAIL_FROM = "Ballast <hi@example.com>";
+
+    for (const body of ["not json", JSON.stringify({}), JSON.stringify({ id: 42 })]) {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(body, { status: 200 }));
+      expect(await sendEmail("partner@example.com", "Hi", "<p>Hi</p>")).toEqual({
+        status: "sent",
+      });
+    }
   });
 
   it("reports the domain restriction when Resend refuses the recipient", async () => {

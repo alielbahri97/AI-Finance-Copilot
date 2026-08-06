@@ -2,9 +2,15 @@
 # still require a Supabase project (see README); the database can live here.
 #
 # 1. cp .env.example .env and fill in at least the Supabase + app values.
+#    NEXT_PUBLIC_* values are baked into the build (see the app service), so
+#    they must be in .env before the first build, and changing one later needs
+#    a rebuild rather than a restart.
 # 2. docker compose up -d --build
 # 3. Apply migrations once: docker compose exec app npx prisma migrate deploy
-#    (or run `npx prisma migrate deploy` from your machine against port 5432)
+#    (or run `npx prisma migrate deploy` from your machine against port 5432).
+#    Where binaries.prisma.sh is blocked, `prisma migrate` cannot download its
+#    schema engine: run `npm run db:apply` from your machine instead, with
+#    DIRECT_URL pointing at port 5432.
 
 services:
   db:
@@ -25,7 +31,14 @@ services:
       retries: 10
 
   app:
-    build: .
+    build:
+      context: .
+      # Compose reads these from ./.env for interpolation. They are inlined by
+      # `next build`, so changing them needs `up -d --build`, not a restart.
+      args:
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?set it in .env}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?set it in .env}
     restart: unless-stopped
     ports:
       - "3000:3000"

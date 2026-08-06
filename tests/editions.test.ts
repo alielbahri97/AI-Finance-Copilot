@@ -13,6 +13,8 @@ import {
   planBelongsToEdition,
   planFromPriceId,
   planOrder,
+  referralRewardPlan,
+  REFERRAL_REWARD_DAYS,
   trialPlan,
   type PlanId,
 } from "@/lib/billing/plans";
@@ -400,6 +402,29 @@ describe("plan resolution per edition", () => {
     const trialing = subscription({ trialEndsAt: new Date("2026-08-05T00:00:00Z") });
     expect(resolvePlanId(trialing, "business", NOW)).toEqual({ planId: "PRO", isTrial: true });
     expect(resolvePlanId(trialing, "personal", NOW)).toEqual({ planId: "PLUS", isTrial: true });
+  });
+
+  /**
+   * The referral reward is a `trialEndsAt` extension, so it can only ever be
+   * worth the tier that edition trials. The billing page and the referral card
+   * promise it in words, and both have to read it from here: "30 days of Pro"
+   * was hardcoded copy that named a Business plan to Personal accounts.
+   */
+  it("credits a referral with a tier the edition actually sells", () => {
+    expect(REFERRAL_REWARD_DAYS).toBe(30);
+    for (const edition of ["business", "personal"] as const) {
+      const reward = referralRewardPlan(edition);
+      expect(reward.id).toBe(trialPlan(edition));
+      expect(reward.edition).toBe(edition);
+      expect(planBelongsToEdition(reward.id, edition)).toBe(true);
+      expect(planOrder(edition)).toContain(reward.id);
+    }
+  });
+
+  it("never promises a personal account the Business Pro plan", () => {
+    expect(referralRewardPlan("personal").name).toBe("Plus");
+    expect(referralRewardPlan("business").name).toBe("Pro");
+    expect(planOrder("personal")).not.toContain("PRO");
   });
 
   it("falls back to Free in both editions once the trial has lapsed", () => {

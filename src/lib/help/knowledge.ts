@@ -3,10 +3,14 @@ import {
   formatPlanPrice,
   getPlan,
   planOrder,
+  referralRewardPlan,
+  REFERRAL_REWARD_DAYS,
+  trialPlan,
   type Plan,
   type PlanLimits,
 } from "@/lib/billing/plans";
 import { BRAND, DEFAULT_EDITION, editionBranding, type Edition } from "@/lib/branding";
+import { MAX_IMPORT_FILE_MB } from "@/lib/validations/import";
 
 /**
  * The help agent's knowledge base: concise how-to topics written from the
@@ -75,8 +79,8 @@ function planLine(plan: Plan, edition: Edition): string {
 
   parts.push(
     limits.csvImportsPerMonth === null
-      ? "unlimited CSV imports"
-      : `${limits.csvImportsPerMonth} CSV import${limits.csvImportsPerMonth === 1 ? "" : "s"}/month`
+      ? "unlimited statement imports"
+      : `${limits.csvImportsPerMonth} statement import${limits.csvImportsPerMonth === 1 ? "" : "s"}/month`
   );
   parts.push(
     limits.aiMessagesPerMonth === null
@@ -114,7 +118,8 @@ function billingContent(edition: Edition): string {
   const lines = planOrder(edition)
     .map((id) => planLine(getPlan(id, edition), edition))
     .join("\n");
-  const trialName = edition === "personal" ? "Plus" : "Pro";
+  const trialName = getPlan(trialPlan(edition), edition).name;
+  const rewardName = referralRewardPlan(edition).name;
   const seatNote =
     edition === "personal"
       ? "- A personal workspace is just you, so there is nothing to share and nobody to add."
@@ -131,7 +136,7 @@ Key things to know:
 - To change or cancel a paid plan: use **Manage billing** on the same page (opens the Stripe billing portal with invoices and payment methods).
 - Usage meters on the Billing page show how much of your monthly quota you've used.
 ${seatNote}
-- **Referrals**: your personal referral link is on the Billing page — each friend who signs up and converts earns you +1 month of credit.
+- **Referrals**: your personal referral link is on the Billing page — each friend who signs up and upgrades to a paid plan earns you ${REFERRAL_REWARD_DAYS} days of ${rewardName}, applied automatically.
 - Help-agent messages (this chat) never count against your AI message quota.`;
 }
 
@@ -252,13 +257,13 @@ function importContent(edition: Edition): string {
   const freeLimit = free.limits.csvImportsPerMonth;
   const freeLine =
     freeLimit === null
-      ? "- CSV imports are unlimited on every plan."
-      : `- On the Free plan you get ${freeLimit} CSV import${freeLimit === 1 ? "" : "s"} per month (see [Billing](/billing)); paid plans are unlimited.`;
+      ? "- Statement imports are unlimited on every plan."
+      : `- On the Free plan you get ${freeLimit} statement import${freeLimit === 1 ? "" : "s"} per month (see [Billing](/billing)); paid plans are unlimited.`;
 
   return `To import a bank statement, open the [Import](/import) page (sidebar → Import):
 
-1. Drag your CSV file onto the upload area (or click to browse).
-2. The app auto-detects the delimiter (comma/semicolon/tab), encoding, and US/European number and date formats.
+1. Drag your file onto the upload area (or click to browse). **CSV/TSV, Excel (.xlsx/.xls), PDF and MT940 (.mt940/.940/.sta)** statements are all accepted, up to ${MAX_IMPORT_FILE_MB} MB.
+2. The format is detected from the file itself. For text exports the app auto-detects the delimiter (comma/semicolon/tab), encoding, and US/European number and date formats.
 3. Review the **column mapping preview**: check that date, description and amount (or debit/credit) columns were detected correctly, and fix any column with the dropdowns.
 4. Click to commit the import. Duplicates of transactions you already have are skipped automatically.
 5. New transactions are auto-categorized by your category rules; anything unmatched stays uncategorized for you to fill in.
@@ -266,7 +271,8 @@ function importContent(edition: Edition): string {
 Good to know:
 - Every import is tracked as a batch — the **import history** list on the Import page has an **Undo** button per batch that removes exactly those transactions.
 ${freeLine}
-- If a file won't parse, check it's a real CSV/TSV (not XLSX) — exporting as "CSV" from your bank or Excel usually fixes it.`;
+- PDF statements are read from the printed layout, so they are best-effort: always check the preview before importing. A scanned or photographed PDF has no text to read and will be rejected.
+- Legacy Excel 97-2003 workbooks and password-protected files cannot be opened — re-save them as .xlsx or CSV first.`;
 }
 
 function integrationsContent(edition: Edition): string {
@@ -300,10 +306,11 @@ const SHARED_AND_BUSINESS_TOPICS = (edition: Edition): EditionTopic[] => [
   },
   {
     id: "csv-import",
-    title: "Importing a CSV bank statement",
+    title: "Importing a bank statement (CSV, Excel, PDF, MT940)",
     keywords: [
-      "csv", "import", "upload", "statement", "file", "excel", "bank statement",
-      "mapping", "columns", "delimiter", "undo", "duplicate",
+      "csv", "import", "upload", "statement", "file", "excel", "xls", "xlsx",
+      "pdf", "mt940", "940", "sta", "bank statement", "mapping", "columns",
+      "delimiter", "undo", "duplicate",
     ],
     content: importContent(edition),
   },

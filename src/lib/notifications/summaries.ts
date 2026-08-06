@@ -7,7 +7,7 @@ import { BRAND } from "@/lib/branding";
 import { buildForecast } from "@/lib/finance/data";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, localeForCurrency } from "@/lib/utils";
 
 export type SummaryKind = "daily" | "weekly" | "monthly";
 
@@ -36,14 +36,30 @@ interface SummaryProfile {
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**
+ * How long the AI gets to write one digest body before the deterministic one
+ * is used instead.
+ *
+ * The notification cron writes a digest for every user inside a single
+ * invocation with a hard 300s ceiling (see `maxDuration` in
+ * src/app/api/cron/notifications/route.ts), so an unbounded call here does not
+ * merely delay one digest — it spends the budget of every user still queued
+ * behind it, who then silently receive nothing at all. This sits well above a
+ * healthy provider's latency for a reply this short, so reaching it means
+ * something is actually wrong and the deterministic body is the better answer.
+ */
+export const SUMMARY_AI_TIMEOUT_MS = 8_000;
+
+/**
  * Builds an AI-written digest of the workspace's finances for the period.
  * Falls back to a deterministic text summary when no AI provider is
- * configured or the call fails — a digest is always produced.
+ * configured, the call fails, or the AI does not answer within
+ * {@link SUMMARY_AI_TIMEOUT_MS} — a digest is always produced.
  */
 export async function generateSummary(
   workspaceId: string,
   profile: SummaryProfile,
-  kind: SummaryKind
+  kind: SummaryKind,
+  options: { timeoutMs?: number } = {}
 ): Promise<SummaryDigest> {
   const config = KIND_CONFIG[kind];
   const now = new Date();
@@ -65,6 +81,8 @@ export async function generateSummary(
   ]);
 
   const currency = profile.currency;
+  const locale = localeForCurrency(currency);
+  const money = (value: number) => formatCurrency(value, currency, locale);
   let income = 0;
   let expenses = 0;
   for (const row of rows) {
@@ -78,12 +96,12 @@ export async function generateSummary(
     .slice(0, 3)
     .map(
       (row) =>
-        `${row.counterparty || row.description} (${row.category?.name ?? "Uncategorized"}): ${formatCurrency(Number(row.amount), currency)}`
+        `${row.counterparty || row.description} (${row.category?.name ?? "Uncategorized"}): ${money(Number(row.amount))}`
     );
 
   const upcomingBills = forecast.upcomingBills.slice(0, 5);
   const billsText = upcomingBills
-    .map((bill) => `${bill.label}: ${formatCurrency(bill.amount, currency)} due ${bill.dueDate}`)
+    .map((bill) => `${bill.label}: ${money(bill.amount)} due ${bill.dueDate}`)
     .join("; ");
 
   const runwayText =
@@ -92,28 +110,36 @@ export async function generateSummary(
       : `${Math.round(forecast.metrics.runwayMonths * 10) / 10} months of runway`;
 
   const stats = [
-    { label: "Income", value: formatCurrency(income, currency) },
-    { label: "Expenses", value: formatCurrency(expenses, currency) },
-    { label: "Net", value: formatCurrency(net, currency) },
-    { label: "Balance", value: formatCurrency(forecast.currentBalance, currency) },
+    { label: "Income", value: money(income) },
+    { label: "Expenses", value: money(expenses) },
+    { label: "Net", value: money(net) },
+    { label: "Balance", value: money(forecast.currentBalance) },
   ];
 
   const title = `Your ${kind} financial summary`;
   const periodLabel = `Covering ${config.label} · ${now.toISOString().slice(0, 10)}`;
 
   const body =
-    (await generateAiBody(workspaceId, profile, kind, config.label, {
-      transactionCount: rows.length,
-      income,
-      expenses,
-      net,
-      largest,
-      billsText,
-      runwayText,
-      projected30d: forecast.metrics.projectedBalance30d,
-      currentBalance: forecast.currentBalance,
-      currency,
-    })) ??
+    (await generateAiBody(
+      workspaceId,
+      profile,
+      kind,
+      config.label,
+      {
+        transactionCount: rows.length,
+        income,
+        expenses,
+        net,
+        largest,
+        billsText,
+        runwayText,
+        projected30d: forecast.metrics.projectedBalance30d,
+        currentBalance: forecast.currentBalance,
+        currency,
+        locale,
+      },
+      options
+    )) ??
     buildFallbackBody(config.label, {
       transactionCount: rows.length,
       income,
@@ -124,6 +150,7 @@ export async function generateSummary(
       runwayText,
       projected30d: forecast.metrics.projectedBalance30d,
       currency,
+      locale,
     });
 
   return { type: config.type, title, periodLabel, body, stats };
@@ -140,6 +167,7 @@ interface SummaryFacts {
   projected30d: number;
   currentBalance?: number;
   currency: string;
+  locale: string;
 }
 
 async function generateAiBody(
@@ -147,19 +175,21 @@ async function generateAiBody(
   profile: SummaryProfile,
   kind: SummaryKind,
   windowLabel: string,
-  facts: SummaryFacts
+  facts: SummaryFacts,
+  options: { timeoutMs?: number } = {}
 ): Promise<string | null> {
   try {
     const snapshot = await buildFinancialSnapshot(workspaceId, profile.currency);
     const client = getAiClient(providerFromProfile(profile.aiProvider));
 
+    const money = (value: number) => formatCurrency(value, facts.currency, facts.locale);
     const activity = [
       `Window: ${windowLabel}`,
       `Transactions recorded: ${facts.transactionCount}`,
-      `Income: ${formatCurrency(facts.income, facts.currency)}, expenses: ${formatCurrency(facts.expenses, facts.currency)}, net: ${formatCurrency(facts.net, facts.currency)}`,
+      `Income: ${money(facts.income)}, expenses: ${money(facts.expenses)}, net: ${money(facts.net)}`,
       facts.largest.length > 0 ? `Largest expenses: ${facts.largest.join("; ")}` : "",
       facts.billsText ? `Upcoming bills: ${facts.billsText}` : "No upcoming bills detected.",
-      `Forecast: ${facts.runwayText}; projected balance in 30 days ${formatCurrency(facts.projected30d, facts.currency)}.`,
+      `Forecast: ${facts.runwayText}; projected balance in 30 days ${money(facts.projected30d)}.`,
     ]
       .filter(Boolean)
       .join("\n");
@@ -179,7 +209,10 @@ async function generateAiBody(
           content: `FULL FINANCIAL SNAPSHOT:\n${renderSnapshot(snapshot)}\n\nTHIS PERIOD'S ACTIVITY:\n${activity}`,
         },
       ],
-      { maxTokens: 500 }
+      {
+        maxTokens: 500,
+        signal: AbortSignal.timeout(options.timeoutMs ?? SUMMARY_AI_TIMEOUT_MS),
+      }
     );
 
     const trimmed = text.trim();
@@ -187,6 +220,7 @@ async function generateAiBody(
   } catch (error) {
     logger.info("AI summary unavailable, using deterministic fallback", {
       detail: error instanceof Error ? error.message : String(error),
+      timedOut: error instanceof Error && error.name === "TimeoutError",
     });
     return null;
   }
@@ -195,7 +229,7 @@ async function generateAiBody(
 /** Deterministic digest used when no AI provider is configured. */
 function buildFallbackBody(windowLabel: string, facts: SummaryFacts): string {
   const parts: string[] = [];
-  const fmt = (value: number) => formatCurrency(value, facts.currency);
+  const fmt = (value: number) => formatCurrency(value, facts.currency, facts.locale);
 
   if (facts.transactionCount === 0) {
     parts.push(`No transactions were recorded in ${windowLabel}.`);

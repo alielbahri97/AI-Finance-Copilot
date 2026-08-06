@@ -63,7 +63,11 @@ export async function GET(
       if (!pending) {
         return finish("The connection session expired. Try again.");
       }
-      const [requisitionId, reference] = pending.split(".");
+      // "<requisitionId>.<reference>" — split on the first separator only, so a
+      // reference that ever contains a dot cannot truncate into a mismatch.
+      const separator = pending.indexOf(".");
+      const requisitionId = separator === -1 ? pending : pending.slice(0, separator);
+      const reference = separator === -1 ? "" : pending.slice(separator + 1);
       if (!requisitionId) {
         return finish("The connection session expired. Try again.");
       }
@@ -93,11 +97,12 @@ export async function GET(
       });
       await recordBankAccounts(
         connection.id,
+        // No currency here: account metadata does not carry one, and passing
+        // null would wipe what an earlier balance snapshot learned.
         finalized.accountDetails.map((account) => ({
           externalAccountId: account.id,
           name: account.name,
           mask: account.mask,
-          currency: account.currency,
         }))
       );
       await recordAudit(ctx.workspace.id, user.id, "integration.connected", {

@@ -5,14 +5,17 @@ import { logger, serializeError } from "@/lib/logger";
 import { recordBankAccounts, type BankAccountSnapshot } from "../bank-accounts";
 import { importBankTransactions, type BankTransaction } from "../bank-import";
 import {
+  agreementConsentExpiry,
   agreementFor,
   assessRequisition,
+  classifyAccountError,
   computeDateFrom,
   consentState,
   isAccountRateLimited,
   mapBookedTransactions,
   pickBalance,
   rateLimitRetryAt,
+  requisitionStatusCode,
   type GcBalance,
   type GcInstitution,
   type GcTransaction,
@@ -25,17 +28,19 @@ import type { ProviderHooks, SyncContext, SyncStats } from "./types";
  * GoCardless Bank Account Data (ex-Nordigen). No per-user OAuth tokens:
  * API access tokens are minted from the secret id/key, and the user approves
  * a *requisition* (scoped by an end-user agreement) at their bank. We store
- * the requisition + account ids + consent expiry in connection metadata and
- * fetch a fresh API token on every sync.
+ * the requisition + account ids + consent expiry in connection metadata; the
+ * API token itself is workspace-independent and cached per server instance.
  *
  * Endpoints per https://bankaccountdata.gocardless.com/api/v2 docs:
- *   POST /token/new/                          mint access token
+ *   POST /token/new/                          mint the JWT pair
+ *   POST /token/refresh/                      new access token from the refresh
  *   GET  /institutions/?country=XX            list banks
  *   GET  /institutions/{id}/                  bank capabilities
  *   POST /agreements/enduser/                 consent scope + duration
+ *   GET  /agreements/enduser/{id}/            acceptance date + agreed window
  *   POST /requisitions/                       start the link flow
  *   GET  /requisitions/{id}/                  status + linked accounts
- *   GET  /accounts/{id}/                      account metadata (iban, currency)
+ *   GET  /accounts/{id}/                      account metadata (iban, status)
  *   GET  /accounts/{id}/transactions/         booked+pending, date_from/date_to
  *   GET  /accounts/{id}/balances/             Berlin Group balance list
  */
@@ -43,6 +48,12 @@ import type { ProviderHooks, SyncContext, SyncStats } from "./types";
 const BASE = "https://bankaccountdata.gocardless.com/api/v2";
 
 export const SANDBOX_INSTITUTION_ID = "SANDBOXFINANCE_SFIN0000";
+
+/** Documented token lifetimes, used when the response omits them. */
+const ACCESS_TTL_SECONDS = 86_400;
+const REFRESH_TTL_SECONDS = 2_592_000;
+/** Renew this long before a token actually expires. */
+const TOKEN_MARGIN_MS = 60 * 1000;
 
 /** Thrown on 429s; carries the reset time from the rate-limit headers. */
 export class GcRateLimitError extends IntegrationError {
@@ -54,32 +65,130 @@ export class GcRateLimitError extends IntegrationError {
   }
 }
 
+/**
+ * Thrown when one account cannot be read although the connection itself is
+ * healthy: AccountProcessing, a per-account permission gap, or a transient
+ * institution error. The sync skips that account and keeps the others.
+ */
+export class GcAccountUnavailableError extends IntegrationError {}
+
+/**
+ * The current JWT pair, cached per server instance.
+ *
+ * /token/new/ returns an access token good for 24h plus a refresh token good
+ * for 30 days, and the docs direct clients to exchange the refresh token at
+ * /token/refresh/ instead of returning to the user secrets. Minting a fresh
+ * pair for every bank list and every sync worked, but spent general
+ * rate-limit budget on a token we already held.
+ */
+let tokenCache: {
+  secretId: string;
+  access: string;
+  accessExpiresAt: number;
+  refresh: string;
+  refreshExpiresAt: number;
+} | null = null;
+
+interface GcTokenPair {
+  access?: string;
+  access_expires?: number;
+  refresh?: string;
+  refresh_expires?: number;
+}
+
+async function tokenRequest(path: string, body: Record<string, string>): Promise<GcTokenPair> {
+  const response = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const { summary, detail } = await errorBody(response);
+    // Both failure modes here are server setup mistakes rather than anything
+    // the end user did, so they are named instead of shown as a bare status.
+    const hint =
+      response.status === 401
+        ? " — check GOCARDLESS_SECRET_ID and GOCARDLESS_SECRET_KEY"
+        : response.status === 403
+          ? " — this server's IP address is not in the user secret's allow-list"
+          : "";
+    throw new IntegrationError(
+      `GoCardless ${path} failed: HTTP ${response.status}${hint}${describe(summary, detail)}`
+    );
+  }
+  return (await response.json()) as GcTokenPair;
+}
+
 async function apiToken(): Promise<string> {
   const secretId = process.env.GOCARDLESS_SECRET_ID;
   const secretKey = process.env.GOCARDLESS_SECRET_KEY;
   if (!secretId || !secretKey) {
     throw new IntegrationError("GoCardless is not configured");
   }
-  const response = await fetch(`${BASE}/token/new/`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ secret_id: secretId, secret_key: secretKey }),
-  });
-  if (!response.ok) {
-    throw new IntegrationError(`GoCardless token request failed: HTTP ${response.status}`);
+
+  const now = Date.now();
+  // Rotating the secrets must not keep serving tokens minted from the old ones.
+  if (tokenCache && tokenCache.secretId !== secretId) tokenCache = null;
+  if (tokenCache && tokenCache.accessExpiresAt - TOKEN_MARGIN_MS > now) {
+    return tokenCache.access;
   }
-  const body = (await response.json()) as { access: string };
-  return body.access;
+
+  if (tokenCache && tokenCache.refresh && tokenCache.refreshExpiresAt - TOKEN_MARGIN_MS > now) {
+    try {
+      const refreshed = await tokenRequest("/token/refresh/", { refresh: tokenCache.refresh });
+      if (refreshed.access) {
+        tokenCache = {
+          ...tokenCache,
+          access: refreshed.access,
+          accessExpiresAt: now + (refreshed.access_expires ?? ACCESS_TTL_SECONDS) * 1000,
+        };
+        return refreshed.access;
+      }
+    } catch (error) {
+      logger.warn("[integrations] gocardless token refresh failed; minting a new pair", {
+        error: serializeError(error),
+      });
+    }
+    tokenCache = null;
+  }
+
+  const minted = await tokenRequest("/token/new/", {
+    secret_id: secretId,
+    secret_key: secretKey,
+  });
+  if (!minted.access) {
+    throw new IntegrationError("GoCardless token response contained no access token");
+  }
+  tokenCache = {
+    secretId,
+    access: minted.access,
+    accessExpiresAt: now + (minted.access_expires ?? ACCESS_TTL_SECONDS) * 1000,
+    refresh: minted.refresh ?? "",
+    refreshExpiresAt: minted.refresh
+      ? now + (minted.refresh_expires ?? REFRESH_TTL_SECONDS) * 1000
+      : 0,
+  };
+  return minted.access;
 }
 
 /** Error body shape documented under "Statuses and Error Code". */
-async function errorDetail(response: Response): Promise<string> {
+async function errorBody(response: Response): Promise<{ summary: string; detail: string }> {
   try {
     const body = (await response.json()) as { summary?: string; detail?: string };
-    return body.detail || body.summary || "";
+    return { summary: body.summary ?? "", detail: body.detail ?? "" };
   } catch {
-    return "";
+    return { summary: "", detail: "" };
   }
+}
+
+function describe(summary: string, detail: string): string {
+  const text = [summary, detail].filter(Boolean).join(" — ");
+  return text ? ` — ${text}` : "";
+}
+
+/** Only /accounts/... carries the documented per-account error semantics. */
+function isAccountPath(path: string): boolean {
+  return path.startsWith("/accounts/");
 }
 
 async function gcFetch<T>(path: string, token: string, init?: RequestInit): Promise<T> {
@@ -92,29 +201,42 @@ async function gcFetch<T>(path: string, token: string, init?: RequestInit): Prom
       ...(init?.headers ?? {}),
     },
   });
-  if (response.status === 401 || response.status === 403) {
-    throw new IntegrationAuthError(`GoCardless auth failed on ${path}`);
+  if (response.ok) {
+    return (await response.json()) as T;
   }
-  if (response.status === 429) {
+
+  const { summary, detail } = await errorBody(response);
+  const kind = isAccountPath(path)
+    ? classifyAccountError(response.status, summary)
+    : response.status === 429
+      ? "rate_limit"
+      : response.status === 401 || response.status === 403
+        ? "auth"
+        : "error";
+
+  if (kind === "rate_limit") {
     const retryAt = rateLimitRetryAt((name) => response.headers.get(name));
     throw new GcRateLimitError(
       `GoCardless rate limit reached on ${path}; retry after ${retryAt.toISOString()}`,
       retryAt
     );
   }
-  if (response.status === 409) {
-    // AccountProcessing: data not ready yet; the next sync will pick it up.
-    throw new IntegrationError(
-      "The bank is still preparing this account's data. Try again in a few minutes."
+  if (kind === "auth") {
+    // The cached token may simply have gone stale; drop it so the next call
+    // mints a fresh one instead of repeating a doomed request.
+    tokenCache = null;
+    throw new IntegrationAuthError(`GoCardless auth failed on ${path}${describe(summary, detail)}`);
+  }
+  if (kind === "unavailable") {
+    throw new GcAccountUnavailableError(
+      /processing/i.test(`${summary} ${detail}`)
+        ? "The bank is still preparing this account's data — the next sync will pick it up."
+        : `The bank could not provide this account's data${describe(summary, detail)}`
     );
   }
-  if (!response.ok) {
-    const detail = await errorDetail(response);
-    throw new IntegrationError(
-      `GoCardless ${path} failed: HTTP ${response.status}${detail ? ` — ${detail}` : ""}`
-    );
-  }
-  return (await response.json()) as T;
+  throw new IntegrationError(
+    `GoCardless ${path} failed: HTTP ${response.status}${describe(summary, detail)}`
+  );
 }
 
 // ------------------------------------------------------------- institutions
@@ -140,9 +262,11 @@ export async function listInstitutions(country: string): Promise<InstitutionOpti
     logo: institution.logo ?? null,
     historyDays: Number(institution.transaction_total_days) || null,
   }));
-  // Surface the sandbox bank in the picker when the server is set up for it.
+  // The sandbox bank is not part of any country's list, so it is added here
+  // when the server is set up for it — first, because someone who configured
+  // it is trying to test and should not hunt for it below forty real banks.
   if (process.env.GOCARDLESS_INSTITUTION_ID?.startsWith("SANDBOX")) {
-    options.push({
+    options.unshift({
       id: SANDBOX_INSTITUTION_ID,
       name: "Sandbox Finance (test bank)",
       logo: null,
@@ -164,34 +288,35 @@ export async function createRequisition(
 ): Promise<{ requisitionId: string; link: string }> {
   const token = await apiToken();
 
+  // Agreement sizing needs the institution's limits; fall back to the API
+  // defaults (90/90 days) if either call fails rather than blocking connect.
+  // The sandbox institution takes agreements like any other bank (docs:
+  // Sandbox), so it goes down the same path and gets a real consent expiry —
+  // which is what makes the consent lifecycle testable without a real bank.
   let agreementId: string | null = null;
-  if (institutionId !== SANDBOX_INSTITUTION_ID) {
-    // Agreement sizing needs the institution's limits; fall back to the API
-    // defaults (90/90 days) if either call fails rather than blocking connect.
-    try {
-      const institution = await gcFetch<GcInstitution>(
-        `/institutions/${encodeURIComponent(institutionId)}/`,
-        token
-      );
-      const sizing = agreementFor(institution);
-      const agreement = await gcFetch<{ id: string }>("/agreements/enduser/", token, {
-        method: "POST",
-        body: JSON.stringify({
-          institution_id: institutionId,
-          max_historical_days: sizing.maxHistoricalDays,
-          access_valid_for_days: sizing.accessValidForDays,
-          // "details" is deliberately excluded: we never call /details/ and
-          // each scope consumes its own per-day request budget at the bank.
-          access_scope: ["balances", "transactions"],
-        }),
-      });
-      agreementId = agreement.id;
-    } catch (error) {
-      if (error instanceof IntegrationAuthError) throw error;
-      logger.warn("[integrations] gocardless agreement creation failed; using defaults", {
-        error: serializeError(error),
-      });
-    }
+  try {
+    const institution = await gcFetch<GcInstitution>(
+      `/institutions/${encodeURIComponent(institutionId)}/`,
+      token
+    );
+    const sizing = agreementFor(institution);
+    const agreement = await gcFetch<{ id: string }>("/agreements/enduser/", token, {
+      method: "POST",
+      body: JSON.stringify({
+        institution_id: institutionId,
+        max_historical_days: sizing.maxHistoricalDays,
+        access_valid_for_days: sizing.accessValidForDays,
+        // "details" is deliberately excluded: we never call /details/ and
+        // each scope consumes its own per-day request budget at the bank.
+        access_scope: ["balances", "transactions"],
+      }),
+    });
+    agreementId = agreement.id;
+  } catch (error) {
+    if (error instanceof IntegrationAuthError) throw error;
+    logger.warn("[integrations] gocardless agreement creation failed; using defaults", {
+      error: serializeError(error),
+    });
   }
 
   const requisition = await gcFetch<{ id: string; link: string }>("/requisitions/", token, {
@@ -209,10 +334,9 @@ export async function createRequisition(
 
 export interface FinalizedAccount {
   id: string;
-  /** IBAN tail for a friendly label ("…1234"); null when the bank omits it. */
+  /** IBAN/BBAN tail for a friendly label ("…1234"); null when the bank omits it. */
   mask: string | null;
   name: string | null;
-  currency: string | null;
 }
 
 export interface FinalizedRequisition {
@@ -228,10 +352,21 @@ export interface FinalizedRequisition {
 
 interface GcRequisition {
   id: string;
-  status: string;
-  accounts: string[];
+  /** Documented as a string ("LN"); normalized because the reference types it
+   *  as an object. */
+  status: unknown;
+  accounts?: string[];
   institution_id: string;
+  /**
+   * The end-user agreement this requisition was created with. The endpoint
+   * reference names the field `agreement` while the quickstart's own sample
+   * response returns `agreements`; both are read because this id is what
+   * carries the consent expiry and the agreed history window, and losing it
+   * silently downgrades the first sync to the 90-day default and removes the
+   * renewal warning.
+   */
   agreement?: string;
+  agreements?: string;
 }
 
 interface GcAgreement {
@@ -241,12 +376,32 @@ interface GcAgreement {
   max_historical_days: number;
 }
 
+/** Documented fields of GET /accounts/{id}/ — note the snake_case. */
+interface GcAccountMetadata {
+  iban?: string;
+  bban?: string;
+  status?: string;
+  name?: string;
+  owner_name?: string;
+}
+
+function maskOf(identifier: string | undefined): string | null {
+  return identifier ? `…${identifier.slice(-4)}` : null;
+}
+
 /** Fetches the requisition after the redirect and assembles the metadata. */
 export async function finalizeRequisition(requisitionId: string): Promise<FinalizedRequisition> {
   const token = await apiToken();
-  const requisition = await gcFetch<GcRequisition>(`/requisitions/${requisitionId}/`, token);
+  const requisition = await gcFetch<GcRequisition>(
+    `/requisitions/${encodeURIComponent(requisitionId)}/`,
+    token
+  );
 
-  const assessment = assessRequisition(requisition.status, requisition.accounts.length);
+  const accounts = requisition.accounts ?? [];
+  const assessment = assessRequisition(
+    requisitionStatusCode(requisition.status),
+    accounts.length
+  );
   if (!assessment.ok) {
     throw new IntegrationError(assessment.message);
   }
@@ -254,17 +409,18 @@ export async function finalizeRequisition(requisitionId: string): Promise<Finali
   // Everything below is enrichment: failures must not lose the connection.
   let consentExpiresAt: string | null = null;
   let maxHistoricalDays: number | null = null;
-  if (requisition.agreement) {
+  const agreementId = requisition.agreement ?? requisition.agreements ?? null;
+  if (agreementId) {
     try {
       const agreement = await gcFetch<GcAgreement>(
-        `/agreements/enduser/${requisition.agreement}/`,
+        `/agreements/enduser/${encodeURIComponent(agreementId)}/`,
         token
       );
-      const anchor = agreement.accepted ? Date.parse(agreement.accepted) : Date.now();
-      consentExpiresAt = new Date(
-        anchor + agreement.access_valid_for_days * 24 * 60 * 60 * 1000
-      ).toISOString();
-      maxHistoricalDays = agreement.max_historical_days;
+      consentExpiresAt = agreementConsentExpiry(
+        agreement.accepted,
+        agreement.access_valid_for_days
+      );
+      maxHistoricalDays = Number(agreement.max_historical_days) || null;
     } catch (error) {
       logger.warn("[integrations] gocardless agreement lookup failed", {
         error: serializeError(error),
@@ -285,28 +441,29 @@ export async function finalizeRequisition(requisitionId: string): Promise<Finali
     institutionName = null;
   }
 
+  // Account metadata is GoCardless's own record, so it costs none of the
+  // per-scope daily budget that /transactions/ and /balances/ draw on. It
+  // carries no currency — that arrives with the first balance snapshot — so
+  // the field is left untouched here rather than being overwritten with null.
   const accountDetails: FinalizedAccount[] = [];
-  for (const accountId of requisition.accounts) {
+  for (const accountId of accounts) {
     try {
-      const account = await gcFetch<{
-        iban?: string;
-        currency?: string;
-        ownerName?: string;
-        details?: string;
-      }>(`/accounts/${accountId}/`, token);
+      const account = await gcFetch<GcAccountMetadata>(
+        `/accounts/${encodeURIComponent(accountId)}/`,
+        token
+      );
       accountDetails.push({
         id: accountId,
-        mask: account.iban ? `…${account.iban.slice(-4)}` : null,
-        name: account.details ?? null,
-        currency: account.currency ?? null,
+        mask: maskOf(account.iban ?? account.bban),
+        name: account.name ?? account.owner_name ?? null,
       });
     } catch {
-      accountDetails.push({ id: accountId, mask: null, name: null, currency: null });
+      accountDetails.push({ id: accountId, mask: null, name: null });
     }
   }
 
   return {
-    accounts: requisition.accounts,
+    accounts,
     institutionId: requisition.institution_id,
     institutionName,
     institutionLogo,
@@ -353,6 +510,8 @@ async function sync(ctx: SyncContext): Promise<SyncStats> {
   const transactions: BankTransaction[] = [];
   const rateLimitedUntil: Record<string, string> = { ...(metadata.rateLimitedUntil ?? {}) };
   const snapshots: BankAccountSnapshot[] = [];
+  /** Reasons accounts were skipped for something other than a rate limit. */
+  const unavailable: string[] = [];
   let fetched = 0;
   let accountsSynced = 0;
   let accountsSkipped = 0;
@@ -365,12 +524,12 @@ async function sync(ctx: SyncContext): Promise<SyncStats> {
     }
 
     try {
-      const body = await gcFetch<{ transactions: { booked: GcTransaction[] } }>(
-        `/accounts/${accountId}/transactions/?date_from=${dateFrom}`,
+      const body = await gcFetch<{ transactions?: { booked?: GcTransaction[] } }>(
+        `/accounts/${encodeURIComponent(accountId)}/transactions/?date_from=${dateFrom}`,
         token
       );
       delete rateLimitedUntil[accountId];
-      const mapped = mapBookedTransactions(accountId, body.transactions.booked ?? []);
+      const mapped = mapBookedTransactions(accountId, body.transactions?.booked ?? []);
       fetched += mapped.length;
       transactions.push(...mapped);
       accountsSynced += 1;
@@ -380,14 +539,21 @@ async function sync(ctx: SyncContext): Promise<SyncStats> {
         accountsSkipped += 1;
         continue;
       }
+      // One account still processing, lacking permission, or behind a bank
+      // outage must not discard the accounts that did answer.
+      if (error instanceof GcAccountUnavailableError) {
+        unavailable.push(error.message);
+        accountsSkipped += 1;
+        continue;
+      }
       throw error;
     }
 
     // Balance snapshot for the UI; each scope has its own budget, so a
     // balance 429 must never fail the transaction sync.
     try {
-      const body = await gcFetch<{ balances: GcBalance[] }>(
-        `/accounts/${accountId}/balances/`,
+      const body = await gcFetch<{ balances?: GcBalance[] }>(
+        `/accounts/${encodeURIComponent(accountId)}/balances/`,
         token
       );
       const picked = pickBalance(body.balances ?? []);
@@ -401,12 +567,26 @@ async function sync(ctx: SyncContext): Promise<SyncStats> {
         });
       }
     } catch (error) {
-      if (!(error instanceof GcRateLimitError)) {
+      // Balances have their own daily budget, so exhausting it — or a bank that
+      // simply won't serve them — is expected and not worth an error log.
+      if (
+        !(error instanceof GcRateLimitError) &&
+        !(error instanceof GcAccountUnavailableError)
+      ) {
         logger.warn("[integrations] gocardless balance fetch failed", {
           error: serializeError(error),
         });
       }
     }
+  }
+
+  // Nothing readable for a reason the user can act on is a failed sync, not a
+  // quiet success: otherwise the card would report "synced" while importing
+  // nothing indefinitely. A pure rate-limit pass is different — it resolves on
+  // its own and the UI already explains the wait.
+  if (accountsSynced === 0 && unavailable.length > 0) {
+    await ctx.patchMetadata({ rateLimitedUntil });
+    throw new IntegrationError(unavailable[0]);
   }
 
   const result = await importBankTransactions(
