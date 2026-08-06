@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { AlertCircleIcon, Loader2Icon } from "lucide-react";
+import { AlertCircleIcon, FingerprintIcon, Loader2Icon } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
@@ -22,6 +22,13 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import {
+  describePasskeyError,
+  detectPasskeySupport,
+  passkeySignInLabel,
+  type PasskeyUiMode,
+} from "@/lib/auth/passkeys";
 import { createClient } from "@/lib/supabase/client";
 import { loginSchema, type LoginValues } from "@/lib/validations/auth";
 
@@ -72,9 +79,12 @@ export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
+  const [isPasskeyLoading, setIsPasskeyLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [rememberEmail, setRememberEmail] = useState(false);
+  const [passkeyMode, setPasskeyMode] = useState<PasskeyUiMode>("hidden");
   const errorRef = useRef<HTMLDivElement>(null);
+  const busy = isLoading || isPasskeyLoading;
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -87,6 +97,17 @@ export function LoginForm() {
     setRememberEmail(stored.remember);
     if (stored.email) form.setValue("email", stored.email);
   }, [form]);
+
+  // Hide the passkey control when WebAuthn is unavailable (insecure HTTP, old browsers).
+  useEffect(() => {
+    let cancelled = false;
+    void detectPasskeySupport().then((support) => {
+      if (!cancelled) setPasskeyMode(support.mode);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // A toast disappears before a screen reader user reaches it and leaves the
   // form looking untouched. The alert stays, and focus lands on it.
@@ -122,9 +143,62 @@ export function LoginForm() {
     }
   }
 
+  async function onPasskeySignIn() {
+    setIsPasskeyLoading(true);
+    setFormError(null);
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase.auth.signInWithPasskey();
+      if (error) {
+        const message = describePasskeyError(error);
+        if (message) setFormError(message);
+        return;
+      }
+      if (!data.session) {
+        setFormError("Passkey sign-in did not create a session. Try again, or use your password.");
+        return;
+      }
+
+      const email = data.user?.email;
+      if (email) persistLoginEmail(rememberEmail, email);
+
+      toast.success("Welcome back!");
+      router.push(searchParams.get("next") ?? "/dashboard");
+      router.refresh();
+    } catch (error) {
+      const message = describePasskeyError(error);
+      if (message) setFormError(message);
+    } finally {
+      setIsPasskeyLoading(false);
+    }
+  }
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4">
+        {passkeyMode !== "hidden" ? (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              disabled={busy}
+              onClick={() => void onPasskeySignIn()}
+            >
+              {isPasskeyLoading ? (
+                <Loader2Icon className="animate-spin" />
+              ) : (
+                <FingerprintIcon />
+              )}
+              {passkeySignInLabel(passkeyMode)}
+            </Button>
+            <div className="flex items-center gap-3">
+              <Separator className="flex-1" />
+              <span className="text-muted-foreground text-xs uppercase">or</span>
+              <Separator className="flex-1" />
+            </div>
+          </>
+        ) : null}
         <FormField
           control={form.control}
           name="email"
@@ -189,7 +263,7 @@ export function LoginForm() {
             <AlertDescription>{formError}</AlertDescription>
           </Alert>
         ) : null}
-        <Button type="submit" className="w-full" disabled={isLoading}>
+        <Button type="submit" className="w-full" disabled={busy}>
           {isLoading && <Loader2Icon className="animate-spin" />}
           Sign in
         </Button>

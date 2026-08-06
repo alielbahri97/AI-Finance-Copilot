@@ -6,6 +6,7 @@ import { AiProviderForm } from "@/components/settings/ai-provider-form";
 import { AppearanceForm } from "@/components/settings/appearance-form";
 import { AutoDunningForm } from "@/components/settings/auto-dunning-form";
 import { ChangePasswordForm } from "@/components/settings/change-password-form";
+import { PasskeySettings } from "@/components/settings/passkey-settings";
 import { CurrencySettingsForm } from "@/components/settings/currency-settings-form";
 import { NotificationSettings } from "@/components/settings/notification-settings";
 import { AuditLog, type AuditEntryView } from "@/components/team/audit-log";
@@ -23,6 +24,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { PageHeading } from "@/components/ui/page-heading";
+import { Separator } from "@/components/ui/separator";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { BRAND } from "@/lib/branding";
 import { getOrCreateProfile } from "@/lib/data";
@@ -311,9 +313,19 @@ export default async function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Security</CardTitle>
-          <CardDescription>Change the password you use to sign in.</CardDescription>
+          <CardDescription>
+            Manage your password and biometric / passkey sign-in.
+          </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-6">
+          <PasskeySettings />
+          <Separator />
+          <div className="space-y-1">
+            <p className="text-sm font-medium">Password</p>
+            <p className="text-muted-foreground text-sm">
+              Change the password you use when biometric or passkey sign-in is unavailable.
+            </p>
+          </div>
           <ChangePasswordForm />
         </CardContent>
       </Card>

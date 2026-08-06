@@ -27,6 +27,13 @@ apply if you enable that feature.
       Keep the `https://ali-finpilot.vercel.app/**` entry — that is still the
       Vercel project's own hostname and preview builds sign in through it.
       Remove or demote `http://localhost:3000` as Site URL once production is live.
+- [ ] **Passkeys enabled** under Authentication → Passkeys (beta): RP display name
+      `Ballast`, RP ID `ballastmoney.com`, origins include
+      `https://app.ballastmoney.com` (and any preview host you want to test on —
+      each origin's hostname must be the RP ID or a subdomain of it). Without
+      this toggle, Settings → Security can still show the UI but registration
+      fails with `passkey_disabled`. No app DB migration is required — credentials
+      live in Supabase Auth.
 - [ ] Email confirmations enabled and email templates reviewed (sender name, links)
 - [ ] Private `invoices` storage bucket created with the per-user RLS policy from the README
 - [ ] RLS enabled on all tables in the `public` schema with no anon-role policies

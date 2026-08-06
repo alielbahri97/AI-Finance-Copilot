@@ -14,6 +14,15 @@ before going live.
      strings.
    - **Authentication → URL Configuration**: set the production site URL and add
      `https://<your-domain>/auth/callback` to the redirect allow list.
+   - **Authentication → Passkeys** *(optional, Face ID / fingerprint / Windows Hello)*:
+     turn on **Enable Passkey authentication**. Relying Party Display Name =
+     `Ballast`, RP ID = bare domain (`ballastmoney.com` or your custom domain —
+     no scheme/port), Origins = comma-separated HTTPS origins that serve the
+     app (e.g. `https://app.ballastmoney.com`). HTTPS is required except for
+     localhost. The client already opts into `auth.experimental.passkey`;
+     without this dashboard toggle, register/sign-in return `passkey_disabled`
+     and password login remains the fallback. Changing RP ID later invalidates
+     every enrolled passkey.
    - **Storage**: create the private `invoices` bucket and its RLS policy (SQL in the
      README, "Create the invoice storage bucket"), and the public `avatars` bucket
      (README §5b / `ops/storage/avatars-bucket.sql`) for profile photos.

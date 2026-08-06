@@ -488,10 +488,14 @@ per-locale product copy.
 
 ### 4. Login improvements
 
-- **Remember-username** checkbox (stores the email locally, never the password).
-- **Passkeys / WebAuthn** for Face ID and fingerprint sign-in, with password
-  fallback always available. **SMS/phone OTP was explicitly declined** (per-message
-  cost, SIM-swap risk).
+- ~~**Remember-username** checkbox (stores the email locally, never the password).~~
+  Done: login form persists email only when “Remember email” is checked.
+- ~~**Passkeys / WebAuthn** for Face ID and fingerprint sign-in, with password
+  fallback always available.~~ Done via Supabase Auth passkeys (experimental
+  client flag + dashboard Passkeys toggle). Login shows “Sign in with Face ID /
+  fingerprint” (or “Sign in with passkey”) when WebAuthn is available; Settings →
+  Security registers/lists/deletes credentials. **SMS/phone OTP was explicitly
+  declined** (per-message cost, SIM-swap risk).
 - ~~**Validate `NEXT_PUBLIC_*` env values** with clear startup errors.~~ Done in
   the rebrand: `src/lib/env-url.ts` validates every URL-typed variable and fails
   with `NEXT_PUBLIC_APP_URL is not a valid URL: "<value>"`. Any remaining

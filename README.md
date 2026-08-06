@@ -44,7 +44,8 @@ predicate. `src/lib/branding.ts` holds the per-edition naming and copy.
 ## Features
 
 - **Authentication** — email/password sign up with email confirmation, sign in, forgot/reset
-  password (Supabase Auth, PKCE flow, session refresh middleware)
+  password, plus optional passkeys (WebAuthn) for Face ID / fingerprint / Windows Hello
+  via Supabase Auth (enable under Authentication → Passkeys; password always remains) (Supabase Auth, PKCE flow, session refresh middleware)
 - **Dashboard** — current-month income/expense cards with month-over-month trends, total
   balance and savings rate, monthly cashflow chart (income/expense bars + net line),
   spending-by-category donut, largest expenses, cash-balance history (Recharts)
