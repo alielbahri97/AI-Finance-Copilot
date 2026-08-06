@@ -12,7 +12,7 @@ export const maxDuration = 60;
 
 export async function GET(request: Request) {
   try {
-    const resolved = await resolveReportRequest(request);
+    const resolved = await resolveReportRequest(request, "csv");
     if ("error" in resolved) {
       return NextResponse.json({ error: resolved.error }, { status: resolved.status });
     }

@@ -36,6 +36,7 @@ import { getInvoiceReminders } from "@/lib/invoices/reminders";
 import { formatCurrency, localeForCurrency } from "@/lib/utils";
 import { getWorkspaceContext } from "@/lib/workspace/context";
 import { editionForWorkspaceType } from "@/lib/workspace/editions";
+import { DashboardExportButton } from "@/components/exports/surface-export-buttons";
 
 export const metadata: Metadata = { title: "Dashboard" };
 export const dynamic = "force-dynamic";
@@ -57,6 +58,7 @@ export default async function DashboardPage() {
   const canViewInvoices = ctx.permissions.has("view_invoices");
   const canViewReports = ctx.permissions.has("view_reports");
   const canEditTransactions = ctx.permissions.has("edit_transactions");
+  const canExport = ctx.permissions.has("export_data");
   const edition = editionForWorkspaceType(workspace.type);
 
   const heading = (
@@ -69,22 +71,25 @@ export default async function DashboardPage() {
             : `Built for ${editionBranding("business").audience} — your overview for the last six months.`}
         </p>
       </div>
-      {canEditTransactions && (
-        <div className="flex gap-2">
-          <Button asChild>
-            <Link href="/transactions">
-              <PlusIcon />
-              Add transaction
-            </Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link href="/import">
-              <UploadIcon />
-              Import
-            </Link>
-          </Button>
-        </div>
-      )}
+      <div className="flex gap-2">
+        {canExport && <DashboardExportButton workspaceId={workspace.id} />}
+        {canEditTransactions && (
+          <>
+            <Button asChild>
+              <Link href="/transactions">
+                <PlusIcon />
+                Add transaction
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/import">
+                <UploadIcon />
+                Import
+              </Link>
+            </Button>
+          </>
+        )}
+      </div>
     </div>
   );
 

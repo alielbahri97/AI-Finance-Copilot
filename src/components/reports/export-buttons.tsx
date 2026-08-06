@@ -31,20 +31,23 @@ import {
 type ExportKind = "pdf" | "excel" | "csv";
 
 interface ExportButtonsProps {
-  /** Plan gating: exports are a paid feature. */
+  /** When true, Excel and PDF are locked; CSV stays available. */
+  paidLocked?: boolean;
+  /** @deprecated use paidLocked — previously locked all formats including CSV. */
   locked?: boolean;
 }
 
-export function ExportButtons({ locked = false }: ExportButtonsProps) {
+export function ExportButtons({ paidLocked, locked = false }: ExportButtonsProps) {
   const searchParams = useSearchParams();
   const [pending, setPending] = useState<ExportKind | null>(null);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const gatePaid = paidLocked ?? locked;
 
   async function download(kind: ExportKind, dataset?: "transactions" | "monthly") {
     // Locked buttons stay enabled: a disabled button cannot be focused, so the
     // reason never reaches a keyboard user, and there is nowhere to click
     // through to. Clicking explains the limit and offers the upgrade instead.
-    if (locked) {
+    if ((kind === "pdf" || kind === "excel") && gatePaid) {
       setUpgradeOpen(true);
       return;
     }
@@ -82,19 +85,6 @@ export function ExportButtons({ locked = false }: ExportButtonsProps) {
     }
   }
 
-  const csvButton = (
-    <Button variant="outline" size="sm" disabled={pending !== null}>
-      {pending === "csv" ? (
-        <Loader2Icon className="size-4 animate-spin" />
-      ) : locked ? (
-        <LockIcon className="size-4" />
-      ) : (
-        <FileDownIcon className="size-4" />
-      )}
-      CSV
-    </Button>
-  );
-
   return (
     <div className="flex flex-wrap gap-2">
       <Button
@@ -105,7 +95,7 @@ export function ExportButtons({ locked = false }: ExportButtonsProps) {
       >
         {pending === "pdf" ? (
           <Loader2Icon className="size-4 animate-spin" />
-        ) : locked ? (
+        ) : gatePaid ? (
           <LockIcon className="size-4" />
         ) : (
           <FileTextIcon className="size-4" />
@@ -120,42 +110,41 @@ export function ExportButtons({ locked = false }: ExportButtonsProps) {
       >
         {pending === "excel" ? (
           <Loader2Icon className="size-4 animate-spin" />
-        ) : locked ? (
+        ) : gatePaid ? (
           <LockIcon className="size-4" />
         ) : (
           <FileSpreadsheetIcon className="size-4" />
         )}
         Excel
       </Button>
-      {/* Locked, the CSV button has no menu to open — there is nothing to
-          choose between until the plan allows exports at all. */}
-      {locked ? (
-        <Button variant="outline" size="sm" onClick={() => setUpgradeOpen(true)}>
-          <LockIcon className="size-4" />
-          CSV
-        </Button>
-      ) : (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>{csvButton}</DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => download("csv", "transactions")}>
-              Transactions
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => download("csv", "monthly")}>
-              Monthly summary
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" disabled={pending !== null}>
+            {pending === "csv" ? (
+              <Loader2Icon className="size-4 animate-spin" />
+            ) : (
+              <FileDownIcon className="size-4" />
+            )}
+            CSV
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={() => download("csv", "transactions")}>
+            Transactions
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => download("csv", "monthly")}>
+            Monthly summary
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <Dialog open={upgradeOpen} onOpenChange={setUpgradeOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Exports are a paid feature</DialogTitle>
+            <DialogTitle>Excel and PDF need a paid plan</DialogTitle>
             <DialogDescription>
-              Your plan does not include them. On a paid plan every report on this page can be
-              downloaded as PDF, Excel or CSV, over whatever period you have selected — the
-              filters you set here carry into the file.
+              CSV exports stay free on every plan. Upgrade to download Excel or PDF reports over
+              whatever period you have selected — the filters you set here carry into the file.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

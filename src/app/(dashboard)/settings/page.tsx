@@ -12,6 +12,10 @@ import { AuditLog, type AuditEntryView } from "@/components/team/audit-log";
 import { TeamSettings, type TeamMemberView } from "@/components/team/team-settings";
 import { WorkspaceNameForm } from "@/components/team/workspace-name-form";
 import {
+  AuditExportButton,
+  FullDataExportButton,
+} from "@/components/exports/surface-export-buttons";
+import {
   Card,
   CardContent,
   CardDescription,
@@ -40,6 +44,7 @@ export default async function SettingsPage() {
   const { user, workspace } = ctx;
   const canManageMembers = ctx.permissions.has("manage_members");
   const canManageSettings = ctx.permissions.has("manage_settings");
+  const canExport = ctx.permissions.has("export_data");
   const sharing = editionHasFeature(workspace.type, "team");
 
   const [profile, preferences, businessProfile, entitlements, members, invitations, auditEntries] =
@@ -176,14 +181,32 @@ export default async function SettingsPage() {
 
       {canManageMembers && (
         <Card>
-          <CardHeader>
-            <CardTitle>Audit log</CardTitle>
-            <CardDescription>
-              Recent member, billing and data changes in this workspace.
-            </CardDescription>
+          <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
+            <div className="space-y-1.5">
+              <CardTitle>Audit log</CardTitle>
+              <CardDescription>
+                Recent member, billing and data changes in this workspace.
+              </CardDescription>
+            </div>
+            {canExport && <AuditExportButton />}
           </CardHeader>
           <CardContent>
             <AuditLog entries={auditViews} />
+          </CardContent>
+        </Card>
+      )}
+
+      {canExport && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Full data export</CardTitle>
+            <CardDescription>
+              Download everything in this workspace as a ZIP of CSV and JSON files. Always free —
+              useful for backups and data-portability requests.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <FullDataExportButton />
           </CardContent>
         </Card>
       )}

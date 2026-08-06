@@ -89,7 +89,7 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
 
 async function ExportButtonsSection({ workspaceId }: { workspaceId: string }) {
   const entitlements = await getEntitlements(workspaceId);
-  return <ExportButtons locked={!entitlements.plan.limits.exportsEnabled} />;
+  return <ExportButtons paidLocked={!entitlements.plan.limits.exportsEnabled} />;
 }
 
 async function ReportBody({ ctx, period }: { ctx: WorkspaceContext; period: ResolvedPeriod }) {

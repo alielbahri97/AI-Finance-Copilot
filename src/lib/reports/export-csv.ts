@@ -1,14 +1,5 @@
 import type { ReportData, ReportTransaction } from "./data";
-
-function csvCell(value: string | number | null): string {
-  if (value === null) return "";
-  const text = String(value);
-  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
-
-function csvLines(rows: (string | number | null)[][]): string {
-  return rows.map((row) => row.map(csvCell).join(",")).join("\r\n") + "\r\n";
-}
+import { csvLines } from "@/lib/exports/csv";
 
 export function buildTransactionsCsv(transactions: ReportTransaction[]): string {
   return csvLines([

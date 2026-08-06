@@ -50,6 +50,7 @@ import {
 } from "@/lib/finance/scenarios";
 import { formatCurrency, localeForCurrency } from "@/lib/utils";
 import { getWorkspaceContext, type WorkspaceContext } from "@/lib/workspace/context";
+import { ForecastExportButton } from "@/components/exports/forecast-export-button";
 
 export const metadata: Metadata = { title: "Forecast" };
 export const dynamic = "force-dynamic";
@@ -88,11 +89,16 @@ export default async function ForecastPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <PageHeading>Cash flow forecast</PageHeading>
-        <p className="text-muted-foreground text-sm">
-          Deterministic projection from your recurring patterns, spending trend and assumptions.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <PageHeading>Cash flow forecast</PageHeading>
+          <p className="text-muted-foreground text-sm">
+            Deterministic projection from your recurring patterns, spending trend and assumptions.
+          </p>
+        </div>
+        {ctx.permissions.has("export_data") && (
+          <ForecastExportButton workspaceId={ctx.workspace.id} />
+        )}
       </div>
 
       <Suspense

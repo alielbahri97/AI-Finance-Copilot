@@ -8,6 +8,7 @@ import { TableCardSkeleton } from "@/components/dashboard/section-skeletons";
 import { TransactionDialog } from "@/components/transactions/transaction-dialog";
 import { TransactionsTable } from "@/components/transactions/transactions-table";
 import { TransactionsToolbar } from "@/components/transactions/transactions-toolbar";
+import { TransactionsExportButton } from "@/components/exports/transactions-export-button";
 import {
   DEFAULT_PAGE_SIZE,
   DEFAULT_SORT,
@@ -96,6 +97,7 @@ export default async function TransactionsPage({
   if (!ctx) redirect("/login");
   if (!ctx.permissions.has("view_transactions")) redirect("/dashboard");
   const canEdit = ctx.permissions.has("edit_transactions");
+  const canExport = ctx.permissions.has("export_data");
 
   const params = await searchParams;
   const categories = await prisma.category.findMany({
@@ -114,17 +116,20 @@ export default async function TransactionsPage({
             Search, filter and categorize your income and expenses.
           </p>
         </div>
-        {canEdit && (
-          <div className="flex gap-2">
-            <TransactionDialog categories={categoryOptions} />
-            <Button asChild>
-              <Link href="/import">
-                <UploadIcon />
-                Import CSV
-              </Link>
-            </Button>
-          </div>
-        )}
+        <div className="flex gap-2">
+          {canExport && <TransactionsExportButton workspaceId={ctx.workspace.id} />}
+          {canEdit && (
+            <>
+              <TransactionDialog categories={categoryOptions} />
+              <Button asChild>
+                <Link href="/import">
+                  <UploadIcon />
+                  Import CSV
+                </Link>
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       <Suspense fallback={<TableCardSkeleton />}>

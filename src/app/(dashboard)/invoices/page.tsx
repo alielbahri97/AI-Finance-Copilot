@@ -25,6 +25,7 @@ import {
   type SortDirection,
 } from "@/components/invoices/types";
 import { UploadInvoice } from "@/components/invoices/upload-invoice";
+import { InvoicesExportButton } from "@/components/exports/invoices-export-button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeading } from "@/components/ui/page-heading";
 import type { Prisma } from "@/generated/prisma/client";
@@ -92,6 +93,7 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
   if (!ctx) redirect("/login");
   if (!ctx.permissions.has("view_invoices")) redirect("/dashboard");
   const canEdit = ctx.permissions.has("edit_invoices");
+  const canExport = ctx.permissions.has("export_data");
 
   const params = await searchParams;
 
@@ -104,7 +106,10 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
             Upload documents, review extracted data and track what needs to be paid.
           </p>
         </div>
-        {canEdit && <UploadInvoice />}
+        <div className="flex flex-wrap gap-2">
+          {canExport && <InvoicesExportButton workspaceId={ctx.workspace.id} />}
+          {canEdit && <UploadInvoice />}
+        </div>
       </div>
 
       <Suspense

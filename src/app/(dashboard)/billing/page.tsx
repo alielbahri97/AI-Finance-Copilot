@@ -231,7 +231,7 @@ export default async function BillingPage({
                       },
                     ]),
                 {
-                  label: "Report exports",
+                  label: "Excel / PDF exports",
                   used: usage.exports,
                   limit: plan.limits.exportsEnabled ? null : 0,
                 },

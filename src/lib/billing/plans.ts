@@ -48,7 +48,7 @@ export interface PlanLimits {
    * Personal has no invoices and therefore no reminders.
    */
   dunningEnabled: boolean;
-  /** PDF/Excel/CSV report exports. */
+  /** PDF/Excel report exports (CSV is free on every plan). */
   exportsEnabled: boolean;
   /** What-if assumptions on the forecast page. */
   assumptionsEnabled: boolean;
@@ -127,7 +127,8 @@ const BUSINESS_FREE: Plan = {
     "50 AI copilot messages per month",
     "AI categorization for 100 transactions per month",
     "5 AI invoice extractions per month",
-    "Dashboard, forecasting & reports (view only)",
+    "Dashboard, forecasting & reports",
+    "CSV exports (Excel/PDF on paid plans)",
   ],
 };
 
@@ -160,7 +161,7 @@ const PRO: Plan = {
     "500 AI copilot messages per month",
     "Unlimited AI transaction categorization",
     "50 AI invoice extractions per month",
-    "PDF, Excel & CSV exports",
+    "PDF & Excel exports (CSV on every plan)",
     "What-if forecast assumptions, in up to 3 named scenarios",
   ],
 };
@@ -270,6 +271,7 @@ const PERSONAL_FREE: Plan = {
     "Dashboard, spending breakdown & forecast",
     "Monthly budgets per category",
     "Net worth from your connected accounts",
+    "CSV exports (Excel/PDF on paid plans)",
   ],
 };
 
@@ -304,7 +306,7 @@ const PLUS: Plan = {
     "Savings goals with projected completion dates",
     "Net worth: property, investments and debts, tracked over time",
     "Subscription insights: monthly cost, price rises, unused",
-    "PDF, Excel & CSV exports",
+    "PDF & Excel exports (CSV on every plan)",
   ],
 };
 

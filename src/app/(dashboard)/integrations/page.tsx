@@ -19,6 +19,7 @@ import { isEncryptionConfigured } from "@/lib/integrations/crypto";
 import { isProviderConfigured, providersForWorkspace } from "@/lib/integrations/registry";
 import { prisma } from "@/lib/prisma";
 import { getWorkspaceContext, type WorkspaceContext } from "@/lib/workspace/context";
+import { BanksExportButton } from "@/components/exports/surface-export-buttons";
 
 export const metadata: Metadata = {
   title: "Integrations",
@@ -221,12 +222,15 @@ export default async function IntegrationsPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <PageHeading>Integrations</PageHeading>
-        <p className="text-muted-foreground text-sm">
-          Pick a tool to see what it does and how to connect it. Connected sources sync
-          automatically every few hours.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <PageHeading>Integrations</PageHeading>
+          <p className="text-muted-foreground text-sm">
+            Pick a tool to see what it does and how to connect it. Connected sources sync
+            automatically every few hours.
+          </p>
+        </div>
+        {ctx.permissions.has("export_data") && <BanksExportButton />}
       </div>
 
       <Suspense fallback={<IntegrationsGridSkeleton />}>

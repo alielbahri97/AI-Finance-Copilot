@@ -106,7 +106,11 @@ function planLine(plan: Plan, edition: Edition): string {
     parts.push(limits.integrationsEnabled ? "integrations" : "no integrations");
   }
 
-  parts.push(limits.exportsEnabled ? "report exports" : "no report exports");
+  parts.push(
+    limits.exportsEnabled
+      ? "Excel/PDF exports (CSV free on every plan)"
+      : "CSV exports (Excel/PDF on paid plans)"
+  );
   parts.push(limits.assumptionsEnabled ? "forecast assumptions" : "no forecast assumptions");
 
   const price = formatPlanPrice(plan);

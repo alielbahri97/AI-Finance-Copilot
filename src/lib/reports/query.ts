@@ -16,13 +16,18 @@ export interface ReportRequestContext {
   dataset: "transactions" | "monthly";
 }
 
+export type ReportExportFormat = "csv" | "excel" | "pdf";
+
 /**
  * Shared auth + query validation for the export routes. Returns either the
  * resolved context or an error response payload. Requires view_reports +
  * export_data in the current workspace and records an audit entry.
+ *
+ * Plan rule: CSV is free on every plan; Excel and PDF need `exportsEnabled`.
  */
 export async function resolveReportRequest(
-  request: Request
+  request: Request,
+  format: ReportExportFormat = "csv"
 ): Promise<{ context: ReportRequestContext } | { error: string; status: number }> {
   const ctx = await getWorkspaceContext();
   if (!ctx) return { error: "Unauthorized", status: 401 };
@@ -38,11 +43,11 @@ export async function resolveReportRequest(
     return { error: "Too many export requests — please wait a moment.", status: 429 };
   }
 
-  // Plan gating: exports are a paid feature.
   const entitlements = await getEntitlements(ctx.workspace.id);
-  if (!entitlements.plan.limits.exportsEnabled) {
+  if ((format === "excel" || format === "pdf") && !entitlements.plan.limits.exportsEnabled) {
     return {
-      error: upgradeError("Report exports", entitlements.planId, entitlements.edition).error,
+      error: upgradeError("Excel and PDF exports", entitlements.planId, entitlements.edition)
+        .error,
       status: 402,
     };
   }
@@ -56,6 +61,7 @@ export async function resolveReportRequest(
   await recordAudit(ctx.workspace.id, ctx.user.id, "data.export", {
     dataset: parsed.data.dataset ?? "transactions",
     period: parsed.data.period,
+    format,
   });
 
   return {
