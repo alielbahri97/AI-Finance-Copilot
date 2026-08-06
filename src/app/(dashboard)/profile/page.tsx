@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { AvatarUploader } from "@/components/profile/avatar-uploader";
 import { BusinessProfileCard } from "@/components/profile/business-profile-card";
 import { ProfileForm } from "@/components/profile/profile-form";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { PageHeading } from "@/components/ui/page-heading";
 import {
@@ -24,7 +24,6 @@ import {
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 import { SUPPORTED_CURRENCIES } from "@/lib/validations/profile";
-import { getInitials } from "@/lib/utils";
 import { getWorkspaceContext } from "@/lib/workspace/context";
 
 export const metadata: Metadata = { title: "Profile" };
@@ -49,20 +48,26 @@ export default async function ProfilePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-4">
-        <Avatar className="size-14">
-          {profile.avatarUrl ? (
-            <AvatarImage src={profile.avatarUrl} alt={profile.fullName ?? profile.email} />
-          ) : null}
-          <AvatarFallback className="text-base">
-            {getInitials(profile.fullName, profile.email)}
-          </AvatarFallback>
-        </Avatar>
-        <div>
-          <PageHeading>{profile.fullName ?? "Your profile"}</PageHeading>
-          <p className="text-muted-foreground text-sm">{profile.email}</p>
-        </div>
+      <div>
+        <PageHeading>{profile.fullName ?? "Your profile"}</PageHeading>
+        <p className="text-muted-foreground text-sm">{profile.email}</p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Profile photo</CardTitle>
+          <CardDescription>
+            Shown in the header and on your profile. JPG, PNG or WebP up to 5 MB.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AvatarUploader
+            email={profile.email}
+            fullName={profile.fullName}
+            avatarUrl={profile.avatarUrl}
+          />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

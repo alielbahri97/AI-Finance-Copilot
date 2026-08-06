@@ -15,7 +15,8 @@ before going live.
    - **Authentication → URL Configuration**: set the production site URL and add
      `https://<your-domain>/auth/callback` to the redirect allow list.
    - **Storage**: create the private `invoices` bucket and its RLS policy (SQL in the
-     README, "Create the invoice storage bucket").
+     README, "Create the invoice storage bucket"), and the public `avatars` bucket
+     (README §5b / `ops/storage/avatars-bucket.sql`) for profile photos.
 2. **Migrations** — apply the SQL migrations once against the direct connection:
 
    ```bash

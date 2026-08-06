@@ -492,7 +492,7 @@ A workspace's kind is fixed when it's created. To have both, create the second o
     ],
     content: `Personal settings are split across two pages:
 
-- The [Profile](/profile) page (sidebar → Profile): your name, avatar and account email, plus password changes.
+- The [Profile](/profile) page (sidebar → Profile): your name, **profile photo** (upload JPG/PNG/WebP), account email, and password changes.
 - The [Settings](/settings) page (sidebar → Settings): your **display currency** (used everywhere in the app), the **AI provider** used for the copilot and extractions, theme (light/dark/system), and the notification preferences.
 
 Changing the currency changes how amounts are displayed and interpreted for new data — it doesn't convert historical amounts between currencies.`,

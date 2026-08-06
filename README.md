@@ -336,6 +336,59 @@ that mean the bucket is missing return a distinct 502 message (see
 `storage: "up"|"down"` for this bucket — or `"not_applicable"` when `DATABASE_URL` points
 at a non-Supabase Postgres, which cannot be asked about a Supabase catalog.
 
+### 5b. Create the avatar storage bucket
+
+Profile photos live in a **public** Supabase Storage bucket named `avatars`, with files
+under a per-user prefix (`<userId>/avatar.{jpg|png|webp}`). The public URL is stored on
+`profiles.avatar_url` and rendered in the header without signed URLs. Uploads/deletes are
+still restricted by RLS to the authenticated user's own folder.
+
+**Option A — dashboard**
+
+1. **Storage → New bucket** — name it `avatars`, turn **Public bucket** on, set a
+   **5 MB** file size limit, and allowed MIME types `image/jpeg`, `image/png`,
+   `image/webp`.
+2. **SQL Editor** — run the policy SQL in Option B (policies only), or paste the full
+   file `ops/storage/avatars-bucket.sql`.
+
+**Option B — SQL Editor (idempotent; preferred)**
+
+```sql
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'avatars',
+  'avatars',
+  true,
+  5242880,
+  array['image/jpeg', 'image/png', 'image/webp']
+)
+on conflict (id) do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "Users manage own avatar files" on storage.objects;
+create policy "Users manage own avatar files"
+on storage.objects for all to authenticated
+using (
+  bucket_id = 'avatars'
+  and (storage.foldername(name))[1] = auth.uid()::text
+)
+with check (
+  bucket_id = 'avatars'
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
+
+drop policy if exists "Public read avatars" on storage.objects;
+create policy "Public read avatars"
+on storage.objects for select to public
+using (bucket_id = 'avatars');
+```
+
+The same SQL is checked in at [`ops/storage/avatars-bucket.sql`](ops/storage/avatars-bucket.sql).
+Apply it in the Supabase SQL Editor for each environment before relying on avatar upload
+in production (`POST` / `DELETE` `/api/profile/avatar`).
+
 ### 6. Run the app
 
 ```bash
