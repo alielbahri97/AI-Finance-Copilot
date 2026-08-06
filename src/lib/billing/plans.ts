@@ -25,9 +25,9 @@ import { BRAND, DEFAULT_EDITION, type Edition } from "@/lib/branding";
 export type PlanId = "FREE" | "PRO" | "BUSINESS" | "ENTERPRISE" | "PLUS" | "PREMIUM";
 
 export interface PlanLimits {
-  /** CSV imports per calendar month; null = unlimited. */
+  /** Statement imports per calendar month; null = unlimited. */
   csvImportsPerMonth: number | null;
-  /** Max rows accepted in a single CSV import; null = unlimited (engine cap applies). */
+  /** Max rows accepted in a single statement import; null = unlimited (engine cap applies). */
   rowsPerImport: number | null;
   /** AI copilot messages per calendar month; null = unlimited. */
   aiMessagesPerMonth: number | null;
@@ -52,6 +52,14 @@ export interface PlanLimits {
   exportsEnabled: boolean;
   /** What-if assumptions on the forecast page. */
   assumptionsEnabled: boolean;
+  /**
+   * Named forecast scenarios a workspace may keep, on top of the base
+   * scenario, which is not a row and is therefore never capped; null =
+   * unlimited. Always 0 where `assumptionsEnabled` is false — there would be
+   * nothing to put in a scenario — so those tiers see a locked teaser rather
+   * than an empty switcher.
+   */
+  maxScenarios: number | null;
   /** Bank/accounting/productivity integrations at all. */
   integrationsEnabled: boolean;
   /** Simultaneous bank connections; null = unlimited, 0 = none. */
@@ -106,6 +114,7 @@ const BUSINESS_FREE: Plan = {
     dunningEnabled: false,
     exportsEnabled: false,
     assumptionsEnabled: false,
+    maxScenarios: 0,
     integrationsEnabled: false,
     bankConnections: 0,
     goalsEnabled: false,
@@ -138,6 +147,7 @@ const PRO: Plan = {
     dunningEnabled: true,
     exportsEnabled: true,
     assumptionsEnabled: true,
+    maxScenarios: 3,
     integrationsEnabled: false,
     bankConnections: 0,
     goalsEnabled: false,
@@ -151,7 +161,7 @@ const PRO: Plan = {
     "Unlimited AI transaction categorization",
     "50 AI invoice extractions per month",
     "PDF, Excel & CSV exports",
-    "What-if forecast assumptions",
+    "What-if forecast assumptions, in up to 3 named scenarios",
   ],
 };
 
@@ -171,6 +181,7 @@ const BUSINESS: Plan = {
     dunningEnabled: true,
     exportsEnabled: true,
     assumptionsEnabled: true,
+    maxScenarios: null,
     integrationsEnabled: true,
     bankConnections: null,
     goalsEnabled: false,
@@ -180,6 +191,7 @@ const BUSINESS: Plan = {
   },
   highlights: [
     "Everything in Pro",
+    "Unlimited named forecast scenarios, compared side by side",
     "Unlimited AI copilot messages",
     "500 AI invoice extractions per month",
     "Bank, accounting & productivity integrations",
@@ -203,6 +215,7 @@ const ENTERPRISE: Plan = {
     dunningEnabled: true,
     exportsEnabled: true,
     assumptionsEnabled: true,
+    maxScenarios: null,
     integrationsEnabled: true,
     bankConnections: null,
     goalsEnabled: false,
@@ -242,6 +255,7 @@ const PERSONAL_FREE: Plan = {
     dunningEnabled: false,
     exportsEnabled: false,
     assumptionsEnabled: false,
+    maxScenarios: 0,
     integrationsEnabled: true,
     bankConnections: 1,
     goalsEnabled: false,
@@ -275,6 +289,7 @@ const PLUS: Plan = {
     dunningEnabled: false,
     exportsEnabled: true,
     assumptionsEnabled: false,
+    maxScenarios: 0,
     integrationsEnabled: true,
     bankConnections: null,
     goalsEnabled: true,
@@ -309,6 +324,7 @@ const PREMIUM: Plan = {
     dunningEnabled: false,
     exportsEnabled: true,
     assumptionsEnabled: true,
+    maxScenarios: 3,
     integrationsEnabled: true,
     bankConnections: null,
     goalsEnabled: true,
@@ -319,7 +335,7 @@ const PREMIUM: Plan = {
   highlights: [
     "Everything in Plus",
     "Unlimited AI copilot messages",
-    "What-if planning: model a raise, a move, a big purchase",
+    "What-if planning: model a raise, a move, a big purchase — in up to 3 scenarios you can compare",
     "20,000 rows per import",
   ],
 };
@@ -362,6 +378,9 @@ export const EDITION_CHECKOUT_PLANS: Record<Edition, readonly PlanId[]> = {
 
 export const TRIAL_DAYS = 14;
 
+/** Days of trial credit a converted referral adds to the referrer's account. */
+export const REFERRAL_REWARD_DAYS = 30;
+
 /**
  * The plan granted during the card-free signup trial: the middle tier of the
  * edition, so a trial shows off what the product does without handing over
@@ -391,6 +410,17 @@ export function trialPlan(edition: Edition = DEFAULT_EDITION): PlanId {
  */
 export function getPlan(id: PlanId, edition: Edition = DEFAULT_EDITION): Plan {
   return EDITION_PLANS[edition][id] ?? PLANS[id];
+}
+
+/**
+ * The tier a converted referral credits the referrer with. The reward is a
+ * trial extension, so it is worth whatever the card-free trial grants — which
+ * is why every surface that promises it has to read the plan from the edition
+ * rather than name one tier: Pro is a Business plan, and a Personal account
+ * cannot be given it.
+ */
+export function referralRewardPlan(edition: Edition = DEFAULT_EDITION): Plan {
+  return getPlan(trialPlan(edition), edition);
 }
 
 /** Whether a tier belongs to an edition's line-up. */

@@ -9,9 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { personalWorkspaceId } from "@/lib/workspace/ids";
 
 import { getOrCreateSubscription } from "./entitlements";
-
-/** Days of Pro credit granted per converted referral. */
-export const REFERRAL_REWARD_DAYS = 30;
+import { REFERRAL_REWARD_DAYS } from "./plans";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 // Unambiguous alphabet (no 0/O, 1/I/L).
@@ -81,8 +79,9 @@ export async function attributeReferral(newUserId: string, code: string): Promis
 
 /**
  * Called when a referred user upgrades to a paid plan: marks the referral
- * converted (once) and rewards the referrer with +30 days of Pro credit,
- * applied as a local trial extension.
+ * converted (once) and rewards the referrer with 30 more days of trial credit.
+ * It is applied as a local trial extension, so the tier it is worth is the one
+ * that workspace's edition trials — see `referralRewardPlan`.
  */
 export async function convertReferral(referredUserId: string): Promise<void> {
   try {

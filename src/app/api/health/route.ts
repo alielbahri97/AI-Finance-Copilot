@@ -68,11 +68,48 @@ async function checkSchema(client: Client): Promise<SchemaDrift> {
 }
 
 /**
+ * Whether the private invoice bucket could be confirmed. `not_applicable` is
+ * the self-hosted answer: see {@link checkStorageBucket}.
+ */
+type StorageStatus = "up" | "down" | "not_applicable";
+
+const STORAGE_NOT_APPLICABLE_NOTE =
+  "DATABASE_URL is not a Supabase database, so the invoice bucket cannot be " +
+  "checked from SQL — verify it in the Supabase dashboard instead.";
+
+/**
+ * Confirms the private `invoices` bucket exists, when the database can answer.
+ *
+ * The bucket lives in Supabase Storage, whose `storage.buckets` catalog only
+ * exists on a Supabase database. The Docker Compose path in this repo runs a
+ * plain Postgres while auth and storage stay on Supabase, so an absent catalog
+ * says nothing about the bucket and must not read as an outage.
+ */
+async function checkStorageBucket(client: Client): Promise<StorageStatus> {
+  const catalog = await client.query<{ present: string | null }>(
+    `SELECT to_regclass('storage.buckets')::text AS present`
+  );
+  if (!catalog.rows[0]?.present) return "not_applicable";
+
+  // Parameterized id; public=false matches README §5 setup.
+  const rows = await client.query<{ id: string }>(
+    `SELECT id
+       FROM storage.buckets
+      WHERE id = $1
+        AND public = false
+      LIMIT 1`,
+    [INVOICE_BUCKET]
+  );
+  return (rows.rowCount ?? 0) > 0 ? "up" : "down";
+}
+
+/**
  * Liveness/readiness probe for load balancers and uptime monitors.
  * Uses a short-lived dedicated Client (not the shared Prisma pool) so the
  * check never holds pooled connections open. Verifies DB connectivity, that
  * the schema matches the deployed code, that the private `invoices` Storage
- * bucket exists, and which AI providers/models are configured.
+ * bucket exists (where the database can be asked), and which AI
+ * providers/models are configured.
  *
  * Unauthenticated by design — exposes only up/down status, the names of
  * missing tables/columns, AI model ids, and whether the email channel is
@@ -121,7 +158,8 @@ export async function GET(request: Request) {
     );
   }
 
-  const status = { db: false, storage: false };
+  let dbUp = false;
+  let storage: StorageStatus = "down";
   let reason: string | undefined;
   let drift: SchemaDrift | undefined;
 
@@ -131,11 +169,14 @@ export async function GET(request: Request) {
   });
 
   try {
-    await withTimeout(
-      (async () => {
+    // The bucket status comes back as a return value rather than a captured
+    // assignment: TypeScript cannot narrow a union written only inside a
+    // closure, and would then read the checks below as unreachable.
+    storage = await withTimeout(
+      (async (): Promise<StorageStatus> => {
         await client.connect();
         await client.query("SELECT 1");
-        status.db = true;
+        dbUp = true;
 
         drift = await checkSchema(client);
         if (!isSchemaUpToDate(drift)) {
@@ -146,19 +187,11 @@ export async function GET(request: Request) {
           });
         }
 
-        // Parameterized id; public=false matches README §5 setup.
-        const rows = await client.query<{ id: string }>(
-          `SELECT id
-           FROM storage.buckets
-           WHERE id = $1
-             AND public = false
-           LIMIT 1`,
-          [INVOICE_BUCKET]
-        );
-        status.storage = (rows.rowCount ?? 0) > 0;
-        if (!status.storage) {
+        const bucket = await checkStorageBucket(client);
+        if (bucket === "down") {
           logger.error("health_storage_bucket_missing", { bucket: INVOICE_BUCKET });
         }
+        return bucket;
       })(),
       HEALTH_TIMEOUT_MS
     );
@@ -167,11 +200,11 @@ export async function GET(request: Request) {
     reason = detail.code ?? detail.name;
     logger.error("health_check_failed", {
       error: detail,
-      db: status.db ? "up" : "down",
-      storage: status.storage ? "up" : "down",
+      db: dbUp ? "up" : "down",
+      storage,
       latencyMs: Date.now() - startedAt,
     });
-    if (status.db && !status.storage) {
+    if (dbUp && storage === "down") {
       logger.error("health_storage_check_failed", { error: detail });
     }
   } finally {
@@ -182,12 +215,11 @@ export async function GET(request: Request) {
     }
   }
 
-  const db = status.db ? "up" : "down";
-  const storage = status.storage ? "up" : "down";
+  const db = dbUp ? "up" : "down";
   // Unknown when the connection failed before the catalog lookups ran.
   const schemaOk = drift ? isSchemaUpToDate(drift) : false;
   const schema = !drift ? "unknown" : schemaOk ? "ok" : "outdated";
-  const ok = status.db && status.storage && schemaOk;
+  const ok = dbUp && storage !== "down" && schemaOk;
 
   return NextResponse.json(
     {
@@ -199,7 +231,8 @@ export async function GET(request: Request) {
       // Informational: a missing email setup never degrades `status`.
       email,
       ...probeNotes,
-      ...(!status.db && reason ? { reason } : {}),
+      ...(storage === "not_applicable" ? { storageNote: STORAGE_NOT_APPLICABLE_NOTE } : {}),
+      ...(!dbUp && reason ? { reason } : {}),
       ...(drift && !schemaOk
         ? {
             missingTables: drift.missingTables,

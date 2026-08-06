@@ -1,14 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  agreementConsentExpiry,
   agreementFor,
   assessRequisition,
+  classifyAccountError,
   computeDateFrom,
   consentState,
   isAccountRateLimited,
   mapBookedTransactions,
   pickBalance,
   rateLimitRetryAt,
+  requisitionStatusCode,
   type GcBalance,
   type GcTransaction,
 } from "@/lib/integrations/gocardless-core";
@@ -185,6 +188,84 @@ describe("gocardless requisition assessment", () => {
 
   it("handles unknown statuses defensively", () => {
     expect(assessRequisition("??", 0).kind).toBe("unknown");
+  });
+});
+
+describe("gocardless requisition status normalization", () => {
+  it("passes the documented two-letter string straight through", () => {
+    expect(requisitionStatusCode("LN")).toBe("LN");
+  });
+
+  it("reads the short code out of an object status", () => {
+    // The endpoint reference types `status` as an object, and the older shape
+    // was { short, long, description } — a linked requisition must not be
+    // mistaken for a failed one if the API ever answers that way.
+    expect(requisitionStatusCode({ short: "LN", long: "LINKED" })).toBe("LN");
+  });
+
+  it("maps a long-form status back to its code", () => {
+    expect(requisitionStatusCode({ long: "LINKED" })).toBe("LN");
+    expect(requisitionStatusCode({ long: "REJECTED" })).toBe("RJ");
+    expect(assessRequisition(requisitionStatusCode({ long: "LINKED" }), 1).ok).toBe(true);
+  });
+
+  it("returns an empty code for missing or unusable values", () => {
+    expect(requisitionStatusCode(undefined)).toBe("");
+    expect(requisitionStatusCode(null)).toBe("");
+    expect(requisitionStatusCode({})).toBe("");
+    expect(assessRequisition(requisitionStatusCode(undefined), 0).kind).toBe("unknown");
+  });
+});
+
+describe("gocardless account error classification", () => {
+  it("treats a spent bank budget as a rate limit", () => {
+    expect(classifyAccountError(429, "RateLimitError")).toBe("rate_limit");
+  });
+
+  it("treats every documented 401 as needing a reconnect", () => {
+    expect(classifyAccountError(401, "End User Agreement (EUA) x has expired")).toBe("auth");
+    expect(classifyAccountError(401, "AccessExpiredError")).toBe("auth");
+    expect(classifyAccountError(401, "AccountInactiveError")).toBe("auth");
+  });
+
+  it("separates a suspended account from one merely still processing", () => {
+    // Both are 409; only suspension needs the user to reconnect.
+    expect(classifyAccountError(409, "Account Suspended")).toBe("auth");
+    expect(classifyAccountError(409, "AccountProcessing")).toBe("unavailable");
+    expect(classifyAccountError(409, "")).toBe("unavailable");
+  });
+
+  it("keeps a per-account permission gap and bank outages from failing the connection", () => {
+    expect(classifyAccountError(403, "AccountAccessForbidden")).toBe("unavailable");
+    expect(classifyAccountError(503, "ConnectionError")).toBe("unavailable");
+    expect(classifyAccountError(500, "UnknownRequestError")).toBe("unavailable");
+  });
+
+  it("falls back to a plain error for anything else", () => {
+    expect(classifyAccountError(400, "Invalid Account ID")).toBe("error");
+    expect(classifyAccountError(404, "Account not found")).toBe("error");
+  });
+});
+
+describe("gocardless consent expiry from an agreement", () => {
+  const now = new Date("2026-08-04T10:00:00Z");
+
+  it("counts the access window from the acceptance date", () => {
+    expect(agreementConsentExpiry("2026-08-01T00:00:00Z", 90, now)).toBe(
+      "2026-10-30T00:00:00.000Z"
+    );
+  });
+
+  it("falls back to now while the agreement is not yet accepted", () => {
+    // The API returns accepted as "" until the user approves at the bank.
+    expect(agreementConsentExpiry("", 90, now)).toBe("2026-11-02T10:00:00.000Z");
+    expect(agreementConsentExpiry(null, 90, now)).toBe("2026-11-02T10:00:00.000Z");
+  });
+
+  it("returns null rather than throwing on unusable input", () => {
+    expect(agreementConsentExpiry("not-a-date", 90, now)).toBeNull();
+    expect(agreementConsentExpiry("2026-08-01T00:00:00Z", 0, now)).toBeNull();
+    expect(agreementConsentExpiry("2026-08-01T00:00:00Z", null, now)).toBeNull();
   });
 });
 

@@ -6,6 +6,7 @@ import {
   CalendarClockIcon,
   FlameIcon,
   HourglassIcon,
+  LayersIcon,
   LockIcon,
   RepeatIcon,
   WalletIcon,
@@ -23,6 +24,9 @@ import {
 import { ExplainForecast } from "@/components/forecast/explain-forecast";
 import { ForecastChart } from "@/components/forecast/forecast-chart-lazy";
 import { RecurringTable } from "@/components/forecast/recurring-table";
+import { ScenarioComparisonChart } from "@/components/forecast/scenario-comparison-chart-lazy";
+import { ScenarioDeltaTable } from "@/components/forecast/scenario-delta-table";
+import { ScenarioSwitcher } from "@/components/forecast/scenario-switcher";
 import { UpcomingBills } from "@/components/forecast/upcoming-bills";
 import {
   Card,
@@ -34,8 +38,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { PageHeading } from "@/components/ui/page-heading";
 import { getEntitlements } from "@/lib/billing/entitlements";
-import { buildForecast } from "@/lib/finance/data";
-import { prisma } from "@/lib/prisma";
+import { buildScenarioForecasts, loadScenarioData } from "@/lib/finance/scenario-data";
+import {
+  assumptionsInScenario,
+  BASE_SCENARIO_ID,
+  canAddScenario,
+  resolveActiveScenarioId,
+  resolveComparedScenarioIds,
+  scenarioDeltas,
+  toScenarioSeries,
+} from "@/lib/finance/scenarios";
 import { formatCurrency, localeForCurrency } from "@/lib/utils";
 import { getWorkspaceContext, type WorkspaceContext } from "@/lib/workspace/context";
 
@@ -55,11 +67,24 @@ function runwayDisplay(months: number | null): { value: string; hint: string } {
   };
 }
 
+/** A repeated query parameter is a hand-edited URL; take the first value. */
+function firstValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
 /** Streams: the header paints immediately, the forecast body follows. */
-export default async function ForecastPage() {
+export default async function ForecastPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ scenario?: string | string[]; compare?: string | string[] }>;
+}) {
   const ctx = await getWorkspaceContext();
   if (!ctx) redirect("/login");
   if (!ctx.permissions.has("view_reports")) redirect("/dashboard");
+
+  const params = await searchParams;
+  const scenarioParam = firstValue(params.scenario);
+  const compareParam = firstValue(params.compare);
 
   return (
     <div className="flex flex-col gap-6">
@@ -71,6 +96,7 @@ export default async function ForecastPage() {
       </div>
 
       <Suspense
+        key={`${scenarioParam ?? ""}|${compareParam ?? ""}`}
         fallback={
           <>
             <StatRowSkeleton />
@@ -78,45 +104,67 @@ export default async function ForecastPage() {
           </>
         }
       >
-        <ForecastContent ctx={ctx} />
+        <ForecastContent ctx={ctx} scenarioParam={scenarioParam} compareParam={compareParam} />
       </Suspense>
     </div>
   );
 }
 
-async function ForecastContent({ ctx }: { ctx: WorkspaceContext }) {
+async function ForecastContent({
+  ctx,
+  scenarioParam,
+  compareParam,
+}: {
+  ctx: WorkspaceContext;
+  scenarioParam?: string;
+  compareParam?: string;
+}) {
   const workspaceId = ctx.workspace.id;
+  const currency = ctx.workspace.currency;
 
-  // Assumptions are fetched once and shared with the forecast engine
-  // (buildForecast used to fetch its own copy — one duplicate query saved).
-  const assumptionsPromise = prisma.assumption.findMany({
-    where: { workspaceId },
-    orderBy: { createdAt: "asc" },
-  });
-  const [forecast, assumptionRows, entitlements] = await Promise.all([
-    assumptionsPromise.then((rows) => buildForecast(workspaceId, ctx.workspace.currency, rows)),
-    assumptionsPromise,
+  // The scenarios and every assumption in one pass, shared by the switcher, the
+  // assumptions manager and the engine — which then runs once per scenario over
+  // one load of history.
+  const data = await loadScenarioData(workspaceId);
+  const activeId = resolveActiveScenarioId(scenarioParam, data.scenarios);
+  const comparedIds = resolveComparedScenarioIds(activeId, compareParam, data.scenarios);
+
+  const [compared, entitlements] = await Promise.all([
+    buildScenarioForecasts(workspaceId, currency, comparedIds, data),
     getEntitlements(workspaceId),
   ]);
-  const assumptionsUnlocked = entitlements.plan.limits.assumptionsEnabled;
 
-  const assumptions: AssumptionItem[] = assumptionRows.map((row) => ({
-    id: row.id,
-    kind: row.kind,
-    type: row.type,
-    label: row.label,
-    amount: row.amount === null ? null : Number(row.amount),
-    percent: row.percent === null ? null : Number(row.percent),
-    date: row.date?.toISOString().slice(0, 10) ?? null,
-    startDate: row.startDate?.toISOString().slice(0, 10) ?? null,
-    endDate: row.endDate?.toISOString().slice(0, 10) ?? null,
-    enabled: row.enabled,
-  }));
+  const forecast = compared[0].forecast;
+  const active = data.scenarios.find((scenario) => scenario.id === activeId);
+  const isComparing = compared.length > 1;
+
+  const assumptionsUnlocked = entitlements.plan.limits.assumptionsEnabled;
+  const namedScenarios = data.scenarios.filter((scenario) => scenario.id !== BASE_SCENARIO_ID);
+  // A workspace that downgrades keeps the scenarios it named: it can still read,
+  // rename and delete them, it just cannot add more.
+  const showScenarios = assumptionsUnlocked || namedScenarios.length > 0;
+  const canCreateScenario =
+    assumptionsUnlocked &&
+    canAddScenario(namedScenarios.length, entitlements.plan.limits.maxScenarios).allowed;
+
+  const assumptions: AssumptionItem[] = assumptionsInScenario(data.assumptions, activeId).map(
+    (row) => ({
+      id: row.id,
+      kind: row.kind,
+      type: row.type,
+      label: row.label,
+      amount: row.amount === null ? null : Number(row.amount),
+      percent: row.percent === null ? null : Number(row.percent),
+      date: row.date?.toISOString().slice(0, 10) ?? null,
+      startDate: row.startDate?.toISOString().slice(0, 10) ?? null,
+      endDate: row.endDate?.toISOString().slice(0, 10) ?? null,
+      enabled: row.enabled,
+    })
+  );
 
   const { metrics } = forecast;
   const runway = runwayDisplay(metrics.runwayMonths);
   const isBurning = metrics.netBurnRate > 0;
-  const currency = ctx.workspace.currency;
   const money = (value: number) => formatCurrency(value, currency, localeForCurrency(currency));
 
   return (
@@ -151,25 +199,79 @@ async function ForecastContent({ ctx }: { ctx: WorkspaceContext }) {
         />
       </div>
 
+      {showScenarios ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <LayersIcon className="size-4" />
+              Scenarios
+            </CardTitle>
+            <CardDescription>
+              Keep a named set of assumptions per plan you are weighing up, and put two or three on
+              the same chart
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ScenarioSwitcher
+              scenarios={data.scenarios}
+              activeId={activeId}
+              comparedIds={comparedIds}
+              canCreate={canCreateScenario}
+              // Null hides the quota line, which is the right answer for a
+              // workspace whose plan no longer includes scenarios at all.
+              scenarioLimit={assumptionsUnlocked ? entitlements.plan.limits.maxScenarios : null}
+            />
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card>
         <CardHeader>
           <CardTitle>Projected balance</CardTitle>
           <CardDescription>
-            Historical actuals and the projected trajectory with an ~80% confidence band
+            {isComparing
+              ? `${compared.map((entry) => entry.name).join(" vs ")} — historical actuals once, one projected line per scenario, with the confidence band on ${compared[0].name}`
+              : "Historical actuals and the projected trajectory with an ~80% confidence band"}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ForecastChart horizons={forecast.horizons} currency={ctx.workspace.currency} />
+          {isComparing ? (
+            <ScenarioComparisonChart scenarios={toScenarioSeries(compared)} currency={currency} />
+          ) : (
+            <ForecastChart horizons={forecast.horizons} currency={currency} />
+          )}
         </CardContent>
       </Card>
+
+      {isComparing ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Where the scenarios end up</CardTitle>
+            <CardDescription>
+              Cash at each horizon and how long it lasts, against {compared[0].name}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ScenarioDeltaTable deltas={scenarioDeltas(compared)} currency={currency} />
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>
           <CardTitle>AI explanation</CardTitle>
-          <CardDescription>Drivers, risks and recommendations for this forecast</CardDescription>
+          <CardDescription>
+            {isComparing
+              ? "What separates these scenarios, and which assumptions are behind it"
+              : "Drivers, risks and recommendations for this forecast"}
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <ExplainForecast />
+          <ExplainForecast
+            scenarioId={activeId}
+            comparedIds={comparedIds}
+            comparedNames={compared.map((entry) => entry.name)}
+          />
         </CardContent>
       </Card>
 
@@ -183,15 +285,23 @@ async function ForecastContent({ ctx }: { ctx: WorkspaceContext }) {
           </CardHeader>
           <CardContent>
             {assumptionsUnlocked ? (
-              <AssumptionsManager assumptions={assumptions} currency={ctx.workspace.currency} />
+              <AssumptionsManager
+                assumptions={assumptions}
+                currency={currency}
+                scenarioId={activeId}
+                scenarioName={namedScenarios.length > 0 ? active?.name : undefined}
+              />
             ) : (
               <div className="flex flex-col items-center gap-3 py-8 text-center">
                 <div className="bg-muted flex size-10 items-center justify-center rounded-full">
                   <LockIcon className="text-muted-foreground size-5" />
                 </div>
-                <p className="text-sm font-medium">What-if assumptions are a Pro feature</p>
+                <p className="text-sm font-medium">
+                  What-if assumptions and scenarios are a Pro feature
+                </p>
                 <p className="text-muted-foreground max-w-sm text-sm">
-                  Model new hires, expected payments and growth scenarios on top of your forecast.
+                  Model new hires, expected payments and growth on top of your forecast — then keep
+                  them as named scenarios and compare two or three side by side.
                 </p>
                 <Button asChild size="sm">
                   <Link href="/billing">Upgrade plan</Link>
@@ -209,7 +319,7 @@ async function ForecastContent({ ctx }: { ctx: WorkspaceContext }) {
             <CardDescription>Projected recurring payments over the next 45 days</CardDescription>
           </CardHeader>
           <CardContent>
-            <UpcomingBills bills={forecast.upcomingBills} currency={ctx.workspace.currency} />
+            <UpcomingBills bills={forecast.upcomingBills} currency={currency} />
           </CardContent>
         </Card>
       </div>
@@ -226,7 +336,7 @@ async function ForecastContent({ ctx }: { ctx: WorkspaceContext }) {
           <CardContent>
             <RecurringTable
               items={forecast.recurringExpenses}
-              currency={ctx.workspace.currency}
+              currency={currency}
               emptyTitle="No recurring expenses detected yet"
             />
           </CardContent>
@@ -242,7 +352,7 @@ async function ForecastContent({ ctx }: { ctx: WorkspaceContext }) {
           <CardContent>
             <RecurringTable
               items={forecast.recurringIncome}
-              currency={ctx.workspace.currency}
+              currency={currency}
               emptyTitle="No recurring income detected yet"
             />
           </CardContent>

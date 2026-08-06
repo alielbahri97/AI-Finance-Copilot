@@ -322,7 +322,7 @@ export function TransactionsTable({
           canEdit ? (
             <div className="flex flex-wrap justify-center gap-2">
               <Button size="sm" asChild>
-                <Link href="/import">Import CSV</Link>
+                <Link href="/import">Import statement</Link>
               </Button>
               <TransactionDialog categories={categories} />
             </div>

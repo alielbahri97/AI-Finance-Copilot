@@ -42,8 +42,8 @@ export default async function ImportPage() {
       <div>
         <PageHeading>Import bank statement</PageHeading>
         <p className="text-muted-foreground text-sm">
-          Upload a CSV export from your bank. Duplicates are skipped automatically and every
-          import can be undone.
+          Upload a CSV, Excel, PDF or MT940 export from your bank. Duplicates are skipped
+          automatically and every import can be undone.
         </p>
       </div>
 

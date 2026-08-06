@@ -8,7 +8,7 @@ export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 /**
- * Scheduled integration synchronization, driven by Vercel Cron (hourly, see
+ * Scheduled integration synchronization, driven by Vercel Cron (see
  * vercel.json). Each connection syncs when its provider interval (with
  * failure backoff) has elapsed; failures are isolated per connection and
  * recorded on SyncRun — the cron itself never crashes on a provider error.

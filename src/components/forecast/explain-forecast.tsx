@@ -7,14 +7,31 @@ import { toast } from "sonner";
 import { Markdown } from "@/components/copilot/markdown-lazy";
 import { Button } from "@/components/ui/button";
 
+interface ExplainForecastProps {
+  /** The scenario on screen. Omitted = the workspace default. */
+  scenarioId?: string;
+  /**
+   * Every scenario being compared, primary first. With more than one, the
+   * explanation becomes "why do these differ" instead of "what is this".
+   */
+  comparedIds?: string[];
+  /** Names of the compared scenarios, for the button and the blurb. */
+  comparedNames?: string[];
+}
+
 /**
  * Requests a streamed AI explanation of the current forecast and renders it
  * as markdown while tokens arrive.
  */
-export function ExplainForecast() {
+export function ExplainForecast({
+  scenarioId,
+  comparedIds = [],
+  comparedNames = [],
+}: ExplainForecastProps = {}) {
   const [content, setContent] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const isComparison = comparedIds.length > 1;
 
   async function explain() {
     if (isStreaming) return;
@@ -27,6 +44,8 @@ export function ExplainForecast() {
     try {
       const response = await fetch("/api/forecast/explain", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scenarioId, compare: comparedIds.slice(1) }),
         signal: controller.signal,
       });
       if (!response.ok || !response.body) {
@@ -83,7 +102,9 @@ export function ExplainForecast() {
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
         <p className="text-muted-foreground text-sm">
-          Let the AI walk through the drivers, risks and recommended actions behind these numbers.
+          {isComparison
+            ? `Let the AI explain why ${comparedNames.map((name) => `"${name}"`).join(" and ")} part company, and which assumptions are doing it.`
+            : "Let the AI walk through the drivers, risks and recommended actions behind these numbers."}
         </p>
         {isStreaming ? (
           <Button size="sm" variant="outline" onClick={stop}>
@@ -93,7 +114,7 @@ export function ExplainForecast() {
         ) : (
           <Button size="sm" onClick={explain}>
             <SparklesIcon />
-            {content ? "Regenerate" : "Explain this forecast"}
+            {content ? "Regenerate" : isComparison ? "Explain the difference" : "Explain this forecast"}
           </Button>
         )}
       </div>
@@ -101,7 +122,7 @@ export function ExplainForecast() {
       {isStreaming && content.length === 0 && (
         <div className="text-muted-foreground flex items-center gap-2 text-sm">
           <Loader2Icon className="size-4 animate-spin" />
-          Analyzing your forecast…
+          {isComparison ? "Comparing your scenarios…" : "Analyzing your forecast…"}
         </div>
       )}
 

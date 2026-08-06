@@ -82,9 +82,9 @@ const DATA_OPTIONS: Array<{
   {
     href: "/import",
     icon: UploadIcon,
-    title: "Upload a CSV",
+    title: "Upload a statement",
     description:
-      "Export a statement from your bank and drop the file in. You map the columns once; duplicates are skipped.",
+      "Export a CSV, Excel, PDF or MT940 statement from your bank and drop the file in. You map the columns once; duplicates are skipped.",
   },
   {
     href: "/transactions",

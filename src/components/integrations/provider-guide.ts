@@ -73,7 +73,7 @@ export const PROVIDER_GUIDES: Record<string, ProviderGuide> = {
     bullets: [
       "Connects 2,000+ European and UK banks (PSD2 account access).",
       "Imports transactions and balances automatically every 6 hours.",
-      "Consent lasts up to 180 days (bank-dependent) with a renewal reminder before it expires.",
+      "Consent lasts as long as your bank allows (usually 90 days, up to 180) with a renewal reminder before it expires.",
     ],
     privacy: BANK_PRIVACY,
     userSteps: [
@@ -82,9 +82,12 @@ export const PROVIDER_GUIDES: Record<string, ProviderGuide> = {
       "You'll be brought back here and the first import runs automatically.",
     ],
     adminSteps: [
-      "Create a Bank Account Data account at bankaccountdata.gocardless.com.",
-      "Create user secrets under Developers → User secrets.",
-      "Set the environment variables below.",
+      "Create a free Bank Account Data account at bankaccountdata.gocardless.com and confirm the email.",
+      "Open Developers → User secrets in the left-hand menu and click “+ Create new”.",
+      "Leave the IP allow-list empty unless this app has a fixed outbound IP — an address that doesn't match makes every token request fail with HTTP 403.",
+      "Copy or download the secret ID and secret key immediately: the key is shown only once.",
+      "Set the environment variables below. No redirect URI has to be registered anywhere — it is sent with each bank request and derived from NEXT_PUBLIC_APP_URL, so make sure that variable matches how the app is actually reached.",
+      "Optional: set GOCARDLESS_INSTITUTION_ID to SANDBOXFINANCE_SFIN0000 to add GoCardless's test bank to the picker and try the whole flow without a real bank.",
       RESTART_STEP,
     ],
     adminUrl: "https://bankaccountdata.gocardless.com",

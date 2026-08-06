@@ -5,6 +5,8 @@ import { apiError } from "@/lib/api/response";
 import { runAutoDunning } from "@/lib/invoices/dunning";
 import { logger } from "@/lib/logger";
 
+// Next only accepts a literal here, so the run budget reads the same ceiling
+// from CRON_MAX_DURATION_SECONDS; a test asserts the two still agree.
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 

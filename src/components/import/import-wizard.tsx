@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { CsvDropzone } from "@/components/import/csv-dropzone";
+import { StatementDropzone } from "@/components/import/statement-dropzone";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,11 +37,14 @@ import {
 import { BRAND } from "@/lib/branding";
 import { normalizeRows } from "@/lib/csv/normalize";
 import type { ColumnMapping, ColumnRole, NormalizedRow, RowError, StatementCurrencyInfo } from "@/lib/csv/types";
+import type { StatementFormat } from "@/lib/import/types";
 import { cn, formatCurrency, localeForCurrency } from "@/lib/utils";
 
 interface ParseResponse {
   fileName: string;
-  delimiter: string;
+  format: StatementFormat;
+  /** How the file was read ("Excel sheet \"Sheet1\"", "MT940 statement in EUR", …). */
+  source: string;
   columnCount: number;
   rowCount: number;
   headers: string[] | null;
@@ -305,7 +308,7 @@ export function ImportWizard({ currency }: ImportWizardProps) {
   if (step === "upload") {
     return (
       <WizardShell step="upload">
-        <CsvDropzone onFile={handleFile} isLoading={isParsing} />
+        <StatementDropzone onFile={handleFile} isLoading={isParsing} />
       </WizardShell>
     );
   }
@@ -376,8 +379,7 @@ export function ImportWizard({ currency }: ImportWizardProps) {
         <div className="flex items-center gap-2 text-sm">
           <Badge variant="secondary">{parseResult.fileName}</Badge>
           <span className="text-muted-foreground">
-            {parseResult.rowCount.toLocaleString()} rows ·{" "}
-            {parseResult.delimiter === "\t" ? "tab" : `"${parseResult.delimiter}"`} separated
+            {parseResult.rowCount.toLocaleString()} rows · {parseResult.source}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -391,6 +393,17 @@ export function ImportWizard({ currency }: ImportWizardProps) {
           </Button>
         </div>
       </div>
+
+      {parseResult.format === "pdf" && (
+        <Alert>
+          <AlertTitle>Read from a PDF — check these rows</AlertTitle>
+          <AlertDescription>
+            PDF statements have no fixed structure, so dates, descriptions and amounts were
+            recovered from the printed layout. Review the preview below before importing; if
+            anything looks off, your bank&apos;s CSV, Excel or MT940 export is more reliable.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {!mappingValid && (
         <Alert variant="destructive">

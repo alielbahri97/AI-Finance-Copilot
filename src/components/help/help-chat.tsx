@@ -20,7 +20,7 @@ export interface HelpMessageItem {
 export function commonQuestions(edition: Edition = DEFAULT_EDITION): string[] {
   return [
     "How do I connect my bank?",
-    "How do I import a CSV?",
+    "How do I import a bank statement?",
     edition === "personal" ? "How do budgets work?" : "How do forecasts work?",
     "What does my plan include?",
     edition === "personal"

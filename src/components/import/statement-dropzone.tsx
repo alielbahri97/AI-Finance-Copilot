@@ -4,24 +4,35 @@ import { useRef, useState } from "react";
 import { FileSpreadsheetIcon, Loader2Icon, UploadCloudIcon } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  ACCEPTED_FORMATS_SENTENCE,
+  isSupportedStatementFile,
+  UPLOAD_ACCEPT_ATTRIBUTE,
+} from "@/lib/import/format";
 import { cn } from "@/lib/utils";
+import { MAX_IMPORT_FILE_MB } from "@/lib/validations/import";
 
-interface CsvDropzoneProps {
+interface StatementDropzoneProps {
   onFile: (file: File) => void;
   isLoading: boolean;
 }
 
-const ACCEPTED_EXTENSIONS = [".csv", ".txt", ".tsv"];
-
-export function CsvDropzone({ onFile, isLoading }: CsvDropzoneProps) {
+export function StatementDropzone({ onFile, isLoading }: StatementDropzoneProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
   function handleFile(file: File | undefined) {
     if (!file) return;
-    const name = file.name.toLowerCase();
-    if (!ACCEPTED_EXTENSIONS.some((extension) => name.endsWith(extension))) {
-      toast.error("Unsupported file", { description: "Upload a .csv, .tsv or .txt export." });
+    if (!isSupportedStatementFile(file.name)) {
+      toast.error("Unsupported file", {
+        description: `Upload a ${ACCEPTED_FORMATS_SENTENCE} statement (.csv, .tsv, .xlsx, .xls, .pdf, .mt940, .sta).`,
+      });
+      return;
+    }
+    if (file.size > MAX_IMPORT_FILE_MB * 1024 * 1024) {
+      toast.error("File is too large", {
+        description: `Statements up to ${MAX_IMPORT_FILE_MB} MB can be imported.`,
+      });
       return;
     }
     onFile(file);
@@ -49,12 +60,12 @@ export function CsvDropzone({ onFile, isLoading }: CsvDropzoneProps) {
           : "border-border hover:border-primary/50 hover:bg-accent/30",
         isLoading && "pointer-events-none opacity-60"
       )}
-      aria-label="Upload a CSV bank statement"
+      aria-label="Upload a bank statement"
     >
       <input
         ref={inputRef}
         type="file"
-        accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain"
+        accept={UPLOAD_ACCEPT_ATTRIBUTE}
         className="hidden"
         onChange={(event) => {
           handleFile(event.target.files?.[0]);
@@ -75,8 +86,8 @@ export function CsvDropzone({ onFile, isLoading }: CsvDropzoneProps) {
           {isLoading ? "Analyzing your file…" : "Drop your bank statement here"}
         </p>
         <p className="text-muted-foreground mt-1 text-sm">
-          or click to browse — CSV exports up to 8 MB. Delimiters, encodings and number
-          formats are detected automatically.
+          or click to browse — {ACCEPTED_FORMATS_SENTENCE} exports up to {MAX_IMPORT_FILE_MB} MB.
+          Delimiters, encodings, number formats and dates are detected automatically.
         </p>
       </div>
     </button>

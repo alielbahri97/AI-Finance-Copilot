@@ -63,7 +63,7 @@ describe("help knowledge base", () => {
   it("generates plan facts from the billing plans module", () => {
     const billing = topics.find((topic) => topic.id === "billing-plans")!;
     expect(billing.content).toContain("**Free**");
-    expect(billing.content).toContain("1 CSV import/month");
+    expect(billing.content).toContain("1 statement import/month");
     expect(billing.content).toContain("**Business**");
     expect(billing.content).toContain("14-day Pro trial");
   });
@@ -123,6 +123,14 @@ describe("help knowledge base per edition", () => {
     // Free allows one bank on Personal, and budgets on every tier.
     expect(billing.content).toContain("1 bank connection");
     expect(billing.content).toContain("budgets");
+  });
+
+  it("describes the referral reward as the tier each edition trials", () => {
+    const business = topics.find((topic) => topic.id === "billing-plans")!;
+    const personal = personalTopics.find((topic) => topic.id === "billing-plans")!;
+    expect(business.content).toContain("earns you 30 days of Pro");
+    expect(personal.content).toContain("earns you 30 days of Plus");
+    expect(personal.content).not.toContain("Pro");
   });
 
   it("states the real plan gate for goals and subscription insights", () => {

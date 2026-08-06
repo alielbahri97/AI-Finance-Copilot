@@ -76,13 +76,18 @@ apply if you enable that feature.
 - [ ] Cron running: Vercel Cron jobs visible (or self-hosted crontab installed) and a
       manual `curl -H "Authorization: Bearer $CRON_SECRET" .../api/cron/notifications`
       returns `{"ok":true,...}`
+- [ ] **Real delivery proven, not assumed**: `npm run verify:email -- --url https://<domain>`
+      ends in `SENT` with a Resend message id. `summariesSent: 1` on its own is not
+      proof — it counts events, not mail. Full procedure and the three usual failures:
+      [DEPLOYMENT.md → Verifying notification email in production](DEPLOYMENT.md#verifying-notification-email-in-production)
 
 ## Integrations *(optional)*
 
 - [ ] Each enabled provider's OAuth app registered with the **production** redirect URI
       `https://<domain>/api/integrations/<id>/callback`
 - [ ] Plaid moved from sandbox to production credentials (`PLAID_ENV=production`)
-- [ ] `/api/cron/sync` scheduled (hourly) and a manual "Sync now" works end to end
+- [ ] `/api/cron/sync` scheduled (daily in `vercel.json`; hourly is worth it here and
+      needs a Pro plan — see DEPLOYMENT.md) and a manual "Sync now" works end to end
 
 ## Domain, security & infrastructure
 

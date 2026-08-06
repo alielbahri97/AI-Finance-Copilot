@@ -225,6 +225,7 @@ model Workspace {
   importBatches          ImportBatch[]
   invoices               Invoice[]
   assumptions            Assumption[]
+  scenarios              Scenario[]
   conversations          Conversation[]
   budgets                Budget[]
   savingsGoals           SavingsGoal[]
@@ -502,7 +503,8 @@ model Subscription {
   stripePriceId        String?            @map("stripe_price_id")
   currentPeriodEnd     DateTime?          @map("current_period_end")
   cancelAtPeriodEnd    Boolean            @default(false) @map("cancel_at_period_end")
-  /// Local card-free Pro trial: 14 days on signup, extended by referral rewards.
+  /// Local card-free trial of the edition's middle tier: 14 days on signup,
+  /// extended by referral rewards.
   trialEndsAt          DateTime?          @map("trial_ends_at")
   createdAt            DateTime           @default(now()) @map("created_at")
   updatedAt            DateTime           @updatedAt @map("updated_at")
@@ -536,8 +538,8 @@ model UsageRecord {
   @@map("usage_records")
 }
 
-/// One row per referred signup. Converted referrals grant the referrer
-/// +1 month of Pro credit (applied as a trial extension).
+/// One row per referred signup. Converted referrals grant the referrer 30 more
+/// days of trial credit, worth whatever tier their edition trials.
 model Referral {
   id             String         @id @default(cuid())
   referrerId     String         @map("referrer_id") @db.Uuid
@@ -740,11 +742,42 @@ model InvoiceLineItem {
   @@map("invoice_line_items")
 }
 
+/// A named set of assumptions to forecast against: "Base case", "Hire in Q4",
+/// "Lose the top client". A scenario carries no numbers of its own — it groups
+/// assumptions, and the forecast engine runs unchanged once per scenario.
+///
+/// Assumptions that predate scenarios keep `scenario_id = NULL`, which *is*
+/// the base scenario rather than a row waiting to be backfilled. Nothing was
+/// migrated, and a workspace that never names a scenario sees exactly what it
+/// saw before.
+model Scenario {
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+  name        String
+  /// The scenario the forecast page opens on. At most one per workspace is
+  /// set; when none is, the page opens on the base (NULL) scenario.
+  isDefault   Boolean  @default(false) @map("is_default")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  assumptions Assumption[]
+
+  /// Two scenarios called "Base case" in one workspace would make the
+  /// switcher a guessing game.
+  @@unique([workspaceId, name])
+  @@index([workspaceId, createdAt])
+  @@map("scenarios")
+}
+
 /// A user-defined adjustment applied on top of the data-driven cash forecast.
 model Assumption {
   id          String          @id @default(cuid())
   workspaceId String          @map("workspace_id")
   userId      String          @map("user_id") @db.Uuid
+  /// Which named scenario this belongs to. NULL is the base scenario, which is
+  /// where every assumption written before scenarios existed still lives.
+  scenarioId  String?         @map("scenario_id")
   kind        AssumptionKind
   type      TransactionType
   label     String
@@ -762,8 +795,12 @@ model Assumption {
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   profile   Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Deleting a scenario deletes the assumptions written into it: they describe
+  /// that one hypothesis and mean nothing detached from it.
+  scenario  Scenario? @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
+  @@index([scenarioId])
   @@map("assumptions")
 }
 
