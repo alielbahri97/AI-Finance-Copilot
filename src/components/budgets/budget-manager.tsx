@@ -1,14 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CheckIcon, Loader2Icon, PencilIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react";
+import {
+  CheckIcon,
+  Loader2Icon,
+  PencilIcon,
+  PlusIcon,
+  Trash2Icon,
+  WalletIcon,
+  XIcon,
+} from "lucide-react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Form,
   FormControl,
@@ -30,7 +40,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import type { BudgetProgress, BudgetSummary } from "@/lib/personal/budgets";
 import type { BudgetCategoryOption } from "@/lib/personal/budgets-data";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, localeForCurrency } from "@/lib/utils";
 
 import { STATUS_TONES } from "./status-tone";
 
@@ -56,10 +66,10 @@ interface BudgetManagerProps {
 }
 
 /** The over/under line under each bar: "40.00 left" or "12.50 over budget". */
-function verdict(budget: BudgetProgress, currency: string): string {
+function verdict(budget: BudgetProgress, currency: string, locale: string): string {
   return budget.remaining < 0
-    ? `${formatCurrency(Math.abs(budget.remaining), currency)} over budget`
-    : `${formatCurrency(budget.remaining, currency)} left`;
+    ? `${formatCurrency(Math.abs(budget.remaining), currency, locale)} over budget`
+    : `${formatCurrency(budget.remaining, currency, locale)} left`;
 }
 
 export function BudgetManager({ summary, categories, currency, canEdit }: BudgetManagerProps) {
@@ -67,6 +77,17 @@ export function BudgetManager({ summary, categories, currency, canEdit }: Budget
   const [busyId, setBusyId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editLimit, setEditLimit] = useState("");
+  const formRef = useRef<HTMLFormElement>(null);
+
+  const locale = localeForCurrency(currency);
+  const money = (value: number) => formatCurrency(value, currency, locale);
+
+  /** The empty state's way out: the create form is already on the page. */
+  function startFirstBudget() {
+    const form = formRef.current;
+    form?.scrollIntoView({ behavior: "smooth", block: "center" });
+    form?.querySelector<HTMLElement>("[data-slot='select-trigger']")?.focus();
+  }
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -154,6 +175,7 @@ export function BudgetManager({ summary, categories, currency, canEdit }: Budget
       {canEdit && (
         <Form {...form}>
           <form
+            ref={formRef}
             onSubmit={form.handleSubmit(createBudget)}
             className="bg-card flex flex-wrap items-start gap-3 rounded-lg border p-3"
           >
@@ -249,13 +271,23 @@ export function BudgetManager({ summary, categories, currency, canEdit }: Budget
       )}
 
       {summary.budgets.length === 0 ? (
-        <div className="text-muted-foreground flex flex-col items-center gap-2 py-10 text-center text-sm">
-          <p className="font-medium">No budgets for this month</p>
-          <p>
-            Set a monthly limit on a category and this page will show how the month is tracking
-            against it.
-          </p>
-        </div>
+        <EmptyState
+          icon={WalletIcon}
+          title="No budgets for this month"
+          description={
+            canEdit
+              ? "Set a monthly limit on a category and this page will show how the month is tracking against it."
+              : "Once someone with edit access sets a monthly limit on a category, this page will show how the month is tracking against it."
+          }
+          action={
+            canEdit ? (
+              <Button onClick={startFirstBudget}>
+                <PlusIcon />
+                Set your first limit
+              </Button>
+            ) : null
+          }
+        />
       ) : (
         <div className="flex flex-col gap-1">
           {summary.budgets.map((budget) => {
@@ -311,10 +343,10 @@ export function BudgetManager({ summary, categories, currency, canEdit }: Budget
                   ) : (
                     <>
                       <span className="text-sm tabular-nums">
-                        {formatCurrency(budget.spent, currency)}
+                        {money(budget.spent)}
                         <span className="text-muted-foreground">
                           {" of "}
-                          {formatCurrency(budget.available, currency)}
+                          {money(budget.available)}
                         </span>
                       </span>
                       {canEdit && (
@@ -347,16 +379,27 @@ export function BudgetManager({ summary, categories, currency, canEdit }: Budget
                           >
                             <PencilIcon />
                           </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="text-muted-foreground hover:text-destructive size-8"
-                            disabled={isBusy}
-                            onClick={() => deleteBudget(budget)}
-                            aria-label={`Delete ${budget.category} budget`}
-                          >
-                            {isBusy ? <Loader2Icon className="animate-spin" /> : <Trash2Icon />}
-                          </Button>
+                          <ConfirmDialog
+                            trigger={
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="text-muted-foreground hover:text-destructive size-8"
+                                disabled={isBusy}
+                                aria-label={`Delete ${budget.category} budget`}
+                              >
+                                {isBusy ? (
+                                  <Loader2Icon className="animate-spin" />
+                                ) : (
+                                  <Trash2Icon />
+                                )}
+                              </Button>
+                            }
+                            title={`Delete the ${budget.category} budget?`}
+                            description={`Your ${budget.category} spending stays on record. You just stop tracking it against a ${money(budget.limit)} monthly limit, and this page will no longer warn you when it runs over.`}
+                            confirmLabel="Delete budget"
+                            onConfirm={() => deleteBudget(budget)}
+                          />
                         </>
                       )}
                     </>
@@ -371,15 +414,15 @@ export function BudgetManager({ summary, categories, currency, canEdit }: Budget
 
                 <div className="text-muted-foreground flex flex-wrap gap-x-2 text-xs">
                   <span className={budget.status === "over" ? "text-destructive" : undefined}>
-                    {verdict(budget, currency)}
+                    {verdict(budget, currency, locale)}
                   </span>
-                  <span>· Limit {formatCurrency(budget.limit, currency)}</span>
+                  <span>· Limit {money(budget.limit)}</span>
                   {budget.rollover && budget.carriedOver !== 0 && (
                     <span>
                       ·{" "}
                       {budget.carriedOver > 0
-                        ? `${formatCurrency(budget.carriedOver, currency)} carried over`
-                        : `${formatCurrency(Math.abs(budget.carriedOver), currency)} carried over as an overspend`}
+                        ? `${money(budget.carriedOver)} carried over`
+                        : `${money(Math.abs(budget.carriedOver))} carried over as an overspend`}
                     </span>
                   )}
                 </div>

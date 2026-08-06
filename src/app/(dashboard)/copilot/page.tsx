@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import type { ChatMessageItem } from "@/components/copilot/chat";
 import type { ConversationItem } from "@/components/copilot/conversation-sidebar";
 import { CopilotShell } from "@/components/copilot/copilot-shell";
+import { PageHeading } from "@/components/ui/page-heading";
 import { buildFinancialSnapshot } from "@/lib/ai/context";
 import { buildSuggestedQuestions } from "@/lib/ai/suggestions";
 import { checkLimit, getEntitlements } from "@/lib/billing/entitlements";
@@ -51,7 +52,7 @@ export default async function CopilotPage({
         where: { conversationId: activeId, conversation: { workspaceId } },
         orderBy: { createdAt: "asc" },
         take: 200,
-        select: { id: true, role: true, content: true },
+        select: { id: true, role: true, content: true, createdAt: true },
       })
     : [];
 
@@ -65,12 +66,13 @@ export default async function CopilotPage({
     id: message.id,
     role: message.role,
     content: message.content,
+    createdAt: message.createdAt.toISOString(),
   }));
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-1 flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">AI Copilot</h1>
+        <PageHeading>AI Copilot</PageHeading>
         <p className="text-muted-foreground text-sm">
           A financial assistant grounded in your transactions, trends and forecasts.
         </p>

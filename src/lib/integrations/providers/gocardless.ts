@@ -414,7 +414,8 @@ async function sync(ctx: SyncContext): Promise<SyncStats> {
     ctx.currency,
     "gocardless",
     `GoCardless sync ${now.toISOString().slice(0, 10)}`,
-    transactions
+    transactions,
+    { aiProvider: ctx.aiProvider }
   );
 
   // Balance snapshots land on the account rows, which is what the aggregated
@@ -435,6 +436,7 @@ async function sync(ctx: SyncContext): Promise<SyncStats> {
     fetched,
     imported: result.imported,
     duplicates: result.duplicates,
+    aiCategorized: result.aiCategorized,
     accountsSynced,
     accountsSkipped,
   };

@@ -1,9 +1,11 @@
 "use client";
 
+import { ChartPieIcon } from "lucide-react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
+import { EmptyState } from "@/components/ui/empty-state";
 import type { CategoryTotal } from "@/lib/reports/data";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, localeForCurrency } from "@/lib/utils";
 
 interface CategoryBreakdownProps {
   data: CategoryTotal[];
@@ -12,11 +14,16 @@ interface CategoryBreakdownProps {
 }
 
 export function CategoryBreakdown({ data, currency, emptyLabel }: CategoryBreakdownProps) {
+  const locale = localeForCurrency(currency);
+
   if (data.length === 0) {
     return (
-      <div className="text-muted-foreground flex h-64 items-center justify-center text-sm">
-        {emptyLabel}
-      </div>
+      <EmptyState
+        className="h-64"
+        icon={ChartPieIcon}
+        title={emptyLabel}
+        description="Pick a wider date range, or categorize some transactions to see the split."
+      />
     );
   }
 
@@ -38,7 +45,7 @@ export function CategoryBreakdown({ data, currency, emptyLabel }: CategoryBreakd
             ))}
           </Pie>
           <Tooltip
-            formatter={(value) => formatCurrency(Number(value ?? 0), currency)}
+            formatter={(value) => formatCurrency(Number(value ?? 0), currency, locale)}
             contentStyle={{
               backgroundColor: "var(--popover)",
               border: "1px solid var(--border)",
@@ -60,7 +67,7 @@ export function CategoryBreakdown({ data, currency, emptyLabel }: CategoryBreakd
               <span className="text-muted-foreground truncate">{entry.name}</span>
             </div>
             <span className="shrink-0 font-medium tabular-nums">
-              {formatCurrency(entry.total, currency)}
+              {formatCurrency(entry.total, currency, locale)}
             </span>
           </div>
         ))}

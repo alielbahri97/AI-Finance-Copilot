@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { autoCategorizeImportBatch } from "@/lib/ai/categorize";
 import { trackEvent } from "@/lib/analytics";
 import { enforceRateLimit } from "@/lib/api/rate-limit-guard";
 import { apiError } from "@/lib/api/response";
@@ -163,6 +164,8 @@ export async function POST(request: Request) {
         rowErrors: errors.slice(0, 10),
         batchId: null,
         currency: workingCurrency,
+        aiCategorized: 0,
+        aiCategorizationNote: null,
       });
     }
 
@@ -207,6 +210,19 @@ export async function POST(request: Request) {
       }))
     );
 
+    // Rules have already had their say; whatever they left uncategorized goes
+    // to the AI. It runs against its own deadline and swallows its own
+    // failures, so the worst case is an import with more rows to sort by hand.
+    const profile = await prisma.profile.findUnique({
+      where: { id: user.id },
+      select: { aiProvider: true },
+    });
+    const categorization = await autoCategorizeImportBatch({
+      workspaceId: workspace.id,
+      batchId: batch.id,
+      aiProvider: profile?.aiProvider ?? null,
+    });
+
     return NextResponse.json({
       imported: fresh.length,
       duplicates,
@@ -214,6 +230,8 @@ export async function POST(request: Request) {
       rowErrors: errors.slice(0, 10),
       batchId: batch.id,
       currency: workingCurrency,
+      aiCategorized: categorization.categorized,
+      aiCategorizationNote: categorization.note,
     });
   } catch (error) {
     return apiError("POST /api/import/commit", "Import failed", error);

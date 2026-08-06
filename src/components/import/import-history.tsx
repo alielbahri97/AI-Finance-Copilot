@@ -6,6 +6,7 @@ import { HistoryIcon, Loader2Icon, Undo2Icon } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import type { BatchOption } from "@/components/transactions/types";
 import { formatDate } from "@/lib/utils";
 
@@ -39,10 +40,12 @@ export function ImportHistory({ batches }: ImportHistoryProps) {
 
   if (batches.length === 0) {
     return (
-      <div className="text-muted-foreground flex flex-col items-center gap-2 py-8 text-center text-sm">
-        <HistoryIcon className="size-6 opacity-50" />
-        No imports yet.
-      </div>
+      <EmptyState
+        className="py-8"
+        icon={HistoryIcon}
+        title="No imports yet"
+        description="Every file you upload is listed here, and each one can be undone in a single step."
+      />
     );
   }
 

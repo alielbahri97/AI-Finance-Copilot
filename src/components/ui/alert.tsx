@@ -9,8 +9,14 @@ const alertVariants = cva(
     variants: {
       variant: {
         default: "bg-card text-card-foreground",
+        // The description used to be knocked back to 90% opacity, which cost it
+        // 0.24:1 on the card and 0.76:1 on the warning wash — enough to fail AA
+        // in the warning case. Hierarchy comes from the title's weight and the
+        // description's size instead, which costs no contrast.
         destructive:
-          "text-destructive bg-card [&>svg]:text-current *:data-[slot=alert-description]:text-destructive/90",
+          "text-destructive bg-card [&>svg]:text-current *:data-[slot=alert-description]:text-destructive",
+        warning:
+          "border-transparent bg-warning/10 text-warning-tinted [&>svg]:text-current *:data-[slot=alert-description]:text-warning-tinted",
       },
     },
     defaultVariants: {

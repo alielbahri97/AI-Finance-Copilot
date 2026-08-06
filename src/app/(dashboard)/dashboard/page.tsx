@@ -6,13 +6,16 @@ import {
   ArrowRightIcon,
   ChartSplineIcon,
   PiggyBankIcon,
+  PlusIcon,
   ReceiptTextIcon,
   TrendingDownIcon,
   TrendingUpIcon,
+  UploadIcon,
 } from "lucide-react";
 
 import { CashCard } from "@/components/dashboard/cash-card";
 import { ChartsSection } from "@/components/dashboard/charts-section";
+import { GettingStarted, hasNoFinancialData } from "@/components/dashboard/getting-started";
 import { PersonalDashboard } from "@/components/dashboard/personal-dashboard";
 import {
   BannerSkeleton,
@@ -20,14 +23,17 @@ import {
   StatRowSkeleton,
   TableCardSkeleton,
 } from "@/components/dashboard/section-skeletons";
-import { StatCard } from "@/components/dashboard/stat-card";
+import { StatCard, StatRow } from "@/components/dashboard/stat-card";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { PageHeading } from "@/components/ui/page-heading";
 import { getEntitlements } from "@/lib/billing/entitlements";
+import type { PlanLimits } from "@/lib/billing/plans";
 import { editionBranding } from "@/lib/branding";
 import { getDashboardData, getOrCreateProfile } from "@/lib/data";
 import { buildForecast } from "@/lib/finance/data";
 import { getInvoiceReminders } from "@/lib/invoices/reminders";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, localeForCurrency } from "@/lib/utils";
 import { getWorkspaceContext } from "@/lib/workspace/context";
 import { editionForWorkspaceType } from "@/lib/workspace/editions";
 
@@ -50,18 +56,35 @@ export default async function DashboardPage() {
   const canViewTransactions = ctx.permissions.has("view_transactions");
   const canViewInvoices = ctx.permissions.has("view_invoices");
   const canViewReports = ctx.permissions.has("view_reports");
+  const canEditTransactions = ctx.permissions.has("edit_transactions");
   const edition = editionForWorkspaceType(workspace.type);
 
   const heading = (
-    <div>
-      <h1 className="text-2xl font-bold tracking-tight">
-        {firstName ? `Welcome back, ${firstName}` : "Dashboard"}
-      </h1>
-      <p className="text-muted-foreground text-sm">
-        {edition === "personal"
-          ? "Your money over the last six months — spending, budgets and what's coming up."
-          : `Built for ${editionBranding("business").audience} — your overview for the last six months.`}
-      </p>
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <PageHeading>{firstName ? `Welcome back, ${firstName}` : "Dashboard"}</PageHeading>
+        <p className="text-muted-foreground text-sm">
+          {edition === "personal"
+            ? "Your money over the last six months — spending, budgets and what's coming up."
+            : `Built for ${editionBranding("business").audience} — your overview for the last six months.`}
+        </p>
+      </div>
+      {canEditTransactions && (
+        <div className="flex gap-2">
+          <Button asChild>
+            <Link href="/transactions">
+              <PlusIcon />
+              Add transaction
+            </Link>
+          </Button>
+          <Button variant="outline" asChild>
+            <Link href="/import">
+              <UploadIcon />
+              Import
+            </Link>
+          </Button>
+        </div>
+      )}
     </div>
   );
 
@@ -72,13 +95,16 @@ export default async function DashboardPage() {
     return (
       <div className="flex flex-col gap-6">
         {heading}
-        <PersonalDashboard
-          workspaceId={workspace.id}
-          currency={workspace.currency}
-          limits={entitlements.plan.limits}
-          canViewTransactions={canViewTransactions}
-          canViewReports={canViewReports}
-        />
+        <Suspense fallback={<StatRowSkeleton hero />}>
+          <PersonalSection
+            workspaceId={workspace.id}
+            currency={workspace.currency}
+            limits={entitlements.plan.limits}
+            canViewTransactions={canViewTransactions}
+            canViewReports={canViewReports}
+            canEditTransactions={canEditTransactions}
+          />
+        </Suspense>
       </div>
     );
   }
@@ -88,13 +114,19 @@ export default async function DashboardPage() {
       {heading}
 
       {canViewTransactions && (
-        <Suspense fallback={<StatRowSkeleton />}>
-          <StatsSection workspaceId={workspace.id} currency={workspace.currency} />
+        <Suspense fallback={<StatRowSkeleton hero />}>
+          <StatsSection
+            workspaceId={workspace.id}
+            currency={workspace.currency}
+            canAddData={canEditTransactions}
+          />
         </Suspense>
       )}
 
+      {/* Reserves the banner's height: a null fallback pushed the forecast
+          teaser and both chart rows down the moment this resolved. */}
       {canViewInvoices && (
-        <Suspense fallback={null}>
+        <Suspense fallback={<BannerSkeleton />}>
           <InvoiceAlertSection workspaceId={workspace.id} currency={workspace.currency} />
         </Suspense>
       )}
@@ -115,20 +147,73 @@ export default async function DashboardPage() {
             </>
           }
         >
-          <ChartsSection workspaceId={workspace.id} currency={workspace.currency} />
+          <ChartsIfData workspaceId={workspace.id} currency={workspace.currency} />
         </Suspense>
       )}
     </div>
   );
 }
 
-async function StatsSection({ workspaceId, currency }: { workspaceId: string; currency: string }) {
+/**
+ * Zero-state gate for the Personal edition. getDashboardData is
+ * request-memoized, so asking here costs nothing the stats row was not going
+ * to ask for anyway; everything inside PersonalDashboard still streams.
+ */
+async function PersonalSection({
+  workspaceId,
+  currency,
+  limits,
+  canViewTransactions,
+  canViewReports,
+  canEditTransactions,
+}: {
+  workspaceId: string;
+  currency: string;
+  limits: PlanLimits;
+  canViewTransactions: boolean;
+  canViewReports: boolean;
+  canEditTransactions: boolean;
+}) {
   const data = await getDashboardData(workspaceId);
+  if (hasNoFinancialData(data)) {
+    return <GettingStarted edition="personal" canAddData={canEditTransactions} />;
+  }
+
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <PersonalDashboard
+      workspaceId={workspaceId}
+      currency={currency}
+      limits={limits}
+      canViewTransactions={canViewTransactions}
+      canViewReports={canViewReports}
+    />
+  );
+}
+
+async function StatsSection({
+  workspaceId,
+  currency,
+  canAddData,
+}: {
+  workspaceId: string;
+  currency: string;
+  canAddData: boolean;
+}) {
+  const data = await getDashboardData(workspaceId);
+  // Four zeros and an empty pie chart read as a broken product, not an empty
+  // one, and say nothing about what to do next.
+  if (hasNoFinancialData(data)) {
+    return <GettingStarted canAddData={canAddData} />;
+  }
+
+  const locale = localeForCurrency(currency);
+
+  return (
+    <StatRow>
+      <CashCard cash={data.cash} emphasis="hero" />
       <StatCard
         title="Income this month"
-        value={formatCurrency(data.monthIncome, currency)}
+        value={formatCurrency(data.monthIncome, currency, locale)}
         hint="vs. previous month"
         icon={TrendingUpIcon}
         changePct={data.incomeChangePct}
@@ -136,21 +221,33 @@ async function StatsSection({ workspaceId, currency }: { workspaceId: string; cu
       />
       <StatCard
         title="Expenses this month"
-        value={formatCurrency(data.monthExpenses, currency)}
+        value={formatCurrency(data.monthExpenses, currency, locale)}
         hint="vs. previous month"
         icon={TrendingDownIcon}
         changePct={data.expensesChangePct}
         increaseIsGood={false}
       />
-      <CashCard cash={data.cash} />
       <StatCard
         title="Savings rate"
         value={`${data.savingsRate}%`}
         hint="Share of this month's income kept"
         icon={PiggyBankIcon}
       />
-    </div>
+    </StatRow>
   );
+}
+
+/** The charts are replaced by the getting-started card, not stacked under it. */
+async function ChartsIfData({
+  workspaceId,
+  currency,
+}: {
+  workspaceId: string;
+  currency: string;
+}) {
+  const data = await getDashboardData(workspaceId);
+  if (hasNoFinancialData(data)) return null;
+  return <ChartsSection workspaceId={workspaceId} currency={currency} />;
 }
 
 async function InvoiceAlertSection({
@@ -163,6 +260,8 @@ async function InvoiceAlertSection({
   const invoiceReminders = await getInvoiceReminders(workspaceId);
   const dueCount = invoiceReminders.dueSoon.length + invoiceReminders.overdue.length;
   if (dueCount === 0) return null;
+
+  const locale = localeForCurrency(currency);
 
   return (
     <Link href="/invoices" className="group">
@@ -177,10 +276,10 @@ async function InvoiceAlertSection({
             </p>
             <p className="text-muted-foreground text-xs">
               {invoiceReminders.overdue.length > 0 &&
-                `${invoiceReminders.overdue.length} overdue (${formatCurrency(invoiceReminders.overdueTotal, currency)})`}
+                `${invoiceReminders.overdue.length} overdue (${formatCurrency(invoiceReminders.overdueTotal, currency, locale)})`}
               {invoiceReminders.overdue.length > 0 && invoiceReminders.dueSoon.length > 0 && " · "}
               {invoiceReminders.dueSoon.length > 0 &&
-                `${invoiceReminders.dueSoon.length} due this week (${formatCurrency(invoiceReminders.dueSoonTotal, currency)})`}
+                `${invoiceReminders.dueSoon.length} due this week (${formatCurrency(invoiceReminders.dueSoonTotal, currency, locale)})`}
             </p>
           </div>
           <ArrowRightIcon className="text-muted-foreground group-hover:text-destructive ml-auto size-4 transition-colors" />
@@ -197,6 +296,11 @@ async function ForecastTeaserSection({
   workspaceId: string;
   currency: string;
 }) {
+  // An empty workspace projects a zero balance and infinite runway, which is
+  // noise rather than a teaser.
+  const data = await getDashboardData(workspaceId);
+  if (hasNoFinancialData(data)) return null;
+
   const forecast = await buildForecast(workspaceId, currency);
   const runwayLabel =
     forecast.metrics.runwayMonths === null
@@ -224,7 +328,11 @@ async function ForecastTeaserSection({
             <div>
               <p className="text-muted-foreground text-xs">Projected balance in 30 days</p>
               <p className="text-sm font-semibold">
-                {formatCurrency(forecast.metrics.projectedBalance30d, currency)}
+                {formatCurrency(
+                  forecast.metrics.projectedBalance30d,
+                  currency,
+                  localeForCurrency(currency)
+                )}
               </p>
             </div>
           </div>

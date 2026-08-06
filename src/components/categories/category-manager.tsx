@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -165,7 +166,9 @@ export function CategoryManager({ categories }: CategoryManagerProps) {
           <div key={group.type} className="flex flex-col gap-2">
             <h3 className="text-sm font-semibold">{group.label}</h3>
             {items.length === 0 ? (
-              <p className="text-muted-foreground text-sm">None yet.</p>
+              <p className="text-muted-foreground text-sm">
+                No {group.label.toLowerCase()} yet — add one above.
+              </p>
             ) : (
               <div className="flex flex-col gap-1">
                 {items.map((category) => (
@@ -234,20 +237,31 @@ export function CategoryManager({ categories }: CategoryManagerProps) {
                         >
                           <PencilIcon />
                         </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="text-muted-foreground hover:text-destructive size-8"
-                          disabled={busyId === category.id}
-                          onClick={() => deleteCategory(category)}
-                          aria-label={`Delete ${category.name}`}
-                        >
-                          {busyId === category.id ? (
-                            <Loader2Icon className="animate-spin" />
-                          ) : (
-                            <Trash2Icon />
-                          )}
-                        </Button>
+                        <ConfirmDialog
+                          trigger={
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="text-muted-foreground hover:text-destructive size-8"
+                              disabled={busyId === category.id}
+                              aria-label={`Delete ${category.name}`}
+                            >
+                              {busyId === category.id ? (
+                                <Loader2Icon className="animate-spin" />
+                              ) : (
+                                <Trash2Icon />
+                              )}
+                            </Button>
+                          }
+                          title={`Delete the ${category.name} category?`}
+                          description={
+                            category.transactionCount > 0
+                              ? `${category.transactionCount} transaction${category.transactionCount === 1 ? "" : "s"} will become uncategorized. They keep their amounts and dates, but they lose this label and stop counting towards ${category.name} in your reports.`
+                              : `Nothing is filed under ${category.name} yet, so nothing else changes.`
+                          }
+                          confirmLabel="Delete category"
+                          onConfirm={() => deleteCategory(category)}
+                        />
                       </>
                     )}
                   </div>

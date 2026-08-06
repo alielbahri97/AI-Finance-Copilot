@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { BotIcon } from "lucide-react";
 
 import { HelpChat, type HelpMessageItem } from "@/components/help/help-chat";
+import { PageHeading } from "@/components/ui/page-heading";
 import { DEFAULT_EDITION } from "@/lib/branding";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
@@ -31,10 +32,10 @@ export default async function HelpPage() {
   const edition = ctx ? editionForWorkspaceType(ctx.workspace.type) : DEFAULT_EDITION;
 
   return (
-    <div className="flex h-[calc(100svh-8.5rem)] min-h-[28rem] flex-col gap-4">
+    <div className="flex min-h-[28rem] flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Help & support</h1>
+          <PageHeading>Help & support</PageHeading>
           <p className="text-muted-foreground text-sm">
             Ask how to do anything in the app and get step-by-step instructions.
           </p>

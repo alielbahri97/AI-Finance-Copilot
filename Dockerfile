@@ -9,8 +9,9 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-# The Prisma schema is needed by the postinstall `prisma generate`.
+# Both are needed by the postinstall `prisma generate`.
 COPY prisma ./prisma
+COPY scripts ./scripts
 RUN npm ci
 
 FROM node:20-alpine AS builder

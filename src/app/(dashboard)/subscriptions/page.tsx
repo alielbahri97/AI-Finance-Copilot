@@ -23,13 +23,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeading } from "@/components/ui/page-heading";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import {
   REVIEW_MAX_MONTHLY_AMOUNT,
   UPCOMING_HORIZON_DAYS,
 } from "@/lib/personal/subscriptions";
 import { getSubscriptionsOverview } from "@/lib/personal/subscriptions-data";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, localeForCurrency } from "@/lib/utils";
 import { getWorkspaceContext, type WorkspaceContext } from "@/lib/workspace/context";
 import { editionHasFeature } from "@/lib/workspace/editions";
 
@@ -51,7 +53,7 @@ export default async function SubscriptionsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Subscriptions</h1>
+        <PageHeading>Subscriptions</PageHeading>
         <p className="text-muted-foreground text-sm">
           Recurring charges found in your transactions, what they cost each month, and which ones
           are worth a second look.
@@ -82,20 +84,21 @@ async function SubscriptionsContent({ ctx }: { ctx: WorkspaceContext }) {
   const overview = await getSubscriptionsOverview(ctx.workspace.id);
 
   if (overview.subscriptions.length === 0 && overview.bills.length === 0) {
-    return <EmptyState />;
+    return <NoSubscriptionsState />;
   }
 
   const stoppedCount = overview.subscriptions.filter((item) =>
     item.flags.includes("overdue")
   ).length;
+  const money = (value: number) => formatCurrency(value, currency, localeForCurrency(currency));
 
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard
           title="Subscriptions per month"
-          value={formatCurrency(overview.totalMonthlyCost, currency)}
-          hint={`${formatCurrency(overview.annualisedCost, currency)} a year at this rate`}
+          value={money(overview.totalMonthlyCost)}
+          hint={`${money(overview.annualisedCost)} a year at this rate`}
           icon={CreditCardIcon}
         />
         <StatCard
@@ -111,7 +114,7 @@ async function SubscriptionsContent({ ctx }: { ctx: WorkspaceContext }) {
         />
         <StatCard
           title="Recurring bills"
-          value={`${formatCurrency(overview.totalMonthlyBills, currency)}/mo`}
+          value={`${money(overview.totalMonthlyBills)}/mo`}
           hint="Housing, utilities, insurance and loans, counted separately"
           icon={HouseIcon}
         />
@@ -124,7 +127,7 @@ async function SubscriptionsContent({ ctx }: { ctx: WorkspaceContext }) {
             Your subscriptions
           </CardTitle>
           <CardDescription>
-            {formatCurrency(overview.totalMonthlyCost, currency)} per month across{" "}
+            {money(overview.totalMonthlyCost)} per month across{" "}
             {overview.subscriptions.length}{" "}
             {overview.subscriptions.length === 1 ? "subscription" : "subscriptions"}
             {stoppedCount > 0
@@ -136,7 +139,8 @@ async function SubscriptionsContent({ ctx }: { ctx: WorkspaceContext }) {
           <SubscriptionList
             items={overview.subscriptions}
             currency={currency}
-            emptyMessage="No subscriptions detected yet. Everything recurring in your history looks like a bill."
+            emptyTitle="No subscriptions detected yet"
+            emptyDescription="Everything recurring in your history looks like a bill rather than a subscription."
           />
         </CardContent>
       </Card>
@@ -157,7 +161,8 @@ async function SubscriptionsContent({ ctx }: { ctx: WorkspaceContext }) {
             <SubscriptionList
               items={overview.bills}
               currency={currency}
-              emptyMessage="No recurring bills detected in your history."
+              emptyTitle="No recurring bills detected"
+              emptyDescription="Housing, utilities, insurance and loan payments show up here once they repeat on a regular date."
             />
           </CardContent>
         </Card>
@@ -182,29 +187,27 @@ async function SubscriptionsContent({ ctx }: { ctx: WorkspaceContext }) {
       <p className="text-muted-foreground text-xs">
         Detection reads the last 12 months of transactions. A charge is counted as recurring after
         three occurrences at a steady amount and interval. Subscriptions under{" "}
-        {formatCurrency(REVIEW_MAX_MONTHLY_AMOUNT, currency)} a month that have run for a while at
+        {money(REVIEW_MAX_MONTHLY_AMOUNT)} a month that have run for a while at
         the same price are marked as worth reviewing — your transactions show payments, not usage.
       </p>
     </>
   );
 }
 
-function EmptyState() {
+function NoSubscriptionsState() {
   return (
     <Card>
-      <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-        <div className="bg-muted flex size-10 items-center justify-center rounded-full">
-          <RepeatIcon className="text-muted-foreground size-5" />
-        </div>
-        <p className="text-sm font-medium">No recurring charges detected yet</p>
-        <p className="text-muted-foreground max-w-md text-sm">
-          Finding subscriptions needs a few months of history: a charge has to appear at least
-          three times, in at least two different months, at a steady amount. Connect a bank account
-          or import more transactions and this page will fill in.
-        </p>
-        <Button asChild size="sm" variant="outline">
-          <Link href="/import">Import transactions</Link>
-        </Button>
+      <CardContent>
+        <EmptyState
+          icon={RepeatIcon}
+          title="No recurring charges detected yet"
+          description="Finding subscriptions needs a few months of history: a charge has to appear at least three times, in at least two different months, at a steady amount. Connect a bank account or import more transactions and this page will fill in."
+          action={
+            <Button asChild size="sm" variant="outline">
+              <Link href="/import">Import transactions</Link>
+            </Button>
+          }
+        />
       </CardContent>
     </Card>
   );
@@ -213,19 +216,17 @@ function EmptyState() {
 function LockedState({ planName }: { planName: string }) {
   return (
     <Card>
-      <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-        <div className="bg-muted flex size-10 items-center justify-center rounded-full">
-          <LockIcon className="text-muted-foreground size-5" />
-        </div>
-        <p className="text-sm font-medium">Subscription insights are a Plus feature</p>
-        <p className="text-muted-foreground max-w-md text-sm">
-          Your {planName} plan does not include them. Plus and Premium find every recurring charge
-          in your transactions, total what they cost each month, and flag price rises and
-          subscriptions worth reviewing.
-        </p>
-        <Button asChild size="sm">
-          <Link href="/billing">Upgrade plan</Link>
-        </Button>
+      <CardContent>
+        <EmptyState
+          icon={LockIcon}
+          title="Subscription insights are a Plus feature"
+          description={`Your ${planName} plan does not include them. Plus and Premium find every recurring charge in your transactions, total what they cost each month, and flag price rises and subscriptions worth reviewing.`}
+          action={
+            <Button asChild size="sm">
+              <Link href="/billing">Upgrade plan</Link>
+            </Button>
+          }
+        />
       </CardContent>
     </Card>
   );

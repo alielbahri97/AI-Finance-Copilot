@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import localFont from "next/font/local";
 
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 import { PwaRegister } from "@/components/pwa-register";
@@ -14,6 +15,63 @@ import "./globals.css";
 // typo here can no longer surface as a bare "TypeError: Invalid URL" while
 // Next collects page data.
 const appUrl = getAppUrl();
+
+// Fonts are self-hosted rather than pulled via next/font/google: `next build`
+// runs on networks where fonts.googleapis.com is unreachable, and the Google
+// loader fetches CSS and binaries at build time. The .woff2 files are copied
+// into this repo from @fontsource-variable/* so the build never needs the
+// network; re-copy from node_modules/@fontsource-variable/<family>/files when
+// bumping those packages.
+const inter = localFont({
+  src: [
+    {
+      path: "./fonts/inter-latin-wght-normal.woff2",
+      weight: "100 900",
+      style: "normal",
+    },
+    {
+      path: "./fonts/inter-latin-wght-italic.woff2",
+      weight: "100 900",
+      style: "italic",
+    },
+  ],
+  variable: "--font-inter",
+  display: "swap",
+  fallback: [
+    "ui-sans-serif",
+    "system-ui",
+    "-apple-system",
+    "Segoe UI",
+    "Roboto",
+    "Helvetica Neue",
+    "Arial",
+    "sans-serif",
+  ],
+  adjustFontFallback: "Arial",
+});
+
+const jetBrainsMono = localFont({
+  src: [
+    {
+      path: "./fonts/jetbrains-mono-latin-wght-normal.woff2",
+      weight: "100 800",
+      style: "normal",
+    },
+  ],
+  variable: "--font-mono-custom",
+  display: "swap",
+  fallback: [
+    "ui-monospace",
+    "SFMono-Regular",
+    "Menlo",
+    "Consolas",
+    "Liberation Mono",
+    "monospace",
+  ],
+  // Deriving fallback metrics from Arial (the only sans option next/font
+  // offers) would mis-size the monospace stack this actually falls back to.
+  adjustFontFallback: false,
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL(appUrl),
@@ -63,8 +121,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className="font-sans antialiased">
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${inter.variable} ${jetBrainsMono.variable}`}
+    >
+      <body className="font-sans">
         <a
           href="#main-content"
           className="bg-primary text-primary-foreground focus:ring-ring sr-only rounded-md px-4 py-2 focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:ring-2"

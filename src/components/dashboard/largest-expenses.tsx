@@ -1,8 +1,8 @@
 import { ReceiptIcon } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import type { TransactionSummary } from "@/lib/data";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { cn, formatCurrency, formatDate, localeForCurrency } from "@/lib/utils";
 
 interface LargestExpensesProps {
   expenses: TransactionSummary[];
@@ -11,14 +11,10 @@ interface LargestExpensesProps {
 
 export function LargestExpenses({ expenses, currency }: LargestExpensesProps) {
   if (expenses.length === 0) {
-    return (
-      <div className="text-muted-foreground flex h-72 flex-col items-center justify-center gap-2 text-sm">
-        <ReceiptIcon className="size-8 opacity-50" />
-        No expenses recorded yet
-      </div>
-    );
+    return <EmptyState className="h-72" icon={ReceiptIcon} title="No expenses recorded yet" />;
   }
 
+  const locale = localeForCurrency(currency);
   const max = expenses[0]?.amount ?? 1;
 
   return (
@@ -28,22 +24,28 @@ export function LargestExpenses({ expenses, currency }: LargestExpensesProps) {
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
               <span className="truncate text-sm font-medium">{expense.description}</span>
+              {/* Same reasoning as the recent-transactions list: a DB-supplied
+                  hex is only safe as a swatch, not as a text colour. */}
               {expense.category && (
-                <Badge
-                  variant="secondary"
-                  className="hidden shrink-0 sm:inline-flex"
-                  style={
-                    expense.categoryColor
-                      ? { backgroundColor: `${expense.categoryColor}22`, color: expense.categoryColor }
-                      : undefined
-                  }
-                >
+                <span className="text-secondary-foreground hidden shrink-0 items-center gap-1.5 text-xs sm:inline-flex">
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "size-2 shrink-0 rounded-full",
+                      !expense.categoryColor && "bg-muted-foreground/40"
+                    )}
+                    style={
+                      expense.categoryColor
+                        ? { backgroundColor: expense.categoryColor }
+                        : undefined
+                    }
+                  />
                   {expense.category}
-                </Badge>
+                </span>
               )}
             </div>
             <span className="shrink-0 text-sm font-semibold tabular-nums">
-              {formatCurrency(expense.amount, currency)}
+              {formatCurrency(expense.amount, currency, locale)}
             </span>
           </div>
           <div className="flex items-center gap-3">
@@ -54,7 +56,7 @@ export function LargestExpenses({ expenses, currency }: LargestExpensesProps) {
               />
             </div>
             <span className="text-muted-foreground shrink-0 text-xs">
-              {formatDate(expense.date)}
+              {formatDate(expense.date, locale)}
             </span>
           </div>
         </div>

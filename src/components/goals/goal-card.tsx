@@ -15,8 +15,9 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Progress } from "@/components/ui/progress";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, localeForCurrency } from "@/lib/utils";
 
 import { ContributionDialog } from "./contribution-dialog";
 import { projectionSentences, STATUS_BADGES, STATUS_LABELS, STATUS_TONES } from "./status";
@@ -96,7 +97,11 @@ export function GoalCard({ goal, currency, canEdit, onEdit }: GoalCardProps) {
     );
   }
 
-  const sentences = projectionSentences(goal, currency);
+  const locale = localeForCurrency(currency);
+  const money = (value: number) => formatCurrency(value, currency, locale);
+  const day = (value: Date | string) => formatDate(value, locale);
+
+  const sentences = projectionSentences(goal, currency, locale);
   const links = [
     goal.categoryName ? `Category: ${goal.categoryName}` : null,
     goal.bankAccountLabel ? `Account: ${goal.bankAccountLabel}` : null,
@@ -143,16 +148,27 @@ export function GoalCard({ goal, currency, canEdit, onEdit }: GoalCardProps) {
                 <ArchiveIcon />
               )}
             </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="text-muted-foreground hover:text-destructive size-8"
-              disabled={busy === "delete"}
-              onClick={remove}
-              aria-label={`Delete ${goal.name}`}
-            >
-              {busy === "delete" ? <Loader2Icon className="animate-spin" /> : <Trash2Icon />}
-            </Button>
+            <ConfirmDialog
+              trigger={
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="text-muted-foreground hover:text-destructive size-8"
+                  disabled={busy === "delete"}
+                  aria-label={`Delete ${goal.name}`}
+                >
+                  {busy === "delete" ? <Loader2Icon className="animate-spin" /> : <Trash2Icon />}
+                </Button>
+              }
+              title={`Delete ${goal.name}?`}
+              description={
+                goal.contributionCount > 0
+                  ? `The goal goes for good, and so does its history of ${goal.contributionCount} contribution${goal.contributionCount === 1 ? "" : "s"}. The transactions behind them stay in your records. If you just want it off this page, archive it instead.`
+                  : "The goal goes for good. If you just want it off this page, archive it instead."
+              }
+              confirmLabel="Delete goal"
+              onConfirm={remove}
+            />
           </CardAction>
         ) : null}
       </CardHeader>
@@ -161,9 +177,9 @@ export function GoalCard({ goal, currency, canEdit, onEdit }: GoalCardProps) {
         <div className="space-y-1.5">
           <div className="flex items-baseline justify-between gap-2 text-sm">
             <span className="font-medium tabular-nums">
-              {formatCurrency(goal.saved, currency)}{" "}
+              {money(goal.saved)}{" "}
               <span className="text-muted-foreground font-normal">
-                of {formatCurrency(goal.targetAmount, currency)}
+                of {money(goal.targetAmount)}
               </span>
             </span>
             <span className="text-muted-foreground tabular-nums">
@@ -186,14 +202,12 @@ export function GoalCard({ goal, currency, canEdit, onEdit }: GoalCardProps) {
         <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
           <div>
             <dt className="text-muted-foreground text-xs">Saving per month</dt>
-            <dd className="tabular-nums">{formatCurrency(goal.monthlyRate, currency)}</dd>
+            <dd className="tabular-nums">{money(goal.monthlyRate)}</dd>
           </div>
           <div>
             <dt className="text-muted-foreground text-xs">Needed per month</dt>
             <dd className="tabular-nums">
-              {goal.requiredMonthlyRate === null
-                ? "—"
-                : formatCurrency(goal.requiredMonthlyRate, currency)}
+              {goal.requiredMonthlyRate === null ? "—" : money(goal.requiredMonthlyRate)}
             </dd>
           </div>
           <div>
@@ -202,15 +216,15 @@ export function GoalCard({ goal, currency, canEdit, onEdit }: GoalCardProps) {
             </dt>
             <dd>
               {goal.achievedAt
-                ? formatDate(goal.achievedAt)
+                ? day(goal.achievedAt)
                 : goal.projectedCompletion
-                  ? formatDate(goal.projectedCompletion)
+                  ? day(goal.projectedCompletion)
                   : "No projection"}
             </dd>
           </div>
           <div>
             <dt className="text-muted-foreground text-xs">Target date</dt>
-            <dd>{goal.targetDate ? formatDate(goal.targetDate) : "No date"}</dd>
+            <dd>{goal.targetDate ? day(goal.targetDate) : "No date"}</dd>
           </div>
         </dl>
 
@@ -235,12 +249,10 @@ export function GoalCard({ goal, currency, canEdit, onEdit }: GoalCardProps) {
                     {suggestion.description}
                     <span className="text-muted-foreground">
                       {suggestion.counterparty ? ` · ${suggestion.counterparty}` : ""}
-                      {` · ${formatDate(suggestion.date)}`}
+                      {` · ${day(suggestion.date)}`}
                     </span>
                   </span>
-                  <span className="tabular-nums">
-                    {formatCurrency(suggestion.amount, currency)}
-                  </span>
+                  <span className="tabular-nums">{money(suggestion.amount)}</span>
                   <Button
                     size="sm"
                     variant="ghost"
@@ -273,7 +285,7 @@ export function GoalCard({ goal, currency, canEdit, onEdit }: GoalCardProps) {
                   className="flex items-center justify-between gap-2 py-0.5 text-sm"
                 >
                   <span className="min-w-0 flex-1 truncate">
-                    {formatDate(contribution.date)}
+                    {day(contribution.date)}
                     {contribution.note ? (
                       <span className="text-muted-foreground"> · {contribution.note}</span>
                     ) : null}
@@ -281,24 +293,29 @@ export function GoalCard({ goal, currency, canEdit, onEdit }: GoalCardProps) {
                       <span className="text-muted-foreground"> · from a transaction</span>
                     ) : null}
                   </span>
-                  <span className="tabular-nums">
-                    {formatCurrency(contribution.amount, currency)}
-                  </span>
+                  <span className="tabular-nums">{money(contribution.amount)}</span>
                   {canEdit ? (
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="text-muted-foreground hover:text-destructive size-7"
-                      disabled={busy === contribution.id}
-                      onClick={() => removeContribution(contribution.id)}
-                      aria-label={`Remove contribution of ${formatCurrency(contribution.amount, currency)}`}
-                    >
-                      {busy === contribution.id ? (
-                        <Loader2Icon className="animate-spin" />
-                      ) : (
-                        <Trash2Icon />
-                      )}
-                    </Button>
+                    <ConfirmDialog
+                      trigger={
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="text-muted-foreground hover:text-destructive size-7"
+                          disabled={busy === contribution.id}
+                          aria-label={`Remove contribution of ${money(contribution.amount)}`}
+                        >
+                          {busy === contribution.id ? (
+                            <Loader2Icon className="animate-spin" />
+                          ) : (
+                            <Trash2Icon />
+                          )}
+                        </Button>
+                      }
+                      title="Remove this contribution?"
+                      description={`The ${money(contribution.amount)} from ${day(contribution.date)} stops counting towards ${goal.name}, so your progress drops back.${contribution.fromTransaction ? " The transaction it came from stays in your records." : ""}`}
+                      confirmLabel="Remove contribution"
+                      onConfirm={() => removeContribution(contribution.id)}
+                    />
                   ) : null}
                 </li>
               ))}

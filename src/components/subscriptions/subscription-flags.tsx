@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import type { DetectedSubscription, SubscriptionFlag } from "@/lib/personal/subscriptions";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, localeForCurrency } from "@/lib/utils";
 
 const FLAG_LABELS: Record<SubscriptionFlag, string> = {
   price_increase: "Price up",
@@ -20,12 +20,13 @@ const FLAG_VARIANTS: Record<SubscriptionFlag, "destructive" | "secondary" | "out
  * particular has to state its own limits: the bank shows payments, not usage.
  */
 export function flagExplanation(item: DetectedSubscription, currency: string): string | null {
+  const locale = localeForCurrency(currency);
   if (item.flags.includes("price_increase") && item.priceChange) {
     const { from, to, percent } = item.priceChange;
-    return `Was ${formatCurrency(from, currency)}, now ${formatCurrency(to, currency)} — up ${Math.round(percent)}%.`;
+    return `Was ${formatCurrency(from, currency, locale)}, now ${formatCurrency(to, currency, locale)} — up ${Math.round(percent)}%.`;
   }
   if (item.flags.includes("overdue")) {
-    return `Nothing charged since ${formatDate(item.lastChargedAt)}, well past the usual ${item.cadence} interval. Left out of the monthly total in case it was cancelled.`;
+    return `Nothing charged since ${formatDate(item.lastChargedAt, locale)}, well past the usual ${item.cadence} interval. Left out of the monthly total in case it was cancelled.`;
   }
   if (item.flags.includes("unused_looking")) {
     return `Charged ${item.timesSeen} times at the same price, and small enough to go unnoticed. Your transactions cannot show whether you still use it, so this is a prompt to check.`;

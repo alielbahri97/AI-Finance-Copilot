@@ -160,14 +160,20 @@ async function sync(ctx: SyncContext): Promise<SyncStats> {
     ctx.currency,
     "plaid",
     `Plaid sync ${new Date().toISOString().slice(0, 10)}`,
-    transactions
+    transactions,
+    { aiProvider: ctx.aiProvider }
   );
   await ctx.patchMetadata({ plaidCursor: cursor ?? null });
   await snapshotBalances(ctx.connection.id, ctx.accessToken).catch((error) =>
     logger.warn("[integrations] Plaid balance snapshot", { error: serializeError(error) })
   );
 
-  return { fetched: added.length, imported: result.imported, duplicates: result.duplicates };
+  return {
+    fetched: added.length,
+    imported: result.imported,
+    duplicates: result.duplicates,
+    aiCategorized: result.aiCategorized,
+  };
 }
 
 async function revoke(

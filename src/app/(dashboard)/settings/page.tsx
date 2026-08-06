@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
+import { AiCategorizationForm } from "@/components/settings/ai-categorization-form";
 import { AiProviderForm } from "@/components/settings/ai-provider-form";
 import { AppearanceForm } from "@/components/settings/appearance-form";
+import { AutoDunningForm } from "@/components/settings/auto-dunning-form";
 import { ChangePasswordForm } from "@/components/settings/change-password-form";
 import { CurrencySettingsForm } from "@/components/settings/currency-settings-form";
 import { NotificationSettings } from "@/components/settings/notification-settings";
@@ -16,6 +18,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { PageHeading } from "@/components/ui/page-heading";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { BRAND } from "@/lib/branding";
 import { getOrCreateProfile } from "@/lib/data";
@@ -113,7 +116,7 @@ export default async function SettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
+        <PageHeading>Settings</PageHeading>
         <p className="text-muted-foreground text-sm">
           {sharing
             ? "Manage your workspace, team, appearance, AI provider and account security."
@@ -222,6 +225,49 @@ export default async function SettingsPage() {
           <AiProviderForm defaultProvider={profile.aiProvider} />
         </CardContent>
       </Card>
+
+      {canManageSettings && (
+        <Card>
+          <CardHeader>
+            <CardTitle>AI categorization</CardTitle>
+            <CardDescription>
+              Whether imported transactions your rules don&apos;t cover are categorized
+              automatically.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AiCategorizationForm
+              defaultEnabled={workspace.aiCategorizationEnabled}
+              monthlyLimit={entitlements.plan.limits.aiCategorizationPerMonth}
+              used={entitlements.usage.aiCategorizations}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {canManageSettings && editionHasFeature(workspace.type, "invoices") && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Customer payment reminders</CardTitle>
+            <CardDescription>
+              Whether {BRAND.name} chases your unpaid invoices for you, or only when you ask.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {entitlements.plan.limits.dunningEnabled ? (
+              <AutoDunningForm
+                defaultEnabled={workspace.autoDunningEnabled}
+                emailConfigured={isEmailConfigured()}
+              />
+            ) : (
+              <p className="text-muted-foreground text-sm">
+                Reminding customers is part of the paid plans. Upgrade on the Billing page to
+                have {BRAND.name} draft and send them for you.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

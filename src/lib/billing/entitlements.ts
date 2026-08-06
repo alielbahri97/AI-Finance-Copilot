@@ -24,6 +24,8 @@ export function currentPeriod(now = new Date()): string {
 
 export interface Usage {
   aiMessages: number;
+  /** Transactions sent to the AI categorizer, not rows it managed to place. */
+  aiCategorizations: number;
   csvImports: number;
   invoiceExtractions: number;
   exports: number;
@@ -122,6 +124,7 @@ export const getEntitlements = cache(async (workspaceId: string): Promise<Entitl
     period,
     usage: {
       aiMessages: usage.aiMessages,
+      aiCategorizations: usage.aiCategorizations,
       csvImports: usage.csvImports,
       invoiceExtractions: usage.invoiceExtractions,
       exports: usage.exports,
@@ -129,7 +132,12 @@ export const getEntitlements = cache(async (workspaceId: string): Promise<Entitl
   };
 });
 
-export type UsageField = "aiMessages" | "csvImports" | "invoiceExtractions" | "exports";
+export type UsageField =
+  | "aiMessages"
+  | "aiCategorizations"
+  | "csvImports"
+  | "invoiceExtractions"
+  | "exports";
 
 /** Increments a workspace usage counter for the current period. Never throws. */
 export async function incrementUsage(

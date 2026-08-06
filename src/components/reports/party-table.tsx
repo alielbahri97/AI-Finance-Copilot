@@ -1,3 +1,6 @@
+import { UsersIcon } from "lucide-react";
+
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Table,
   TableBody,
@@ -7,7 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { PartyTotal } from "@/lib/reports/data";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, localeForCurrency } from "@/lib/utils";
 
 interface PartyTableProps {
   data: PartyTotal[];
@@ -18,11 +21,16 @@ interface PartyTableProps {
 
 /** Ranked list of counterparties (top vendors or top customers). */
 export function PartyTable({ data, currency, partyLabel, emptyLabel }: PartyTableProps) {
+  const locale = localeForCurrency(currency);
+
   if (data.length === 0) {
     return (
-      <div className="text-muted-foreground flex h-40 items-center justify-center text-sm">
-        {emptyLabel}
-      </div>
+      <EmptyState
+        className="h-40"
+        icon={UsersIcon}
+        title={emptyLabel}
+        description="Transactions need a counterparty before they can be ranked here."
+      />
     );
   }
 
@@ -45,7 +53,7 @@ export function PartyTable({ data, currency, partyLabel, emptyLabel }: PartyTabl
               {entry.count}
             </TableCell>
             <TableCell className="text-right font-medium tabular-nums">
-              {formatCurrency(entry.total, currency)}
+              {formatCurrency(entry.total, currency, locale)}
             </TableCell>
           </TableRow>
         ))}

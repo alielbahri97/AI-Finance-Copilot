@@ -39,6 +39,25 @@ export const SCHEMA_CHECKS: SchemaCheck[] = [
   { table: "savings_contributions", columns: [], migration: "0017_workspace_editions" },
   { table: "workspaces", columns: ["type"], migration: "0017_workspace_editions" },
   { table: "budgets", columns: ["category_id", "rollover"], migration: "0017_workspace_editions" },
+  {
+    table: "workspaces",
+    columns: ["ai_categorization_enabled"],
+    migration: "0018_ai_categorization",
+  },
+  {
+    table: "usage_records",
+    columns: ["ai_categorizations"],
+    migration: "0018_ai_categorization",
+  },
+  { table: "invoices", columns: ["customer_email"], migration: "0019_customer_dunning" },
+  {
+    table: "workspaces",
+    columns: ["auto_dunning_enabled"],
+    migration: "0019_customer_dunning",
+  },
+  { table: "reminder_logs", columns: [], migration: "0019_customer_dunning" },
+  { table: "assets", columns: [], migration: "0020_net_worth" },
+  { table: "asset_valuations", columns: [], migration: "0020_net_worth" },
 ];
 
 export interface SchemaDrift {

@@ -22,12 +22,18 @@ import type { BatchOption, CategoryOption } from "./types";
 const ALL = "all";
 const UNCATEGORIZED = "uncategorized";
 
+/** Date-input values are plain days; parse them locally so the chip is not off by one. */
+function formatDayParam(value: string, locale: string) {
+  return formatDate(`${value}T00:00:00`, locale);
+}
+
 interface TransactionsToolbarProps {
   categories: CategoryOption[];
   batches: BatchOption[];
+  locale: string;
 }
 
-export function TransactionsToolbar({ categories, batches }: TransactionsToolbarProps) {
+export function TransactionsToolbar({ categories, batches, locale }: TransactionsToolbarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -35,6 +41,9 @@ export function TransactionsToolbar({ categories, batches }: TransactionsToolbar
   const [search, setSearch] = useState(searchParams.get("q") ?? "");
   const [minAmount, setMinAmount] = useState(searchParams.get("min") ?? "");
   const [maxAmount, setMaxAmount] = useState(searchParams.get("max") ?? "");
+  const [fromDate, setFromDate] = useState(searchParams.get("from") ?? "");
+  const [toDate, setToDate] = useState(searchParams.get("to") ?? "");
+  const [rangeError, setRangeError] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(
     ["type", "category", "batch", "from", "to", "min", "max"].some((key) =>
       searchParams.has(key)
@@ -77,6 +86,66 @@ export function TransactionsToolbar({ categories, batches }: TransactionsToolbar
   const incomeCategories = categories.filter((category) => category.type === "INCOME");
   const expenseCategories = categories.filter((category) => category.type === "EXPENSE");
 
+  /**
+   * A range that ends before it starts matches nothing, so we hold the value
+   * locally and say why rather than reloading an empty table.
+   */
+  function updateRange(key: "from" | "to", value: string) {
+    if (key === "from") setFromDate(value);
+    else setToDate(value);
+
+    const nextFrom = key === "from" ? value : fromDate;
+    const nextTo = key === "to" ? value : toDate;
+    if (nextFrom && nextTo && nextFrom > nextTo) {
+      setRangeError("The end date comes before the start date, so nothing would match.");
+      return;
+    }
+    setRangeError(null);
+    updateParams({ [key]: value });
+  }
+
+  function clearFilter(key: string) {
+    if (key === "min") setMinAmount("");
+    if (key === "max") setMaxAmount("");
+    if (key === "from") setFromDate("");
+    if (key === "to") setToDate("");
+    if (key === "from" || key === "to") setRangeError(null);
+    updateParams({ [key]: null });
+  }
+
+  const categoryParam = searchParams.get("category");
+  const batchParam = searchParams.get("batch");
+  const chips: { key: string; label: string }[] = [];
+  const typeParam = searchParams.get("type");
+  if (typeParam === "INCOME" || typeParam === "EXPENSE") {
+    chips.push({ key: "type", label: typeParam === "INCOME" ? "Income only" : "Expenses only" });
+  }
+  if (categoryParam) {
+    chips.push({
+      key: "category",
+      label:
+        categoryParam === UNCATEGORIZED
+          ? "Uncategorized"
+          : (categories.find((category) => category.id === categoryParam)?.name ?? "Category"),
+    });
+  }
+  if (batchParam) {
+    chips.push({
+      key: "batch",
+      label: batches.find((batch) => batch.id === batchParam)?.fileName ?? "Import batch",
+    });
+  }
+  const fromParam = searchParams.get("from");
+  const toParam = searchParams.get("to");
+  if (fromParam) chips.push({ key: "from", label: `From ${formatDayParam(fromParam, locale)}` });
+  if (toParam) chips.push({ key: "to", label: `To ${formatDayParam(toParam, locale)}` });
+  if (searchParams.get("min")) {
+    chips.push({ key: "min", label: `Min ${searchParams.get("min")}` });
+  }
+  if (searchParams.get("max")) {
+    chips.push({ key: "max", label: `Max ${searchParams.get("max")}` });
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -107,6 +176,9 @@ export function TransactionsToolbar({ categories, batches }: TransactionsToolbar
               setSearch("");
               setMinAmount("");
               setMaxAmount("");
+              setFromDate("");
+              setToDate("");
+              setRangeError(null);
               router.replace(pathname, { scroll: false });
             }}
           >
@@ -115,6 +187,23 @@ export function TransactionsToolbar({ categories, batches }: TransactionsToolbar
           </Button>
         )}
       </div>
+
+      {!showFilters && chips.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {chips.map((chip) => (
+            <button
+              key={chip.key}
+              type="button"
+              onClick={() => clearFilter(chip.key)}
+              aria-label={`Remove filter: ${chip.label}`}
+              className="bg-muted text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex max-w-56 items-center gap-1 rounded-full py-1 pr-2 pl-2.5 text-xs transition-colors focus-visible:ring-2 focus-visible:outline-none"
+            >
+              <span className="truncate">{chip.label}</span>
+              <XIcon aria-hidden className="size-3 shrink-0" />
+            </button>
+          ))}
+        </div>
+      )}
 
       {showFilters && (
         <div className="bg-card grid gap-3 rounded-lg border p-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
@@ -184,7 +273,7 @@ export function TransactionsToolbar({ categories, batches }: TransactionsToolbar
                 <SelectItem value={ALL}>All sources</SelectItem>
                 {batches.map((batch) => (
                   <SelectItem key={batch.id} value={batch.id}>
-                    {batch.fileName} ({formatDate(batch.createdAt)})
+                    {batch.fileName} ({formatDate(batch.createdAt, locale)})
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -199,8 +288,11 @@ export function TransactionsToolbar({ categories, batches }: TransactionsToolbar
               id="filter-from"
               type="date"
               className="h-8"
-              value={searchParams.get("from") ?? ""}
-              onChange={(event) => updateParams({ from: event.target.value })}
+              max={toDate || undefined}
+              aria-invalid={rangeError !== null}
+              aria-describedby={rangeError ? "filter-range-error" : undefined}
+              value={fromDate}
+              onChange={(event) => updateRange("from", event.target.value)}
             />
           </div>
 
@@ -212,8 +304,11 @@ export function TransactionsToolbar({ categories, batches }: TransactionsToolbar
               id="filter-to"
               type="date"
               className="h-8"
-              value={searchParams.get("to") ?? ""}
-              onChange={(event) => updateParams({ to: event.target.value })}
+              min={fromDate || undefined}
+              aria-invalid={rangeError !== null}
+              aria-describedby={rangeError ? "filter-range-error" : undefined}
+              value={toDate}
+              onChange={(event) => updateRange("to", event.target.value)}
             />
           </div>
 
@@ -249,6 +344,16 @@ export function TransactionsToolbar({ categories, batches }: TransactionsToolbar
               />
             </div>
           </div>
+
+          {rangeError && (
+            <p
+              id="filter-range-error"
+              role="alert"
+              className="text-destructive col-span-full text-xs"
+            >
+              {rangeError}
+            </p>
+          )}
         </div>
       )}
     </div>

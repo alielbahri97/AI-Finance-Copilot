@@ -2,18 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckIcon, Loader2Icon, Trash2Icon, UndoIcon } from "lucide-react";
+import { CheckIcon, Trash2Icon, UndoIcon } from "lucide-react";
 import { toast } from "sonner";
 
+import { RemindCustomerDialog } from "@/components/invoices/remind-customer-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { InvoiceDto } from "@/lib/invoices/serialize";
 
 interface InvoiceActionsProps {
@@ -24,7 +18,6 @@ interface InvoiceActionsProps {
 export function InvoiceActions({ invoice }: InvoiceActionsProps) {
   const router = useRouter();
   const [isBusy, setIsBusy] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
 
   async function setStatus(status: "PAID" | "UNPAID") {
     setIsBusy(true);
@@ -64,12 +57,15 @@ export function InvoiceActions({ invoice }: InvoiceActionsProps) {
       toast.error("Network error", { description: "Please try again." });
     } finally {
       setIsBusy(false);
-      setConfirmDelete(false);
     }
   }
 
   return (
     <div className="flex items-center gap-2">
+      {/* Chasing money is only a thing for invoices we issued and nobody paid. */}
+      {invoice.direction === "RECEIVABLE" && invoice.status === "UNPAID" && (
+        <RemindCustomerDialog invoice={invoice} />
+      )}
       {invoice.status === "PAID" ? (
         <Button size="sm" variant="outline" onClick={() => setStatus("UNPAID")} disabled={isBusy}>
           <UndoIcon />
@@ -81,36 +77,23 @@ export function InvoiceActions({ invoice }: InvoiceActionsProps) {
           Mark paid
         </Button>
       )}
-      <Button
-        size="sm"
-        variant="outline"
-        className="text-destructive hover:text-destructive"
-        onClick={() => setConfirmDelete(true)}
-        disabled={isBusy}
-      >
-        <Trash2Icon />
-        Delete
-      </Button>
-
-      <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete this invoice?</DialogTitle>
-            <DialogDescription>
-              The invoice, its line items and the stored document will be removed permanently.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmDelete(false)} disabled={isBusy}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={remove} disabled={isBusy}>
-              {isBusy && <Loader2Icon className="animate-spin" />}
-              Delete invoice
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        trigger={
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-destructive hover:text-destructive"
+            disabled={isBusy}
+          >
+            <Trash2Icon />
+            Delete
+          </Button>
+        }
+        title="Delete this invoice?"
+        description="The invoice, its line items and the stored document will be removed permanently."
+        confirmLabel="Delete invoice"
+        onConfirm={remove}
+      />
     </div>
   );
 }

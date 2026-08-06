@@ -135,6 +135,13 @@ invitation.
   are unset, or Resend is refusing the recipient because no sending domain is
   verified (step 8). The invite dialog says which one it is; share the invite
   link in the meantime.
-- **`prisma generate` fails** (`binaries.prisma.sh` blocked) — only needed
-  after schema changes; the stub-engine workaround is described in the
-  README's corporate network section.
+- **`prisma generate` warns about `binaries.prisma.sh`** — expected on a
+  network that blocks it. `npm run build` and `npm install` go through
+  `scripts/prisma-generate.mjs`, which retries with a placeholder engine and
+  still generates a correct, up-to-date client (this project never runs the
+  schema engine — see the header of that script). No action needed. To skip the
+  ~70s doomed download attempt on such a network, set
+  `PRISMA_ENGINE_STUB_FALLBACK=always`.
+- **`db:push` / `db:migrate` fail** (`binaries.prisma.sh` blocked) — these are
+  the commands that genuinely need the schema engine. Use `npm run db:apply`,
+  which applies `prisma/migrations/*` over a plain `pg` connection instead.

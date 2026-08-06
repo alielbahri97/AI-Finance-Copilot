@@ -57,7 +57,9 @@ export function PwaInstallPrompt() {
   return (
     <div
       role="status"
-      className="border-border bg-background/95 fixed inset-x-3 bottom-3 z-50 mx-auto flex max-w-md items-center gap-3 rounded-xl border p-3 shadow-lg backdrop-blur sm:inset-x-auto sm:right-4 sm:bottom-4 sm:left-auto"
+      // Sits one step above the help FAB in the same corner, so the two never
+      // land on each other and neither one covers the mobile tab bar.
+      className="border-border bg-background/95 fixed inset-x-3 bottom-[calc(var(--tab-bar-height)+4.75rem)] z-50 mx-auto flex max-w-md items-center gap-3 rounded-xl border p-3 shadow-lg backdrop-blur sm:inset-x-auto sm:right-6 sm:left-auto"
     >
       <div className="bg-primary text-primary-foreground flex size-10 shrink-0 items-center justify-center rounded-lg">
         <DownloadIcon className="size-5" />

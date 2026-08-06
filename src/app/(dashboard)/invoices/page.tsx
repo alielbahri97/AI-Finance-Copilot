@@ -16,23 +16,75 @@ import {
 import { StatCard } from "@/components/dashboard/stat-card";
 import { InvoicesTable } from "@/components/invoices/invoices-table";
 import { InvoicesToolbar } from "@/components/invoices/invoices-toolbar";
+import {
+  DEFAULT_PAGE_SIZE,
+  DEFAULT_SORT,
+  DEFAULT_SORT_DIRECTION,
+  PAGE_SIZE_OPTIONS,
+  type InvoiceSortKey,
+  type SortDirection,
+} from "@/components/invoices/types";
 import { UploadInvoice } from "@/components/invoices/upload-invoice";
 import { Card, CardContent } from "@/components/ui/card";
+import { PageHeading } from "@/components/ui/page-heading";
 import type { Prisma } from "@/generated/prisma/client";
 import { getInvoiceReminders } from "@/lib/invoices/reminders";
 import { serializeInvoice } from "@/lib/invoices/serialize";
 import { prisma } from "@/lib/prisma";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, localeForCurrency } from "@/lib/utils";
 import { getWorkspaceContext, type WorkspaceContext } from "@/lib/workspace/context";
 
 export const metadata: Metadata = { title: "Invoices" };
 export const dynamic = "force-dynamic";
 
 interface InvoicesPageProps {
-  searchParams: Promise<{ status?: string; vendor?: string; from?: string; to?: string }>;
+  searchParams: Promise<{
+    status?: string;
+    vendor?: string;
+    from?: string;
+    to?: string;
+    page?: string;
+    size?: string;
+    sort?: string;
+    dir?: string;
+  }>;
 }
 
 type InvoiceParams = Awaited<InvoicesPageProps["searchParams"]>;
+
+function parsePageSize(value: string | undefined): number {
+  const size = Number(value);
+  return (PAGE_SIZE_OPTIONS as readonly number[]).includes(size) ? size : DEFAULT_PAGE_SIZE;
+}
+
+function parseSort(value: string | undefined): InvoiceSortKey {
+  const keys: InvoiceSortKey[] = ["due", "date", "vendor", "amount"];
+  return keys.find((key) => key === value) ?? DEFAULT_SORT;
+}
+
+function parseDirection(value: string | undefined): SortDirection {
+  return value === "asc" || value === "desc" ? value : DEFAULT_SORT_DIRECTION;
+}
+
+/**
+ * Undated invoices sort last whichever way the date column points: an invoice
+ * with no due date is not the most urgent thing on the list.
+ */
+function buildOrderBy(
+  sort: InvoiceSortKey,
+  direction: SortDirection
+): Prisma.InvoiceOrderByWithRelationInput[] {
+  switch (sort) {
+    case "amount":
+      return [{ total: direction }, { createdAt: "desc" }];
+    case "vendor":
+      return [{ vendor: direction }, { createdAt: "desc" }];
+    case "date":
+      return [{ invoiceDate: { sort: direction, nulls: "last" } }, { createdAt: "desc" }];
+    default:
+      return [{ dueDate: { sort: direction, nulls: "last" } }, { createdAt: "desc" }];
+  }
+}
 
 /** Streams: header and upload action paint first, stats and table follow. */
 export default async function InvoicesPage({ searchParams }: InvoicesPageProps) {
@@ -47,7 +99,7 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Invoices</h1>
+          <PageHeading>Invoices</PageHeading>
           <p className="text-muted-foreground text-sm">
             Upload documents, review extracted data and track what needs to be paid.
           </p>
@@ -70,6 +122,11 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
 }
 
 async function InvoicesContent({ ctx, params }: { ctx: WorkspaceContext; params: InvoiceParams }) {
+  const requestedPage = Math.max(1, Number(params.page ?? "1") || 1);
+  const pageSize = parsePageSize(params.size);
+  const sort = parseSort(params.sort);
+  const direction = parseDirection(params.dir);
+
   const where: Prisma.InvoiceWhereInput = { workspaceId: ctx.workspace.id };
   if (params.status === "OVERDUE") {
     where.status = "UNPAID";
@@ -93,13 +150,8 @@ async function InvoicesContent({ ctx, params }: { ctx: WorkspaceContext; params:
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
 
-  const [invoices, unpaidAggregate, paidThisMonth, reminders] = await Promise.all([
-    prisma.invoice.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      include: { lineItems: true, transaction: true },
-      take: 200,
-    }),
+  const [totalCount, unpaidAggregate, paidThisMonth, reminders] = await Promise.all([
+    prisma.invoice.count({ where }),
     prisma.invoice.aggregate({
       where: { workspaceId: ctx.workspace.id, status: "UNPAID" },
       _sum: { total: true },
@@ -113,34 +165,47 @@ async function InvoicesContent({ ctx, params }: { ctx: WorkspaceContext; params:
     getInvoiceReminders(ctx.workspace.id),
   ]);
 
+  const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
+  const page = Math.min(requestedPage, pageCount);
+
+  const invoices = await prisma.invoice.findMany({
+    where,
+    orderBy: buildOrderBy(sort, direction),
+    include: { lineItems: true, transaction: true },
+    skip: (page - 1) * pageSize,
+    take: pageSize,
+  });
+
   const hasFilters = Boolean(params.status || params.vendor || params.from || params.to);
   const outstanding = Number(unpaidAggregate._sum.total ?? 0);
+  const currency = ctx.workspace.currency;
+  const locale = localeForCurrency(currency);
 
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Outstanding"
-          value={formatCurrency(outstanding, ctx.workspace.currency)}
+          value={formatCurrency(outstanding, currency, locale)}
           hint={`${unpaidAggregate._count} unpaid invoice${unpaidAggregate._count === 1 ? "" : "s"}`}
           icon={ReceiptTextIcon}
         />
         <StatCard
           title="Overdue"
-          value={formatCurrency(reminders.overdueTotal, ctx.workspace.currency)}
+          value={formatCurrency(reminders.overdueTotal, currency, locale)}
           hint={`${reminders.overdue.length} invoice${reminders.overdue.length === 1 ? "" : "s"} past due`}
           icon={AlertTriangleIcon}
           tone={reminders.overdue.length > 0 ? "negative" : "default"}
         />
         <StatCard
           title="Due in 7 days"
-          value={formatCurrency(reminders.dueSoonTotal, ctx.workspace.currency)}
+          value={formatCurrency(reminders.dueSoonTotal, currency, locale)}
           hint={`${reminders.dueSoon.length} invoice${reminders.dueSoon.length === 1 ? "" : "s"} coming up`}
           icon={CalendarClockIcon}
         />
         <StatCard
           title="Paid this month"
-          value={formatCurrency(Number(paidThisMonth._sum.total ?? 0), ctx.workspace.currency)}
+          value={formatCurrency(Number(paidThisMonth._sum.total ?? 0), currency, locale)}
           hint={`${paidThisMonth._count} invoice${paidThisMonth._count === 1 ? "" : "s"} settled`}
           icon={CheckCircle2Icon}
           tone="positive"
@@ -149,7 +214,7 @@ async function InvoicesContent({ ctx, params }: { ctx: WorkspaceContext; params:
 
       {reminders.overdue.length > 0 && params.status !== "OVERDUE" && (
         <Link href="/invoices?status=OVERDUE">
-          <div className="border-destructive/30 bg-destructive/5 text-destructive flex items-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium transition-colors hover:bg-destructive/10">
+          <div className="border-destructive/30 bg-destructive/5 text-destructive-tinted flex items-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium transition-colors hover:bg-destructive/10">
             <AlertTriangleIcon className="size-4 shrink-0" />
             {reminders.overdue.length === 1
               ? "1 invoice is overdue"
@@ -162,7 +227,18 @@ async function InvoicesContent({ ctx, params }: { ctx: WorkspaceContext; params:
       <Card>
         <CardContent className="flex flex-col gap-4">
           <InvoicesToolbar />
-          <InvoicesTable invoices={invoices.map(serializeInvoice)} hasFilters={hasFilters} />
+          <InvoicesTable
+            invoices={invoices.map(serializeInvoice)}
+            hasFilters={hasFilters}
+            page={page}
+            pageCount={pageCount}
+            pageSize={pageSize}
+            totalCount={totalCount}
+            sort={sort}
+            direction={direction}
+            canEdit={ctx.permissions.has("edit_invoices")}
+            locale={locale}
+          />
         </CardContent>
       </Card>
     </>

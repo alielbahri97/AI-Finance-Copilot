@@ -62,7 +62,7 @@ describe("edition feature matrix", () => {
   });
 
   it("keeps the personal surfaces personal-only", () => {
-    const personalOnly: EditionFeature[] = ["budgets", "goals", "subscriptions"];
+    const personalOnly: EditionFeature[] = ["budgets", "goals", "netWorth", "subscriptions"];
     for (const feature of personalOnly) {
       expect(editionHasFeature("PERSONAL", feature)).toBe(true);
       expect(editionHasFeature("BUSINESS", feature)).toBe(false);
@@ -177,7 +177,7 @@ describe("edition route guards", () => {
   });
 
   it("blocks the personal routes in a business workspace", () => {
-    for (const path of ["/budgets", "/goals", "/goals/g_1", "/subscriptions"]) {
+    for (const path of ["/budgets", "/goals", "/goals/g_1", "/net-worth", "/subscriptions"]) {
       expect(editionAllowsPath("PERSONAL", path)).toBe(true);
       expect(editionAllowsPath("BUSINESS", path)).toBe(false);
     }
@@ -213,7 +213,7 @@ describe("edition navigation", () => {
     expect(hrefs("BUSINESS")).not.toContain("/budgets");
     expect(hrefs("PERSONAL")).not.toContain("/invoices");
     expect(hrefs("PERSONAL")).toEqual(
-      expect.arrayContaining(["/budgets", "/goals", "/subscriptions"])
+      expect.arrayContaining(["/budgets", "/goals", "/net-worth", "/subscriptions"])
     );
   });
 

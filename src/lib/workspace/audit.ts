@@ -18,6 +18,7 @@ export type AuditAction =
   | "member.permissions_changed"
   | "workspace.created"
   | "workspace.renamed"
+  | "workspace.auto_dunning_changed"
   | "billing.checkout_started"
   | "billing.portal_opened"
   | "billing.plan_changed"
@@ -25,6 +26,7 @@ export type AuditAction =
   | "data.transactions_deleted"
   | "data.import_undone"
   | "data.invoice_deleted"
+  | "data.invoice_reminder_sent"
   | "integration.connected"
   | "integration.disconnected";
 

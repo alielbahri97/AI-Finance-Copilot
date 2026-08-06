@@ -1,14 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Link2Icon, Link2OffIcon, Loader2Icon, SearchCheckIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import type { InvoiceDto } from "@/lib/invoices/serialize";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, localeForCurrency } from "@/lib/utils";
 
 interface MatchDto {
   transactionId: string;
@@ -32,6 +34,7 @@ interface TransactionLinkProps {
  */
 export function TransactionLink({ invoice }: TransactionLinkProps) {
   const router = useRouter();
+  const locale = localeForCurrency(invoice.currency);
   const [matches, setMatches] = useState<MatchDto[] | null>(null);
   const [isBusy, setIsBusy] = useState(false);
 
@@ -95,15 +98,15 @@ export function TransactionLink({ invoice }: TransactionLinkProps) {
     const tx = invoice.transaction;
     return (
       <div className="flex items-center gap-3 rounded-lg border p-3">
-        <div className="bg-success/15 text-success flex size-9 shrink-0 items-center justify-center rounded-lg">
+        <div className="bg-success/10 text-success flex size-9 shrink-0 items-center justify-center rounded-lg">
           <Link2Icon className="size-4" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{tx.description}</p>
           <p className="text-muted-foreground text-xs">
-            {formatDate(tx.date)}
+            {formatDate(tx.date, locale)}
             {tx.counterparty ? ` · ${tx.counterparty}` : ""} ·{" "}
-            {formatCurrency(tx.amount, invoice.currency)}
+            {formatCurrency(tx.amount, invoice.currency, locale)}
           </p>
         </div>
         <Button size="sm" variant="outline" onClick={unlink} disabled={isBusy}>
@@ -125,10 +128,17 @@ export function TransactionLink({ invoice }: TransactionLinkProps) {
 
   if (matches.length === 0) {
     return (
-      <div className="text-muted-foreground flex items-center gap-2 rounded-lg border border-dashed p-4 text-sm">
-        <SearchCheckIcon className="size-4" />
-        No likely matching transactions found. Import more bank data or link one manually later.
-      </div>
+      <EmptyState
+        className="rounded-lg border border-dashed py-8"
+        icon={SearchCheckIcon}
+        title="No likely match found"
+        description="Matching looks for a bank transaction with a similar amount, date and vendor. Import the period this invoice falls in and check again."
+        action={
+          <Button size="sm" variant="outline" asChild>
+            <Link href="/import">Import bank data</Link>
+          </Button>
+        }
+      />
     );
   }
 
@@ -145,9 +155,9 @@ export function TransactionLink({ invoice }: TransactionLinkProps) {
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{match.transaction.description}</p>
             <p className="text-muted-foreground text-xs">
-              {formatDate(match.transaction.date)}
+              {formatDate(match.transaction.date, locale)}
               {match.transaction.counterparty ? ` · ${match.transaction.counterparty}` : ""} ·{" "}
-              {formatCurrency(match.transaction.amount, invoice.currency)}
+              {formatCurrency(match.transaction.amount, invoice.currency, locale)}
             </p>
           </div>
           <Button size="sm" onClick={() => link(match.transactionId)} disabled={isBusy}>

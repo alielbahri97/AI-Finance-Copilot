@@ -9,6 +9,7 @@ import {
   LockIcon,
   PlugIcon,
   SearchIcon,
+  SearchXIcon,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -216,11 +218,16 @@ export function GoCardlessConnectButton({
               </Button>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="text-muted-foreground flex h-full items-center justify-center px-6 text-center text-sm">
-              {search
-                ? `No banks match “${search}”. Try a different spelling or country.`
-                : "No banks available for this country."}
-            </div>
+            <EmptyState
+              className="h-full py-8"
+              icon={SearchXIcon}
+              title={search ? `No banks match “${search}”` : "No banks available here"}
+              description={
+                search
+                  ? "Try a different spelling, or check that the country above is the right one."
+                  : "Our provider does not cover this country yet. Importing a statement works everywhere."
+              }
+            />
           ) : (
             <ul className="divide-y">
               {filtered.map((institution) => (

@@ -26,6 +26,8 @@ export interface InvoiceTransactionDto {
 export interface InvoiceDto {
   id: string;
   vendor: string;
+  /** Where payment reminders for a receivable go; null when none is known. */
+  customerEmail: string | null;
   invoiceNumber: string | null;
   invoiceDate: string | null;
   dueDate: string | null;
@@ -73,6 +75,7 @@ export function serializeInvoice(
   return {
     id: invoice.id,
     vendor: invoice.vendor,
+    customerEmail: invoice.customerEmail,
     invoiceNumber: invoice.invoiceNumber,
     invoiceDate: invoice.invoiceDate ? isoDay(invoice.invoiceDate) : null,
     dueDate: invoice.dueDate ? isoDay(invoice.dueDate) : null,

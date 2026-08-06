@@ -14,7 +14,9 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { dateFnsLocale } from "@/lib/date-fns-locale";
 import { cn } from "@/lib/utils";
 
 interface NotificationItem {
@@ -38,8 +40,9 @@ const TYPE_ICONS: Record<string, LucideIcon> = {
 
 const POLL_INTERVAL_MS = 60_000;
 
-export function NotificationBell() {
+export function NotificationBell({ locale = "en-US" }: { locale?: string }) {
   const router = useRouter();
+  const dateLocale = dateFnsLocale(locale);
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -101,10 +104,20 @@ export function NotificationBell() {
       }}
     >
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative"
+          aria-label={
+            unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"
+          }
+        >
           <BellIcon className="size-5" />
           {unreadCount > 0 && (
-            <span className="bg-destructive text-destructive-foreground absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold">
+            <span
+              aria-hidden
+              className="bg-destructive-solid text-destructive-foreground absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-2xs font-semibold"
+            >
               {unreadCount > 99 ? "99+" : unreadCount}
             </span>
           )}
@@ -129,12 +142,12 @@ export function NotificationBell() {
           {!loaded ? (
             <p className="text-muted-foreground px-4 py-8 text-center text-sm">Loading…</p>
           ) : items.length === 0 ? (
-            <div className="px-4 py-10 text-center">
-              <BellIcon className="text-muted-foreground mx-auto mb-2 size-6" />
-              <p className="text-muted-foreground text-sm">
-                No notifications yet. Summaries and alerts will show up here.
-              </p>
-            </div>
+            <EmptyState
+              className="py-10"
+              icon={BellIcon}
+              title="No notifications yet"
+              description="Monthly summaries, budget warnings and invoice reminders arrive here."
+            />
           ) : (
             items.map((item) => {
               const Icon = TYPE_ICONS[item.type] ?? BellIcon;
@@ -166,8 +179,11 @@ export function NotificationBell() {
                     <p className="text-muted-foreground line-clamp-2 text-xs whitespace-pre-line">
                       {item.body}
                     </p>
-                    <p className="text-muted-foreground/70 mt-1 text-[11px]">
-                      {formatDistanceToNow(new Date(item.createdAt), { addSuffix: true })}
+                    <p className="text-muted-foreground text-2xs mt-1">
+                      {formatDistanceToNow(new Date(item.createdAt), {
+                        addSuffix: true,
+                        locale: dateLocale,
+                      })}
                     </p>
                   </div>
                 </button>

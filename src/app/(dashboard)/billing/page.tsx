@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { AlertTriangleIcon, CheckCircle2Icon, InfoIcon } from "lucide-react";
+import { AlertTriangleIcon, CheckCircle2Icon, InfoIcon, ReceiptTextIcon } from "lucide-react";
 
 import { PlanCards } from "@/components/billing/plan-cards";
 import { PortalButton } from "@/components/billing/portal-button";
@@ -8,6 +8,8 @@ import { ReferralCard } from "@/components/billing/referral-card";
 import { UsageMeters } from "@/components/billing/usage-meters";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeading } from "@/components/ui/page-heading";
 import {
   Card,
   CardContent,
@@ -117,7 +119,7 @@ export default async function BillingPage({
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Billing</h1>
+          <PageHeading>Billing</PageHeading>
           <p className="text-muted-foreground text-sm">
             {editionBranding(edition).name} — your plan, usage and invoices, all in one place.
           </p>
@@ -177,7 +179,7 @@ export default async function BillingPage({
               </p>
             )}
             {entitlements.cancelAtPeriodEnd && entitlements.currentPeriodEnd && (
-              <p className="text-warning-foreground text-muted-foreground">
+              <p className="text-muted-foreground">
                 Your subscription is set to cancel on {formatDate(entitlements.currentPeriodEnd)}.
                 You keep full access until then.
               </p>
@@ -266,11 +268,16 @@ export default async function BillingPage({
         </CardHeader>
         <CardContent>
           {invoiceHistory.length === 0 ? (
-            <p className="text-muted-foreground py-4 text-center text-sm">
-              {billingConfigured
-                ? "No invoices yet — they will appear here after your first payment."
-                : "Invoice history is available once billing is configured."}
-            </p>
+            <EmptyState
+              className="py-8"
+              icon={ReceiptTextIcon}
+              title={billingConfigured ? "No invoices yet" : "Billing is not configured"}
+              description={
+                billingConfigured
+                  ? "Stripe issues one after each payment, and every invoice stays downloadable here."
+                  : "This workspace is not connected to Stripe, so there is nothing to bill and no history to show."
+              }
+            />
           ) : (
             <Table>
               <TableHeader>

@@ -1,13 +1,30 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckIcon, FileTextIcon, Link2Icon, Loader2Icon, UndoIcon } from "lucide-react";
+import {
+  CheckIcon,
+  FileTextIcon,
+  Link2Icon,
+  Loader2Icon,
+  SearchXIcon,
+  UndoIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { InvoiceStatusBadge } from "@/components/invoices/status-badge";
+import { UploadInvoice } from "@/components/invoices/upload-invoice";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DataTablePagination,
+  SortHeader,
+  TABLE_SCROLL_AREA,
+  TABLE_STICKY_HEAD,
+  useTableSearchParams,
+} from "@/components/ui/data-table";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Table,
   TableBody,
@@ -17,16 +34,71 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { InvoiceDto } from "@/lib/invoices/serialize";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { cn, formatCurrency, formatDate } from "@/lib/utils";
+import {
+  DEFAULT_PAGE_SIZE,
+  DEFAULT_SORT,
+  DEFAULT_SORT_DIRECTION,
+  PAGE_SIZE_OPTIONS,
+  SORT_DEFAULT_DIRECTION,
+  type InvoiceSortKey,
+  type SortDirection,
+} from "./types";
+
+const SORT_LABELS: Record<InvoiceSortKey, string> = {
+  vendor: "Vendor",
+  date: "Date",
+  due: "Due",
+  amount: "Total",
+};
 
 interface InvoicesTableProps {
   invoices: InvoiceDto[];
   hasFilters: boolean;
+  page: number;
+  pageCount: number;
+  pageSize: number;
+  totalCount: number;
+  sort: InvoiceSortKey;
+  direction: SortDirection;
+  canEdit: boolean;
+  /**
+   * The reader's locale, not the invoice's: every row carries its own
+   * currency, but the grouping and date order are the workspace's throughout.
+   */
+  locale: string;
 }
 
-export function InvoicesTable({ invoices, hasFilters }: InvoicesTableProps) {
+export function InvoicesTable({
+  invoices,
+  hasFilters,
+  page,
+  pageCount,
+  pageSize,
+  totalCount,
+  sort,
+  direction,
+  canEdit,
+  locale,
+}: InvoicesTableProps) {
   const router = useRouter();
+  const setParams = useTableSearchParams();
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  function applySort(column: InvoiceSortKey) {
+    const nextDirection: SortDirection =
+      sort === column
+        ? direction === "asc"
+          ? "desc"
+          : "asc"
+        : SORT_DEFAULT_DIRECTION[column];
+    const isDefault = column === DEFAULT_SORT && nextDirection === DEFAULT_SORT_DIRECTION;
+    setParams({
+      sort: isDefault ? null : column,
+      dir: isDefault ? null : nextDirection,
+      page: null,
+    });
+  }
 
   async function setStatus(invoice: InvoiceDto, status: "PAID" | "UNPAID") {
     setBusyId(invoice.id);
@@ -51,103 +123,165 @@ export function InvoicesTable({ invoices, hasFilters }: InvoicesTableProps) {
   }
 
   if (invoices.length === 0) {
-    return (
-      <div className="text-muted-foreground flex flex-col items-center gap-2 py-12 text-center text-sm">
-        <FileTextIcon className="size-8 opacity-50" />
-        <p className="font-medium">{hasFilters ? "No invoices match your filters" : "No invoices yet"}</p>
-        <p>{hasFilters ? "Try changing or clearing the filters." : "Upload a PDF or photo to get started."}</p>
-      </div>
+    return hasFilters ? (
+      <EmptyState
+        icon={SearchXIcon}
+        title="No invoices match these filters"
+        description="Try a wider date range, another status, or a shorter vendor search."
+        action={
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/invoices">Clear filters</Link>
+          </Button>
+        }
+      />
+    ) : (
+      <EmptyState
+        icon={FileTextIcon}
+        title="No invoices yet"
+        description="Upload a PDF or a photo of a bill and we extract the vendor, dates and totals for you to check."
+        action={canEdit ? <UploadInvoice /> : undefined}
+      />
     );
   }
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Vendor</TableHead>
-          <TableHead className="hidden md:table-cell">Number</TableHead>
-          <TableHead className="hidden sm:table-cell">Date</TableHead>
-          <TableHead>Due</TableHead>
-          <TableHead className="text-right">Total</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead className="w-24 text-right">Actions</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {invoices.map((invoice) => (
-          <TableRow
-            key={invoice.id}
-            className="cursor-pointer"
-            onClick={() => router.push(`/invoices/${invoice.id}`)}
-          >
-            <TableCell className="max-w-48">
-              <div className="flex items-center gap-2">
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{invoice.vendor || "Unknown vendor"}</p>
-                  <p className="text-muted-foreground truncate text-xs">{invoice.fileName}</p>
-                </div>
-                {invoice.direction === "RECEIVABLE" && (
-                  <Badge variant="outline" className="hidden shrink-0 text-xs lg:inline-flex">
-                    Receivable
-                  </Badge>
-                )}
-                {invoice.transaction && (
-                  <Link2Icon
-                    className="text-success size-3.5 shrink-0"
-                    aria-label="Linked to a transaction"
-                  />
-                )}
-              </div>
-            </TableCell>
-            <TableCell className="text-muted-foreground hidden md:table-cell">
-              {invoice.invoiceNumber ?? "—"}
-            </TableCell>
-            <TableCell className="text-muted-foreground hidden sm:table-cell">
-              {invoice.invoiceDate ? formatDate(invoice.invoiceDate) : "—"}
-            </TableCell>
-            <TableCell
-              className={
-                invoice.derivedStatus === "OVERDUE"
-                  ? "text-destructive font-medium"
-                  : "text-muted-foreground"
-              }
-            >
-              {invoice.dueDate ? formatDate(invoice.dueDate) : "—"}
-            </TableCell>
-            <TableCell className="text-right font-semibold tabular-nums">
-              {formatCurrency(invoice.total, invoice.currency)}
-            </TableCell>
-            <TableCell>
-              <InvoiceStatusBadge status={invoice.derivedStatus} />
-            </TableCell>
-            <TableCell className="text-right" onClick={(event) => event.stopPropagation()}>
-              {busyId === invoice.id ? (
-                <Loader2Icon className="text-muted-foreground ml-auto size-4 animate-spin" />
-              ) : invoice.status === "PAID" ? (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-muted-foreground h-7"
-                  onClick={() => setStatus(invoice, "UNPAID")}
+    <div className="flex flex-col gap-3">
+      <div className={TABLE_SCROLL_AREA}>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <SortHeader
+                column="vendor"
+                label={SORT_LABELS.vendor}
+                sort={sort}
+                direction={direction}
+                onSort={applySort}
+              />
+              <TableHead className={cn(TABLE_STICKY_HEAD, "hidden md:table-cell")}>
+                Number
+              </TableHead>
+              <SortHeader
+                column="date"
+                label={SORT_LABELS.date}
+                sort={sort}
+                direction={direction}
+                onSort={applySort}
+                className="hidden sm:table-cell"
+              />
+              <SortHeader
+                column="due"
+                label={SORT_LABELS.due}
+                sort={sort}
+                direction={direction}
+                onSort={applySort}
+              />
+              <SortHeader
+                column="amount"
+                label={SORT_LABELS.amount}
+                sort={sort}
+                direction={direction}
+                onSort={applySort}
+                align="right"
+                className="text-right"
+              />
+              <TableHead className={TABLE_STICKY_HEAD}>Status</TableHead>
+              <TableHead className={cn(TABLE_STICKY_HEAD, "w-24 text-right")}>Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {invoices.map((invoice) => (
+              <TableRow key={invoice.id} className="relative">
+                <TableCell className="max-w-48">
+                  <div className="flex items-center gap-2">
+                    <div className="min-w-0">
+                      <Link
+                        href={`/invoices/${invoice.id}`}
+                        className="focus-visible:ring-ring block rounded-sm after:absolute after:inset-0 focus-visible:ring-2 focus-visible:outline-none"
+                      >
+                        <span className="block truncate font-medium">
+                          {invoice.vendor || "Unknown vendor"}
+                        </span>
+                      </Link>
+                      <p className="text-muted-foreground truncate text-xs">{invoice.fileName}</p>
+                    </div>
+                    {invoice.direction === "RECEIVABLE" && (
+                      <Badge variant="outline" className="hidden shrink-0 text-xs lg:inline-flex">
+                        Receivable
+                      </Badge>
+                    )}
+                    {invoice.transaction && (
+                      <Link2Icon
+                        className="text-success size-3.5 shrink-0"
+                        aria-label="Linked to a transaction"
+                      />
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell className="text-muted-foreground hidden md:table-cell">
+                  {invoice.invoiceNumber ?? "—"}
+                </TableCell>
+                <TableCell className="text-muted-foreground hidden sm:table-cell">
+                  {invoice.invoiceDate ? formatDate(invoice.invoiceDate, locale) : "—"}
+                </TableCell>
+                <TableCell
+                  className={
+                    invoice.derivedStatus === "OVERDUE"
+                      ? "text-destructive font-medium"
+                      : "text-muted-foreground"
+                  }
                 >
-                  <UndoIcon />
-                  Unpaid
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-success h-7"
-                  onClick={() => setStatus(invoice, "PAID")}
+                  {invoice.dueDate ? formatDate(invoice.dueDate, locale) : "—"}
+                </TableCell>
+                <TableCell className="text-right font-semibold tabular-nums">
+                  {formatCurrency(invoice.total, invoice.currency, locale)}
+                </TableCell>
+                <TableCell>
+                  <InvoiceStatusBadge status={invoice.derivedStatus} />
+                </TableCell>
+                <TableCell
+                  className="relative z-10 text-right"
+                  onClick={(event) => event.stopPropagation()}
                 >
-                  <CheckIcon />
-                  Paid
-                </Button>
-              )}
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+                  {busyId === invoice.id ? (
+                    <Loader2Icon className="text-muted-foreground ml-auto size-4 animate-spin" />
+                  ) : invoice.status === "PAID" ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-muted-foreground h-7"
+                      onClick={() => setStatus(invoice, "UNPAID")}
+                    >
+                      <UndoIcon />
+                      Unpaid
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-success h-7"
+                      onClick={() => setStatus(invoice, "PAID")}
+                    >
+                      <CheckIcon />
+                      Paid
+                    </Button>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      <DataTablePagination
+        page={page}
+        pageCount={pageCount}
+        pageSize={pageSize}
+        pageSizeOptions={PAGE_SIZE_OPTIONS}
+        defaultPageSize={DEFAULT_PAGE_SIZE}
+        totalCount={totalCount}
+        noun="invoice"
+        locale={locale}
+      />
+    </div>
   );
 }

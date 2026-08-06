@@ -41,6 +41,20 @@ enum InvoiceDirection {
   RECEIVABLE
 }
 
+/// Rungs of the customer-facing payment-reminder ladder, picked from how far
+/// an unpaid receivable is from its due date. Each rung is sent at most once
+/// per invoice — see the ReminderLog uniqueness below.
+enum DunningStep {
+  /// Due within the next 7 days: a friendly heads-up before anything is late.
+  DUE_SOON
+  /// 1-14 days late.
+  OVERDUE_1
+  /// 15-30 days late.
+  OVERDUE_2
+  /// More than 30 days late: the last reminder Ballast sends by itself.
+  FINAL
+}
+
 enum ExtractionStatus {
   /// AI extraction succeeded; fields were pre-filled for review.
   EXTRACTED
@@ -133,6 +147,30 @@ enum AssumptionKind {
   PERCENT_GROWTH
 }
 
+/// What a manually tracked holding is. The first six are things a person
+/// owns, the last four things they owe. Which side of the balance a kind
+/// falls on is decided in exactly one place — `isLiabilityKind()` in
+/// src/lib/personal/net-worth.ts — rather than stored per row, so a holding
+/// can never disagree with its own kind.
+enum AssetKind {
+  /// A house, a flat, land.
+  PROPERTY
+  VEHICLE
+  /// Brokerage accounts, funds, pensions: a balance the user reads off a
+  /// statement, not a holdings-level feed.
+  INVESTMENT
+  CRYPTO
+  /// Money held somewhere no bank connection reaches — cash, a foreign
+  /// account, a savings pot at a bank Ballast cannot sync.
+  CASH
+  OTHER_ASSET
+  LOAN
+  MORTGAGE
+  /// A credit card or overdraft: the outstanding balance, entered positive.
+  CREDIT_LINE
+  OTHER_LIABILITY
+}
+
 enum BusinessType {
   RESTAURANT
   RETAIL
@@ -165,6 +203,13 @@ model Workspace {
   type      WorkspaceType @default(BUSINESS)
   /// Currency for the workspace's shared data.
   currency  String   @default("USD")
+  /// Opt-out for AI categorization of imported transactions. On by default;
+  /// rule matching and manual categorization are unaffected either way.
+  aiCategorizationEnabled Boolean @default(true) @map("ai_categorization_enabled")
+  /// Whether the hourly cron may email customers about overdue receivables on
+  /// the workspace's behalf. Off by default: nothing leaves the building under
+  /// someone's own name until they ask for it.
+  autoDunningEnabled      Boolean @default(false) @map("auto_dunning_enabled")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -183,6 +228,7 @@ model Workspace {
   conversations          Conversation[]
   budgets                Budget[]
   savingsGoals           SavingsGoal[]
+  assets                 Asset[]
   integrationConnections IntegrationConnection[]
 
   @@index([type])
@@ -268,6 +314,7 @@ model Profile {
   transactions           Transaction[]
   budgets                Budget[]
   savingsGoals           SavingsGoal[]
+  assets                 Asset[]
   chatMessages           ChatMessage[]
   categories             Category[]
   categoryRules          CategoryRule[]
@@ -275,6 +322,7 @@ model Profile {
   conversations          Conversation[]
   assumptions            Assumption[]
   invoices               Invoice[]
+  remindersSent          ReminderLog[]
   notifications          Notification[]
   notificationPreference NotificationPreference?
   pushSubscriptions      PushSubscription[]
@@ -473,6 +521,8 @@ model UsageRecord {
   userId             String?  @map("user_id") @db.Uuid
   period             String
   aiMessages         Int      @default(0) @map("ai_messages")
+  /// Transactions handed to the AI categorizer this period.
+  aiCategorizations  Int      @default(0) @map("ai_categorizations")
   csvImports         Int      @default(0) @map("csv_imports")
   invoiceExtractions Int      @default(0) @map("invoice_extractions")
   exports            Int      @default(0)
@@ -599,6 +649,9 @@ model Invoice {
   /// The member who uploaded/created the invoice.
   userId           String           @map("user_id") @db.Uuid
   vendor           String           @default("")
+  /// Where payment reminders for a receivable go. Null means this invoice has
+  /// nobody to remind, which is what keeps it out of the dunning queue.
+  customerEmail    String?          @map("customer_email")
   invoiceNumber    String?          @map("invoice_number")
   invoiceDate      DateTime?        @map("invoice_date")
   dueDate          DateTime?        @map("due_date")
@@ -638,12 +691,38 @@ model Invoice {
   profile     Profile           @relation(fields: [userId], references: [id], onDelete: Cascade)
   transaction Transaction?      @relation(fields: [transactionId], references: [id], onDelete: SetNull)
   lineItems   InvoiceLineItem[]
+  reminderLogs ReminderLog[]
 
   @@index([workspaceId, status])
   @@index([workspaceId, dueDate])
   @@index([workspaceId, createdAt(sort: Desc)])
   @@index([workspaceId, externalRef])
   @@map("invoices")
+}
+
+/// One payment reminder that actually reached a customer. Two jobs: it is the
+/// audit trail ("what exactly did we send them, and when"), and it is the
+/// escalation ladder's memory — the unique key below is what makes "each step
+/// at most once per invoice" a fact of the database rather than a race the
+/// cron might lose. Rows are written only for delivered mail, so an unsent
+/// draft never burns a rung.
+model ReminderLog {
+  id        String      @id @default(cuid())
+  invoiceId String      @map("invoice_id")
+  kind      DunningStep
+  toEmail   String      @map("to_email")
+  subject   String
+  body      String
+  /// Who sent it. Null means the hourly cron did, with nobody in the loop.
+  sentBy    String?     @map("sent_by") @db.Uuid
+  sentAt    DateTime    @default(now()) @map("sent_at")
+
+  invoice Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  sender  Profile? @relation(fields: [sentBy], references: [id], onDelete: SetNull)
+
+  @@unique([invoiceId, kind])
+  @@index([invoiceId, sentAt(sort: Desc)])
+  @@map("reminder_logs")
 }
 
 model InvoiceLineItem {
@@ -865,6 +944,56 @@ model SavingsContribution {
   @@unique([goalId, transactionId])
   @@index([goalId, date(sort: Desc)])
   @@map("savings_contributions")
+}
+
+/// Something the workspace owns or owes that no bank connection reports: a
+/// house, a car, an index fund, a mortgage. Bank balances already arrive
+/// through BankAccount and are added to net worth from there, so an asset row
+/// exists precisely for what is *not* synced — which is what keeps the two
+/// from double-counting the same money.
+///
+/// The row itself holds no value. Worth changes over time and the history is
+/// the interesting part, so every figure lives in AssetValuation and the
+/// latest one is the current value.
+model Asset {
+  id          String    @id @default(cuid())
+  workspaceId String    @map("workspace_id")
+  userId      String    @map("user_id") @db.Uuid
+  name        String
+  kind        AssetKind
+  /// Held in this currency. Null means the workspace currency. A holding in
+  /// another currency is shown but never summed — there is no FX rate
+  /// anywhere in this app and inventing one would misstate net worth.
+  currency    String?
+  note        String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  workspace  Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  profile    Profile          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  valuations AssetValuation[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@map("assets")
+}
+
+/// What an asset was worth on a date. Append-only: a correction is a new row,
+/// not an edit, because the history is what draws the net-worth line and
+/// rewriting it would quietly change the past. Liabilities are stored
+/// positive and subtracted, so a value is never negative.
+model AssetValuation {
+  id        String   @id @default(cuid())
+  assetId   String   @map("asset_id")
+  value     Decimal  @db.Decimal(14, 2)
+  /// The day the figure describes, not the day it was entered.
+  asOf      DateTime @map("as_of")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([assetId, asOf(sort: Desc)])
+  @@map("asset_valuations")
 }
 
 /// A copilot conversation, shared across the workspace's members.

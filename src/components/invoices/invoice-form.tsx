@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2Icon, PlusIcon, SaveIcon, Trash2Icon } from "lucide-react";
 import { toast } from "sonner";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -88,7 +89,7 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
   }
   const attention = (field: string, isEmpty: boolean) =>
     needsAttention(field, isEmpty)
-      ? "border-amber-400 ring-1 ring-amber-400/60 dark:border-amber-500 dark:ring-amber-500/50"
+      ? "border-warning ring-warning/60 ring-1"
       : undefined;
   const anyAttention =
     isReviewDraft &&
@@ -165,18 +166,20 @@ export function InvoiceForm({ invoice }: InvoiceFormProps) {
   return (
     <div className="flex flex-col gap-4">
       {invoice.extractionWarnings.length > 0 && invoice.status === "DRAFT" && (
-        <div className="rounded-lg border border-amber-400/60 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-200">
-          <p className="font-medium">The extracted numbers don&apos;t add up:</p>
-          <ul className="mt-1 list-disc pl-5">
-            {invoice.extractionWarnings.map((warning) => (
-              <li key={warning}>{warning}</li>
-            ))}
-          </ul>
-        </div>
+        <Alert variant="warning">
+          <AlertTitle>The extracted numbers don&apos;t add up:</AlertTitle>
+          <AlertDescription>
+            <ul className="list-disc pl-5">
+              {invoice.extractionWarnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          </AlertDescription>
+        </Alert>
       )}
       {anyAttention && (
         <p className="text-muted-foreground text-sm">
-          <span className="mr-1.5 inline-block size-2.5 rounded-full border border-amber-400 bg-amber-400/40 align-middle" />
+          <span className="border-warning bg-warning/40 mr-1.5 inline-block size-2.5 rounded-full border align-middle" />
           Highlighted fields were missing or low-confidence — check them against the document.
         </p>
       )}

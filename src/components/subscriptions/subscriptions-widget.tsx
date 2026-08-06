@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CreditCardIcon } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -8,8 +9,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import type { UpcomingCharge } from "@/lib/personal/subscriptions";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, localeForCurrency } from "@/lib/utils";
 
 /** How many upcoming charges the widget lists before deferring to the page. */
 const WIDGET_CHARGE_COUNT = 2;
@@ -38,6 +40,7 @@ export function SubscriptionsWidget({
   upcomingCharges,
 }: SubscriptionsWidgetProps) {
   const next = upcomingCharges.slice(0, WIDGET_CHARGE_COUNT);
+  const locale = localeForCurrency(currency);
 
   return (
     <Card className="gap-4">
@@ -54,15 +57,22 @@ export function SubscriptionsWidget({
       </CardHeader>
       <CardContent className="space-y-3">
         {subscriptionCount === 0 ? (
-          <p className="text-muted-foreground text-sm">
-            Detection needs a few months of transactions before it can tell a subscription from a
-            one-off payment.
-          </p>
+          <EmptyState
+            className="py-6"
+            icon={CreditCardIcon}
+            title="Nothing recurring detected yet"
+            description="Detection needs a few months of transactions before it can tell a subscription from a one-off payment."
+            action={
+              <Button size="sm" variant="outline" asChild>
+                <Link href="/import">Import more history</Link>
+              </Button>
+            }
+          />
         ) : (
           <>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold tracking-tight tabular-nums">
-                {formatCurrency(totalMonthlyCost, currency)}
+              <span className="text-lg font-semibold tracking-tight tabular-nums">
+                {formatCurrency(totalMonthlyCost, currency, locale)}
               </span>
               <span className="text-muted-foreground text-xs">per month</span>
             </div>
@@ -80,10 +90,10 @@ export function SubscriptionsWidget({
                   >
                     <span className="min-w-0 flex-1 truncate">{charge.label}</span>
                     <span className="text-muted-foreground text-xs">
-                      {formatDate(charge.date)}
+                      {formatDate(charge.date, locale)}
                     </span>
                     <span className="font-medium tabular-nums">
-                      {formatCurrency(charge.amount, currency)}
+                      {formatCurrency(charge.amount, currency, locale)}
                     </span>
                   </div>
                 ))}

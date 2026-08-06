@@ -1,7 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import type { GoalsSummary } from "@/lib/personal/goals";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, localeForCurrency } from "@/lib/utils";
 
 interface GoalsSummaryCardProps {
   summary: GoalsSummary;
@@ -12,6 +12,8 @@ interface GoalsSummaryCardProps {
 export function GoalsSummaryCard({ summary, currency }: GoalsSummaryCardProps) {
   const { goals, behindCount, achievedCount } = summary;
   const withDates = goals.filter((goal) => goal.requiredMonthlyRate !== null).length;
+  const locale = localeForCurrency(currency);
+  const money = (value: number) => formatCurrency(value, currency, locale);
 
   return (
     <Card className="gap-4">
@@ -29,11 +31,11 @@ export function GoalsSummaryCard({ summary, currency }: GoalsSummaryCardProps) {
       <CardContent className="space-y-4">
         <div className="space-y-1.5">
           <div className="flex items-baseline justify-between gap-2">
-            <span className="text-2xl font-bold tracking-tight tabular-nums">
-              {formatCurrency(summary.totalSaved, currency)}
+            <span className="text-xl font-semibold tracking-tight tabular-nums">
+              {money(summary.totalSaved)}
             </span>
             <span className="text-muted-foreground text-sm tabular-nums">
-              of {formatCurrency(summary.totalTarget, currency)}
+              of {money(summary.totalTarget)}
             </span>
           </div>
           <Progress
@@ -49,14 +51,14 @@ export function GoalsSummaryCard({ summary, currency }: GoalsSummaryCardProps) {
         <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           <div>
             <dt className="text-muted-foreground text-xs">Still to save</dt>
-            <dd className="text-lg font-semibold tabular-nums">
-              {formatCurrency(Math.max(0, summary.totalTarget - summary.totalSaved), currency)}
+            <dd className="font-semibold tabular-nums">
+              {money(Math.max(0, summary.totalTarget - summary.totalSaved))}
             </dd>
           </div>
           <div>
             <dt className="text-muted-foreground text-xs">Needed per month</dt>
-            <dd className="text-lg font-semibold tabular-nums">
-              {formatCurrency(summary.requiredMonthlyTotal, currency)}
+            <dd className="font-semibold tabular-nums">
+              {money(summary.requiredMonthlyTotal)}
             </dd>
             <p className="text-muted-foreground text-xs">
               {withDates === 0
@@ -66,7 +68,7 @@ export function GoalsSummaryCard({ summary, currency }: GoalsSummaryCardProps) {
           </div>
           <div>
             <dt className="text-muted-foreground text-xs">Behind</dt>
-            <dd className="text-lg font-semibold tabular-nums">{behindCount}</dd>
+            <dd className="font-semibold tabular-nums">{behindCount}</dd>
             <p className="text-muted-foreground text-xs">
               {behindCount === 0 ? "Every dated goal is on track" : "Projected to miss the date"}
             </p>

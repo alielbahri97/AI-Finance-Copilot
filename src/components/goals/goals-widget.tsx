@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { PiggyBankIcon } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Progress } from "@/components/ui/progress";
 import { selectFocusGoals, type GoalsSummary } from "@/lib/personal/goals";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, localeForCurrency } from "@/lib/utils";
 
 import { projectionSentences, STATUS_LABELS, STATUS_TONES } from "./status";
 
@@ -20,6 +22,8 @@ interface GoalsWidgetProps {
  */
 export function GoalsWidget({ summary, currency }: GoalsWidgetProps) {
   const focus = selectFocusGoals(summary.goals, 3);
+  const locale = localeForCurrency(currency);
+  const money = (value: number) => formatCurrency(value, currency, locale);
 
   return (
     <Card className="gap-3">
@@ -36,22 +40,26 @@ export function GoalsWidget({ summary, currency }: GoalsWidgetProps) {
       </CardHeader>
       <CardContent className="space-y-4">
         {focus.length === 0 ? (
-          <p className="text-muted-foreground text-sm">
-            No goals yet.{" "}
-            <Link href="/goals" className="underline underline-offset-4">
-              Set one up
-            </Link>{" "}
-            to track what you are saving for.
-          </p>
+          <EmptyState
+            className="py-6"
+            icon={PiggyBankIcon}
+            title="No goals yet"
+            description="Name what you are saving for and this card tracks how close you are."
+            action={
+              <Button size="sm" variant="outline" asChild>
+                <Link href="/goals">Set up a goal</Link>
+              </Button>
+            }
+          />
         ) : (
           <>
             <div className="space-y-1.5">
               <div className="flex items-baseline justify-between gap-2">
-                <span className="text-2xl font-bold tracking-tight tabular-nums">
-                  {formatCurrency(summary.totalSaved, currency)}
+                <span className="text-lg font-semibold tracking-tight tabular-nums">
+                  {money(summary.totalSaved)}
                 </span>
                 <span className="text-muted-foreground text-xs tabular-nums">
-                  of {formatCurrency(summary.totalTarget, currency)}
+                  of {money(summary.totalTarget)}
                 </span>
               </div>
               <Progress
@@ -60,7 +68,7 @@ export function GoalsWidget({ summary, currency }: GoalsWidgetProps) {
                 label="Combined savings-goal progress"
               />
               <p className="text-muted-foreground text-xs">
-                {formatCurrency(summary.requiredMonthlyTotal, currency)} a month keeps every
+                {money(summary.requiredMonthlyTotal)} a month keeps every
                 dated goal on time.
               </p>
             </div>
@@ -80,7 +88,7 @@ export function GoalsWidget({ summary, currency }: GoalsWidgetProps) {
                     label={`${goal.name} progress`}
                   />
                   <p className="text-muted-foreground text-xs">
-                    {projectionSentences(goal, currency)[0]}
+                    {projectionSentences(goal, currency, locale)[0]}
                   </p>
                 </li>
               ))}

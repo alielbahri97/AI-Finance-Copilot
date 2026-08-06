@@ -3,7 +3,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BotIcon, HistoryIcon, SendIcon, SquareIcon, UserIcon } from "lucide-react";
+import {
+  ArrowDownIcon,
+  BotIcon,
+  CheckIcon,
+  CopyIcon,
+  HistoryIcon,
+  RefreshCwIcon,
+  SendIcon,
+  SquareIcon,
+  TriangleAlertIcon,
+  UserIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Markdown } from "@/components/copilot/markdown-lazy";
@@ -15,6 +26,7 @@ export interface ChatMessageItem {
   id: string;
   role: "USER" | "ASSISTANT";
   content: string;
+  createdAt?: string;
 }
 
 interface CopilotChatProps {
@@ -32,6 +44,14 @@ type StreamEvent =
   | { type: "done" }
   | { type: "error"; message: string };
 
+/** A turn that never produced an answer, kept so the user can re-send it. */
+interface FailedTurn {
+  prompt: string;
+  message: string;
+}
+
+const TIME_FORMAT = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" });
+
 export function CopilotChat({
   conversationId,
   initialMessages,
@@ -43,9 +63,13 @@ export function CopilotChat({
   const [messages, setMessages] = useState<ChatMessageItem[]>(initialMessages);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
+  const [failedTurn, setFailedTurn] = useState<FailedTurn | null>(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const activeIdRef = useRef<string | null>(conversationId);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const stickToBottomRef = useRef(true);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
@@ -65,7 +89,15 @@ export function CopilotChat({
   function handleScroll() {
     const el = scrollRef.current;
     if (!el) return;
-    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    stickToBottomRef.current = nearBottom;
+    setIsAtBottom(nearBottom);
+  }
+
+  function jumpToLatest() {
+    stickToBottomRef.current = true;
+    setIsAtBottom(true);
+    scrollToBottom();
   }
 
   function updateAssistant(id: string, updater: (content: string) => string) {
@@ -80,21 +112,25 @@ export function CopilotChat({
     const trimmed = text.trim();
     if (!trimmed || isStreaming || quotaExhausted) return;
 
-    setInput("");
+    // A retry or a chip must not wipe whatever the user has half-typed.
+    setInput((current) => (current.trim() === trimmed ? "" : current));
+    setFailedTurn(null);
     setIsStreaming(true);
     stickToBottomRef.current = true;
+    setIsAtBottom(true);
 
+    const sentAt = new Date().toISOString();
     const assistantId = `local-${Date.now()}-assistant`;
     setMessages((prev) => [
       ...prev,
-      { id: `local-${Date.now()}-user`, role: "USER", content: trimmed },
-      { id: assistantId, role: "ASSISTANT", content: "" },
+      { id: `local-${Date.now()}-user`, role: "USER", content: trimmed, createdAt: sentAt },
+      { id: assistantId, role: "ASSISTANT", content: "", createdAt: sentAt },
     ]);
 
     const controller = new AbortController();
     abortRef.current = controller;
     const wasNewConversation = activeIdRef.current === null;
-    let failed = false;
+    let failure: string | null = null;
 
     try {
       const response = await fetch("/api/copilot", {
@@ -109,10 +145,7 @@ export function CopilotChat({
 
       if (!response.ok || !response.body) {
         const body = await response.json().catch(() => null);
-        toast.error("Copilot error", {
-          description: body?.error ?? "The assistant could not answer. Try again.",
-        });
-        failed = true;
+        failure = body?.error ?? "The assistant could not answer that one.";
         return;
       }
 
@@ -127,8 +160,7 @@ export function CopilotChat({
           updateAssistant(assistantId, (content) => content + event.text);
           scrollToBottom("auto");
         } else if (event.type === "error") {
-          toast.error("Copilot error", { description: event.message });
-          failed = true;
+          failure = event.message;
         }
       };
 
@@ -150,8 +182,7 @@ export function CopilotChat({
       }
     } catch (error) {
       if (!(error instanceof Error && error.name === "AbortError")) {
-        toast.error("Network error", { description: "Please try again." });
-        failed = true;
+        failure = "Could not reach the assistant. Check your connection.";
       }
     } finally {
       setIsStreaming(false);
@@ -160,12 +191,43 @@ export function CopilotChat({
       setMessages((prev) =>
         prev.filter((message) => !(message.id === assistantId && message.content === ""))
       );
-      if (!failed) {
+      if (failure) {
+        setFailedTurn({ prompt: trimmed, message: failure });
+      } else {
         if (wasNewConversation && activeIdRef.current) {
           router.replace(`/copilot?c=${activeIdRef.current}`, { scroll: false });
         }
         router.refresh();
       }
+      // Buttons that triggered the turn can disappear on completion, which drops
+      // focus to the document.
+      if (document.activeElement === document.body) inputRef.current?.focus();
+    }
+  }
+
+  /** Rewinds to just before `prompt` was asked and sends it again. */
+  function resend(prompt: string) {
+    if (isStreaming || quotaExhausted) return;
+    setFailedTurn(null);
+    setMessages((prev) => {
+      let end = prev.length;
+      while (end > 0 && prev[end - 1]?.role === "ASSISTANT") end -= 1;
+      if (end > 0 && prev[end - 1]?.content === prompt) end -= 1;
+      return prev.slice(0, end);
+    });
+    void sendMessage(prompt);
+  }
+
+  async function copyMessage(message: ChatMessageItem) {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopiedId(message.id);
+      window.setTimeout(
+        () => setCopiedId((current) => (current === message.id ? null : current)),
+        1500
+      );
+    } catch {
+      toast.error("Could not copy", { description: "Your browser blocked clipboard access." });
     }
   }
 
@@ -184,6 +246,7 @@ export function CopilotChat({
   const lastMessage = messages[messages.length - 1];
   const showTypingDots =
     isStreaming && lastMessage?.role === "ASSISTANT" && lastMessage.content === "";
+  const lastPrompt = [...messages].reverse().find((message) => message.role === "USER")?.content;
 
   return (
     <div className="bg-card flex h-full min-h-0 flex-col rounded-xl border shadow-sm">
@@ -207,83 +270,174 @@ export function CopilotChat({
         )}
       </div>
 
-      <div
-        ref={scrollRef}
-        onScroll={handleScroll}
-        className="flex-1 space-y-4 overflow-y-auto p-4"
-      >
-        {isEmpty ? (
-          <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
-            <div className="bg-accent text-accent-foreground flex size-12 items-center justify-center rounded-full">
-              <BotIcon className="size-6" />
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions text"
+          aria-label="Conversation"
+          className="flex-1 space-y-4 overflow-y-auto p-4"
+        >
+          {isEmpty ? (
+            <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
+              <div className="bg-accent text-accent-foreground flex size-12 items-center justify-center rounded-full">
+                <BotIcon className="size-6" />
+              </div>
+              <div>
+                <p className="font-medium">Ask me anything about your finances</p>
+                <p className="text-muted-foreground mx-auto max-w-sm text-sm">
+                  I can see your transactions, categories, balances, trends and forecasts — and
+                  I answer with your real numbers.
+                </p>
+              </div>
+              <div className="flex max-w-xl flex-wrap justify-center gap-2">
+                {suggestions.slice(0, 5).map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    type="button"
+                    onClick={() => sendMessage(suggestion)}
+                    className="bg-muted hover:bg-accent hover:text-accent-foreground cursor-pointer rounded-full px-3 py-1.5 text-xs transition-colors"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div>
-              <p className="font-medium">Ask me anything about your finances</p>
-              <p className="text-muted-foreground mx-auto max-w-sm text-sm">
-                I can see your transactions, categories, balances, trends and forecasts — and
-                I answer with your real numbers.
-              </p>
-            </div>
-            <div className="flex max-w-xl flex-wrap justify-center gap-2">
-              {suggestions.slice(0, 5).map((suggestion) => (
-                <button
-                  key={suggestion}
-                  type="button"
-                  onClick={() => sendMessage(suggestion)}
-                  className="bg-muted hover:bg-accent hover:text-accent-foreground cursor-pointer rounded-full px-3 py-1.5 text-xs transition-colors"
+          ) : (
+            messages.map((message, index) => {
+              const isAssistant = message.role === "ASSISTANT";
+              const isLast = index === messages.length - 1;
+              const isPending = isAssistant && message.content === "" && showTypingDots;
+              const showActions = isAssistant && !isPending && !(isStreaming && isLast);
+              return (
+                <div
+                  key={message.id}
+                  className={cn("flex items-start gap-3", !isAssistant && "flex-row-reverse")}
                 >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          messages.map((message) => (
-            <div
-              key={message.id}
-              className={cn(
-                "flex items-start gap-3",
-                message.role === "USER" && "flex-row-reverse"
-              )}
-            >
-              <div
-                className={cn(
-                  "flex size-8 shrink-0 items-center justify-center rounded-full",
-                  message.role === "USER"
-                    ? "bg-secondary text-secondary-foreground"
-                    : "bg-primary text-primary-foreground"
-                )}
+                  <div
+                    className={cn(
+                      "flex size-8 shrink-0 items-center justify-center rounded-full",
+                      isAssistant
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary text-secondary-foreground"
+                    )}
+                  >
+                    {isAssistant ? (
+                      <BotIcon className="size-4" />
+                    ) : (
+                      <UserIcon className="size-4" />
+                    )}
+                  </div>
+                  <div
+                    className={cn(
+                      "flex min-w-0 max-w-[85%] flex-col gap-1",
+                      !isAssistant && "items-end"
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "rounded-xl px-4 py-2.5 text-sm",
+                        isAssistant
+                          ? "bg-muted rounded-tl-sm"
+                          : "bg-primary text-primary-foreground rounded-tr-sm whitespace-pre-wrap"
+                      )}
+                    >
+                      {isAssistant ? (
+                        isPending ? (
+                          <span
+                            className="flex items-center gap-1 py-1"
+                            aria-label="Assistant is typing"
+                          >
+                            <span className="bg-foreground/40 size-1.5 animate-bounce rounded-full [animation-delay:0ms]" />
+                            <span className="bg-foreground/40 size-1.5 animate-bounce rounded-full [animation-delay:150ms]" />
+                            <span className="bg-foreground/40 size-1.5 animate-bounce rounded-full [animation-delay:300ms]" />
+                          </span>
+                        ) : (
+                          <Markdown content={message.content} />
+                        )
+                      ) : (
+                        message.content
+                      )}
+                    </div>
+                    {showActions && (
+                      <div className="text-muted-foreground flex items-center gap-1 pl-1">
+                        {message.createdAt && (
+                          <time
+                            className="text-xs tabular-nums"
+                            dateTime={message.createdAt}
+                            suppressHydrationWarning
+                          >
+                            {TIME_FORMAT.format(new Date(message.createdAt))}
+                          </time>
+                        )}
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="text-muted-foreground size-6"
+                          onClick={() => copyMessage(message)}
+                        >
+                          {copiedId === message.id ? (
+                            <CheckIcon className="size-3.5" />
+                          ) : (
+                            <CopyIcon className="size-3.5" />
+                          )}
+                          <span className="sr-only">Copy answer</span>
+                        </Button>
+                        {isLast && !failedTurn && lastPrompt && (
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="text-muted-foreground size-6"
+                            disabled={quotaExhausted}
+                            onClick={() => resend(lastPrompt)}
+                          >
+                            <RefreshCwIcon className="size-3.5" />
+                            <span className="sr-only">Regenerate answer</span>
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+
+          {failedTurn && (
+            <div className="border-destructive/40 bg-destructive/5 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2.5">
+              <p className="text-destructive flex items-center gap-2 text-sm">
+                <TriangleAlertIcon className="size-4 shrink-0" />
+                {failedTurn.message}
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={isStreaming || quotaExhausted}
+                onClick={() => resend(failedTurn.prompt)}
               >
-                {message.role === "USER" ? (
-                  <UserIcon className="size-4" />
-                ) : (
-                  <BotIcon className="size-4" />
-                )}
-              </div>
-              <div
-                className={cn(
-                  "max-w-[85%] rounded-xl px-4 py-2.5 text-sm",
-                  message.role === "USER"
-                    ? "bg-primary text-primary-foreground rounded-tr-sm whitespace-pre-wrap"
-                    : "bg-muted rounded-tl-sm"
-                )}
-              >
-                {message.role === "ASSISTANT" ? (
-                  message.content === "" && showTypingDots ? (
-                    <span className="flex items-center gap-1 py-1" aria-label="Assistant is typing">
-                      <span className="bg-foreground/40 size-1.5 animate-bounce rounded-full [animation-delay:0ms]" />
-                      <span className="bg-foreground/40 size-1.5 animate-bounce rounded-full [animation-delay:150ms]" />
-                      <span className="bg-foreground/40 size-1.5 animate-bounce rounded-full [animation-delay:300ms]" />
-                    </span>
-                  ) : (
-                    <Markdown content={message.content} />
-                  )
-                ) : (
-                  message.content
-                )}
-              </div>
+                <RefreshCwIcon />
+                Retry
+              </Button>
             </div>
-          ))
+          )}
+        </div>
+
+        {!isEmpty && !isAtBottom && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={jumpToLatest}
+            className="bg-card absolute inset-x-0 bottom-3 mx-auto w-fit rounded-full shadow-md"
+          >
+            <ArrowDownIcon />
+            Jump to latest
+          </Button>
         )}
       </div>
 
@@ -320,6 +474,7 @@ export function CopilotChat({
         }}
       >
         <Textarea
+          ref={inputRef}
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={(event) => {
@@ -333,9 +488,13 @@ export function CopilotChat({
               ? "Monthly AI message limit reached"
               : "Ask about your cash, suppliers, forecasts…"
           }
-          className="max-h-32 min-h-10 resize-none"
+          className={cn("max-h-32 min-h-10 resize-none", isStreaming && "opacity-70")}
           rows={1}
-          disabled={isStreaming || quotaExhausted}
+          // Streaming keeps the caret here: a disabled textarea blurs and drops
+          // keyboard users back to the top of the page after every answer.
+          readOnly={isStreaming}
+          aria-busy={isStreaming}
+          disabled={quotaExhausted}
         />
         {isStreaming ? (
           <Button type="button" size="icon" variant="outline" onClick={stopStreaming}>

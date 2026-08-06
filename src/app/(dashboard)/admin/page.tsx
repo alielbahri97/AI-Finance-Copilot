@@ -11,6 +11,8 @@ import {
 import { EventsChart, SignupsChart } from "@/components/admin/admin-charts-lazy";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeading } from "@/components/ui/page-heading";
 import {
   Card,
   CardContent,
@@ -50,7 +52,7 @@ export default async function AdminPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Admin</h1>
+        <PageHeading>Admin</PageHeading>
         <p className="text-muted-foreground text-sm">
           Users, subscriptions and product analytics.
         </p>
@@ -117,7 +119,12 @@ export default async function AdminPage() {
         </CardHeader>
         <CardContent>
           {users.length === 0 ? (
-            <p className="text-muted-foreground py-4 text-center text-sm">No users yet.</p>
+            <EmptyState
+              className="py-8"
+              icon={UsersIcon}
+              title="No users yet"
+              description="Every account that signs up is listed here, newest first."
+            />
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -138,7 +145,7 @@ export default async function AdminPage() {
                           <span className="flex items-center gap-2 font-medium">
                             {user.fullName ?? user.email}
                             {user.isAdmin && (
-                              <Badge variant="outline" className="text-[10px]">
+                              <Badge variant="outline" className="text-2xs">
                                 Admin
                               </Badge>
                             )}

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { apiError } from "@/lib/api/response";
+import { getEntitlements, upgradeError } from "@/lib/billing/entitlements";
 import { ensureDefaultCategories } from "@/lib/categories";
 import { logger, serializeError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
@@ -10,9 +11,20 @@ import { recordAudit } from "@/lib/workspace/audit";
 import { requireWorkspace, WORKSPACE_COOKIE } from "@/lib/workspace/context";
 import { defaultWorkspaceName, WORKSPACE_TYPES } from "@/lib/workspace/editions";
 
-const renameSchema = z.object({
-  name: z.string().trim().min(1, "Name is required").max(80),
-});
+/**
+ * Workspace-level settings the owner/admin can change. Every field is
+ * optional and only what is sent is written, so the rename form and the AI
+ * toggle can each PATCH the one thing they own.
+ */
+const settingsSchema = z
+  .object({
+    name: z.string().trim().min(1, "Name is required").max(80).optional(),
+    aiCategorizationEnabled: z.boolean().optional(),
+    autoDunningEnabled: z.boolean().optional(),
+  })
+  .refine((value) => Object.values(value).some((field) => field !== undefined), {
+    message: "Nothing to update",
+  });
 
 const createSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
@@ -104,27 +116,47 @@ export async function POST(request: Request) {
   }
 }
 
-/** Renames the current workspace. */
+/** Updates the current workspace's name and/or its workspace-level settings. */
 export async function PATCH(request: Request) {
   const auth = await requireWorkspace("manage_settings");
   if (!auth.ok) return auth.response;
   const { user, workspace } = auth.ctx;
 
-  const parsed = renameSchema.safeParse(await request.json().catch(() => null));
+  const parsed = settingsSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
+  }
+
+  // Turning automatic reminders on is the one setting here that spends the
+  // product's reputation on the customer's behalf, so it carries the plan gate
+  // the send routes carry. Turning it off is always allowed.
+  if (parsed.data.autoDunningEnabled === true) {
+    const entitlements = await getEntitlements(workspace.id);
+    if (!entitlements.plan.limits.dunningEnabled) {
+      return NextResponse.json(
+        upgradeError("Automatic payment reminders", entitlements.planId, entitlements.edition),
+        { status: 402 }
+      );
+    }
   }
 
   const previous = workspace.name;
   const updated = await prisma.workspace.update({
     where: { id: workspace.id },
-    data: { name: parsed.data.name },
-    select: { id: true, name: true },
+    data: parsed.data,
+    select: { id: true, name: true, aiCategorizationEnabled: true, autoDunningEnabled: true },
   });
-  await recordAudit(workspace.id, user.id, "workspace.renamed", {
-    from: previous,
-    to: updated.name,
-  });
+  if (parsed.data.autoDunningEnabled !== undefined) {
+    await recordAudit(workspace.id, user.id, "workspace.auto_dunning_changed", {
+      enabled: parsed.data.autoDunningEnabled,
+    });
+  }
+  if (parsed.data.name !== undefined && updated.name !== previous) {
+    await recordAudit(workspace.id, user.id, "workspace.renamed", {
+      from: previous,
+      to: updated.name,
+    });
+  }
 
   return NextResponse.json({ workspace: updated });
 }

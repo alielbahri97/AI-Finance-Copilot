@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -151,13 +152,12 @@ export function RulesManager({ rules, categories }: RulesManagerProps) {
       </form>
 
       {rules.length === 0 ? (
-        <div className="text-muted-foreground flex flex-col items-center gap-2 py-8 text-center text-sm">
-          <WandSparklesIcon className="size-6 opacity-50" />
-          <p>
-            No rules yet. Rules categorize matching imports and new transactions. Changing a
-            category on a transaction also creates a rule for that merchant.
-          </p>
-        </div>
+        <EmptyState
+          className="py-8"
+          icon={WandSparklesIcon}
+          title="No rules yet"
+          description="A rule categorises every matching import and new transaction. Changing a category on a transaction writes one for that merchant automatically, so this list fills itself in as you work."
+        />
       ) : (
         <div className="flex flex-col gap-1">
           {rules.map((rule) => (
@@ -169,10 +169,14 @@ export function RulesManager({ rules, categories }: RulesManagerProps) {
                 {rule.pattern}
               </code>
               <span className="text-muted-foreground text-xs">→</span>
-              <Badge
-                variant="secondary"
-                style={{ backgroundColor: `${rule.categoryColor}22`, color: rule.categoryColor }}
-              >
+              <Badge variant="secondary" className="gap-1.5">
+                {/* A DB-supplied hex is only safe as a swatch, not as a text
+                    colour — amber categories landed near 2:1 as a label. */}
+                <span
+                  aria-hidden
+                  className="size-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: rule.categoryColor }}
+                />
                 {rule.categoryName}
               </Badge>
               <div className="flex-1" />

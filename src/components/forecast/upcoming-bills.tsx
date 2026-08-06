@@ -1,8 +1,11 @@
+import Link from "next/link";
 import { CalendarClockIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import type { UpcomingBill } from "@/lib/finance/forecast";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, localeForCurrency } from "@/lib/utils";
 
 interface UpcomingBillsProps {
   bills: UpcomingBill[];
@@ -10,12 +13,21 @@ interface UpcomingBillsProps {
 }
 
 export function UpcomingBills({ bills, currency }: UpcomingBillsProps) {
+  const locale = localeForCurrency(currency);
+
   if (bills.length === 0) {
     return (
-      <div className="text-muted-foreground flex flex-col items-center gap-2 py-8 text-center text-sm">
-        <CalendarClockIcon className="size-6 opacity-50" />
-        <p>No recurring bills detected yet. Import more history to find patterns.</p>
-      </div>
+      <EmptyState
+        className="py-8"
+        icon={CalendarClockIcon}
+        title="No recurring bills detected yet"
+        description="Bills are found by spotting the same payment repeating. A few more months of history is usually enough."
+        action={
+          <Button size="sm" variant="outline" asChild>
+            <Link href="/import">Import a statement</Link>
+          </Button>
+        }
+      />
     );
   }
 
@@ -27,15 +39,15 @@ export function UpcomingBills({ bills, currency }: UpcomingBillsProps) {
           className="hover:bg-muted/50 flex items-center gap-3 rounded-lg px-2 py-2 transition-colors"
         >
           <div className="bg-accent text-accent-foreground flex size-9 shrink-0 flex-col items-center justify-center rounded-lg leading-none">
-            <span className="text-[10px] uppercase">
-              {new Date(bill.dueDate).toLocaleDateString("en-US", { month: "short" })}
+            <span className="text-2xs uppercase">
+              {new Date(bill.dueDate).toLocaleDateString(locale, { month: "short" })}
             </span>
             <span className="text-sm font-semibold">{new Date(bill.dueDate).getUTCDate()}</span>
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{bill.label}</p>
             <p className="text-muted-foreground text-xs">
-              {formatDate(bill.dueDate)} · {bill.cadence}
+              {formatDate(bill.dueDate, locale)} · {bill.cadence}
             </p>
           </div>
           {bill.source === "assumption" && (
@@ -44,7 +56,7 @@ export function UpcomingBills({ bills, currency }: UpcomingBillsProps) {
             </Badge>
           )}
           <span className="text-sm font-semibold tabular-nums">
-            {formatCurrency(bill.amount, currency)}
+            {formatCurrency(bill.amount, currency, locale)}
           </span>
         </div>
       ))}

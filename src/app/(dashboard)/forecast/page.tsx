@@ -32,10 +32,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { PageHeading } from "@/components/ui/page-heading";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { buildForecast } from "@/lib/finance/data";
 import { prisma } from "@/lib/prisma";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, localeForCurrency } from "@/lib/utils";
 import { getWorkspaceContext, type WorkspaceContext } from "@/lib/workspace/context";
 
 export const metadata: Metadata = { title: "Forecast" };
@@ -63,7 +64,7 @@ export default async function ForecastPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Cash flow forecast</h1>
+        <PageHeading>Cash flow forecast</PageHeading>
         <p className="text-muted-foreground text-sm">
           Deterministic projection from your recurring patterns, spending trend and assumptions.
         </p>
@@ -115,6 +116,8 @@ async function ForecastContent({ ctx }: { ctx: WorkspaceContext }) {
   const { metrics } = forecast;
   const runway = runwayDisplay(metrics.runwayMonths);
   const isBurning = metrics.netBurnRate > 0;
+  const currency = ctx.workspace.currency;
+  const money = (value: number) => formatCurrency(value, currency, localeForCurrency(currency));
 
   return (
     <>
@@ -128,21 +131,21 @@ async function ForecastContent({ ctx }: { ctx: WorkspaceContext }) {
         />
         <StatCard
           title={isBurning ? "Net burn rate" : "Net cash added"}
-          value={`${formatCurrency(Math.abs(metrics.netBurnRate), ctx.workspace.currency)}/mo`}
-          hint={`Gross expenses ${formatCurrency(metrics.grossBurnRate, ctx.workspace.currency)}/mo (3-month avg)`}
+          value={`${money(Math.abs(metrics.netBurnRate))}/mo`}
+          hint={`Gross expenses ${money(metrics.grossBurnRate)}/mo (3-month avg)`}
           icon={FlameIcon}
           tone={isBurning ? "negative" : "positive"}
         />
         <StatCard
           title="Recurring expenses"
-          value={`${formatCurrency(metrics.recurringMonthlyExpenses, ctx.workspace.currency)}/mo`}
-          hint={`Recurring income ${formatCurrency(metrics.recurringMonthlyIncome, ctx.workspace.currency)}/mo`}
+          value={`${money(metrics.recurringMonthlyExpenses)}/mo`}
+          hint={`Recurring income ${money(metrics.recurringMonthlyIncome)}/mo`}
           icon={RepeatIcon}
         />
         <StatCard
           title="Balance in 30 days"
-          value={formatCurrency(metrics.projectedBalance30d, ctx.workspace.currency)}
-          hint={`90 days: ${formatCurrency(metrics.projectedBalance90d, ctx.workspace.currency)} · 12 months: ${formatCurrency(metrics.projectedBalance12m, ctx.workspace.currency)}`}
+          value={money(metrics.projectedBalance30d)}
+          hint={`90 days: ${money(metrics.projectedBalance90d)} · 12 months: ${money(metrics.projectedBalance12m)}`}
           icon={WalletIcon}
           tone={metrics.projectedBalance30d >= 0 ? "default" : "negative"}
         />
@@ -216,7 +219,7 @@ async function ForecastContent({ ctx }: { ctx: WorkspaceContext }) {
           <CardHeader>
             <CardTitle>Recurring expenses</CardTitle>
             <CardDescription>
-              Detected from your history · {formatCurrency(metrics.recurringMonthlyExpenses, ctx.workspace.currency)}
+              Detected from your history · {money(metrics.recurringMonthlyExpenses)}
               /month total
             </CardDescription>
           </CardHeader>
@@ -224,7 +227,7 @@ async function ForecastContent({ ctx }: { ctx: WorkspaceContext }) {
             <RecurringTable
               items={forecast.recurringExpenses}
               currency={ctx.workspace.currency}
-              emptyMessage="No recurring expenses detected yet."
+              emptyTitle="No recurring expenses detected yet"
             />
           </CardContent>
         </Card>
@@ -232,7 +235,7 @@ async function ForecastContent({ ctx }: { ctx: WorkspaceContext }) {
           <CardHeader>
             <CardTitle>Recurring income</CardTitle>
             <CardDescription>
-              Detected from your history · {formatCurrency(metrics.recurringMonthlyIncome, ctx.workspace.currency)}
+              Detected from your history · {money(metrics.recurringMonthlyIncome)}
               /month total
             </CardDescription>
           </CardHeader>
@@ -240,7 +243,7 @@ async function ForecastContent({ ctx }: { ctx: WorkspaceContext }) {
             <RecurringTable
               items={forecast.recurringIncome}
               currency={ctx.workspace.currency}
-              emptyMessage="No recurring income detected yet."
+              emptyTitle="No recurring income detected yet"
             />
           </CardContent>
         </Card>

@@ -13,10 +13,18 @@ const badgeVariants = cva(
         secondary:
           "border-transparent bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90",
         destructive:
-          "border-transparent bg-destructive text-white [a&]:hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40",
+          "border-transparent bg-destructive-solid text-white [a&]:hover:bg-destructive-solid/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40",
         outline: "text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
-        success:
-          "border-transparent bg-success/15 text-success [a&]:hover:bg-success/25 dark:bg-success/20",
+        // The wash stays at 10% in dark mode too. At 20% it lifted the chip
+        // close enough to the light text sitting on it to drop both badges
+        // under 3.6:1, which is the opposite of what a stronger tint was for.
+        // The `-tinted` foregrounds are the same hues darkened enough to
+        // survive being printed on a wash of themselves; the wash itself is
+        // still built from the base token, so solid usages are unaffected.
+        // Hover deepens to 15% rather than 20%: at 20% the light-mode wash
+        // took the link variants back under AA.
+        success: "border-transparent bg-success/10 text-success-tinted [a&]:hover:bg-success/15",
+        warning: "border-transparent bg-warning/10 text-warning-tinted [a&]:hover:bg-warning/15",
       },
     },
     defaultVariants: {

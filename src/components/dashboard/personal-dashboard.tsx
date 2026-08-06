@@ -16,9 +16,10 @@ import {
   StatRowSkeleton,
   TableCardSkeleton,
 } from "@/components/dashboard/section-skeletons";
-import { StatCard } from "@/components/dashboard/stat-card";
+import { StatCard, StatRow } from "@/components/dashboard/stat-card";
 import { UpcomingBills } from "@/components/forecast/upcoming-bills";
 import { GoalsWidget } from "@/components/goals/goals-widget";
+import { NetWorthDashboardCard } from "@/components/net-worth/net-worth-dashboard-card";
 import { SubscriptionsWidget } from "@/components/subscriptions/subscriptions-widget";
 import {
   Card,
@@ -34,7 +35,7 @@ import { getBudgetOverview } from "@/lib/personal/budgets-data";
 import { periodOf } from "@/lib/personal/budgets";
 import { getGoalsOverview } from "@/lib/personal/goals-data";
 import { getSubscriptionsOverview } from "@/lib/personal/subscriptions-data";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, localeForCurrency } from "@/lib/utils";
 
 /**
  * The Personal edition's dashboard: what a person actually wants to know on a
@@ -65,7 +66,7 @@ export function PersonalDashboard({
   return (
     <>
       {canViewTransactions && (
-        <Suspense fallback={<StatRowSkeleton />}>
+        <Suspense fallback={<StatRowSkeleton hero />}>
           <PersonalStats workspaceId={workspaceId} currency={currency} />
         </Suspense>
       )}
@@ -85,20 +86,30 @@ export function PersonalDashboard({
         </div>
       )}
 
-      {canViewTransactions && (limits.goalsEnabled || limits.subscriptionInsightsEnabled) && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {limits.goalsEnabled && (
-            <Suspense fallback={<TableCardSkeleton rows={4} />}>
-              <GoalsSection workspaceId={workspaceId} currency={currency} />
-            </Suspense>
-          )}
-          {limits.subscriptionInsightsEnabled && (
-            <Suspense fallback={<TableCardSkeleton rows={4} />}>
-              <SubscriptionsSection workspaceId={workspaceId} currency={currency} />
-            </Suspense>
-          )}
-        </div>
-      )}
+      {canViewTransactions &&
+        (limits.goalsEnabled ||
+          limits.subscriptionInsightsEnabled ||
+          limits.netWorthEnabled) && (
+          <div className="grid gap-4 lg:grid-cols-2">
+            {limits.goalsEnabled && (
+              <Suspense fallback={<TableCardSkeleton rows={4} />}>
+                <GoalsSection workspaceId={workspaceId} currency={currency} />
+              </Suspense>
+            )}
+            {limits.subscriptionInsightsEnabled && (
+              <Suspense fallback={<TableCardSkeleton rows={4} />}>
+                <SubscriptionsSection workspaceId={workspaceId} currency={currency} />
+              </Suspense>
+            )}
+            {/* Renders nothing until a holding exists: with none, net worth is
+                the cash figure the stat row already shows. */}
+            {limits.netWorthEnabled && (
+              <Suspense fallback={<TableCardSkeleton rows={3} />}>
+                <NetWorthDashboardCard workspaceId={workspaceId} currency={currency} />
+              </Suspense>
+            )}
+          </div>
+        )}
 
       {canViewReports && (
         <Suspense
@@ -135,12 +146,28 @@ async function PersonalStats({
   ]);
   const summary = budgets.summary;
   const hasBudgets = summary.budgets.length > 0;
+  const money = (value: number) => formatCurrency(value, currency, localeForCurrency(currency));
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <StatRow>
+      {/* "Left to spend" is the question a person opens this page with, so it
+          leads the row. Without any budget there is no such number, and total
+          cash becomes the headline instead. */}
+      {hasBudgets ? (
+        <StatCard
+          title={summary.totalRemaining < 0 ? "Over budget" : "Left to spend"}
+          value={money(Math.abs(summary.totalRemaining))}
+          hint={`of ${money(summary.totalAvailable)} budgeted this month`}
+          icon={WalletIcon}
+          tone={summary.totalRemaining < 0 ? "negative" : "default"}
+          emphasis="hero"
+        />
+      ) : (
+        <CashCard cash={data.cash} emphasis="hero" />
+      )}
       <StatCard
         title="Money in this month"
-        value={formatCurrency(data.monthIncome, currency)}
+        value={money(data.monthIncome)}
         hint="vs. previous month"
         icon={TrendingUpIcon}
         changePct={data.incomeChangePct}
@@ -148,21 +175,14 @@ async function PersonalStats({
       />
       <StatCard
         title="Money out this month"
-        value={formatCurrency(data.monthExpenses, currency)}
+        value={money(data.monthExpenses)}
         hint="vs. previous month"
         icon={TrendingDownIcon}
         changePct={data.expensesChangePct}
         increaseIsGood={false}
       />
-      <CashCard cash={data.cash} />
       {hasBudgets ? (
-        <StatCard
-          title={summary.totalRemaining < 0 ? "Over budget" : "Left to spend"}
-          value={formatCurrency(Math.abs(summary.totalRemaining), currency)}
-          hint={`of ${formatCurrency(summary.totalAvailable, currency)} budgeted this month`}
-          icon={WalletIcon}
-          tone={summary.totalRemaining < 0 ? "negative" : "default"}
-        />
+        <CashCard cash={data.cash} />
       ) : (
         <StatCard
           title="Kept this month"
@@ -171,7 +191,7 @@ async function PersonalStats({
           icon={PiggyBankIcon}
         />
       )}
-    </div>
+    </StatRow>
   );
 }
 
@@ -210,7 +230,7 @@ async function BillsSection({
           <CardDescription>
             {bills.length === 0
               ? "Next 45 days"
-              : `${formatCurrency(total, currency)} due in the next 45 days`}
+              : `${formatCurrency(total, currency, localeForCurrency(currency))} due in the next 45 days`}
           </CardDescription>
         </div>
         <CalendarClockIcon className="text-muted-foreground size-4" />

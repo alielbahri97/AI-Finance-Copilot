@@ -1,5 +1,6 @@
 "use client";
 
+import { ActivityIcon } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -10,6 +11,7 @@ import {
   YAxis,
 } from "recharts";
 
+import { EmptyState } from "@/components/ui/empty-state";
 import type { DayPoint, EventCount } from "@/lib/admin/stats";
 
 const tooltipStyle = {
@@ -59,9 +61,12 @@ export function SignupsChart({ data }: { data: DayPoint[] }) {
 export function EventsChart({ data }: { data: EventCount[] }) {
   if (data.length === 0) {
     return (
-      <div className="text-muted-foreground flex h-64 items-center justify-center text-sm">
-        No events recorded in the last 30 days
-      </div>
+      <EmptyState
+        className="h-64"
+        icon={ActivityIcon}
+        title="No events recorded in the last 30 days"
+        description="Analytics events are written as people use the app."
+      />
     );
   }
   return (
