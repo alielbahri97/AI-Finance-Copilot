@@ -7,6 +7,7 @@ import { AlertCircleIcon, Loader2Icon, MailCheckIcon } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
+import { PasswordInput } from "@/components/auth/password-input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -214,8 +215,7 @@ export function SignupForm() {
             <FormItem>
               <FormLabel>Password</FormLabel>
               <FormControl>
-                <Input
-                  type="password"
+                <PasswordInput
                   placeholder="••••••••"
                   autoComplete="new-password"
                   {...field}
@@ -232,8 +232,7 @@ export function SignupForm() {
             <FormItem>
               <FormLabel>Confirm password</FormLabel>
               <FormControl>
-                <Input
-                  type="password"
+                <PasswordInput
                   placeholder="••••••••"
                   autoComplete="new-password"
                   {...field}

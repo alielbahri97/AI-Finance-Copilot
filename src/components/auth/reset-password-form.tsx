@@ -7,6 +7,7 @@ import { AlertCircleIcon, Loader2Icon } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
+import { PasswordInput } from "@/components/auth/password-input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,7 +18,6 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 import { resetPasswordSchema, type ResetPasswordValues } from "@/lib/validations/auth";
 
@@ -69,8 +69,7 @@ export function ResetPasswordForm() {
             <FormItem>
               <FormLabel>New password</FormLabel>
               <FormControl>
-                <Input
-                  type="password"
+                <PasswordInput
                   placeholder="••••••••"
                   autoComplete="new-password"
                   {...field}
@@ -87,8 +86,7 @@ export function ResetPasswordForm() {
             <FormItem>
               <FormLabel>Confirm new password</FormLabel>
               <FormControl>
-                <Input
-                  type="password"
+                <PasswordInput
                   placeholder="••••••••"
                   autoComplete="new-password"
                   {...field}

@@ -8,8 +8,10 @@ import { AlertCircleIcon, Loader2Icon } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
+import { PasswordInput } from "@/components/auth/password-input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Form,
   FormControl,
@@ -19,8 +21,12 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import { loginSchema, type LoginValues } from "@/lib/validations/auth";
+
+const REMEMBER_EMAIL_FLAG_KEY = "ballast.rememberEmail";
+const LOGIN_EMAIL_KEY = "ballast.loginEmail";
 
 /**
  * Supabase reports a wrong password and an unconfirmed address with the same
@@ -38,17 +44,49 @@ function describeSignInError(message: string): string {
   return message;
 }
 
+function readStoredLoginEmail(): { remember: boolean; email: string } {
+  try {
+    const remember = window.localStorage.getItem(REMEMBER_EMAIL_FLAG_KEY) === "1";
+    const email = window.localStorage.getItem(LOGIN_EMAIL_KEY) ?? "";
+    return { remember, email: remember ? email : "" };
+  } catch {
+    return { remember: false, email: "" };
+  }
+}
+
+function persistLoginEmail(remember: boolean, email: string) {
+  try {
+    if (remember) {
+      window.localStorage.setItem(REMEMBER_EMAIL_FLAG_KEY, "1");
+      window.localStorage.setItem(LOGIN_EMAIL_KEY, email);
+    } else {
+      window.localStorage.removeItem(REMEMBER_EMAIL_FLAG_KEY);
+      window.localStorage.removeItem(LOGIN_EMAIL_KEY);
+    }
+  } catch {
+    // Private mode / blocked storage — ignore.
+  }
+}
+
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [rememberEmail, setRememberEmail] = useState(false);
   const errorRef = useRef<HTMLDivElement>(null);
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: "", password: "" },
   });
+
+  // Prefill from localStorage after mount (SSR-safe).
+  useEffect(() => {
+    const stored = readStoredLoginEmail();
+    setRememberEmail(stored.remember);
+    if (stored.email) form.setValue("email", stored.email);
+  }, [form]);
 
   // A toast disappears before a screen reader user reaches it and leaves the
   // form looking untouched. The alert stays, and focus lands on it.
@@ -70,6 +108,9 @@ export function LoginForm() {
         setFormError(describeSignInError(error.message));
         return;
       }
+
+      // Only persist email (never password) after a successful sign-in.
+      persistLoginEmail(rememberEmail, values.email);
 
       toast.success("Welcome back!");
       router.push(searchParams.get("next") ?? "/dashboard");
@@ -117,8 +158,7 @@ export function LoginForm() {
                 </Link>
               </div>
               <FormControl>
-                <Input
-                  type="password"
+                <PasswordInput
                   placeholder="••••••••"
                   autoComplete="current-password"
                   {...field}
@@ -128,6 +168,20 @@ export function LoginForm() {
             </FormItem>
           )}
         />
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="remember-email"
+            checked={rememberEmail}
+            onCheckedChange={(checked) => {
+              const next = checked === true;
+              setRememberEmail(next);
+              if (!next) persistLoginEmail(false, "");
+            }}
+          />
+          <Label htmlFor="remember-email" className="font-normal">
+            Remember email
+          </Label>
+        </div>
         {formError ? (
           <Alert variant="destructive" ref={errorRef} tabIndex={-1} className="outline-none">
             <AlertCircleIcon />
