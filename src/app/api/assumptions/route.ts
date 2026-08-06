@@ -49,9 +49,10 @@ export async function POST(request: Request) {
     // Plan gating: what-if assumptions are a paid feature.
     const entitlements = await getEntitlements(workspace.id);
     if (!entitlements.plan.limits.assumptionsEnabled) {
-      return NextResponse.json(upgradeError("Forecast assumptions", entitlements.planId), {
-        status: 402,
-      });
+      return NextResponse.json(
+        upgradeError("Forecast assumptions", entitlements.planId, entitlements.edition),
+        { status: 402 }
+      );
     }
 
     const assumption = await prisma.assumption.create({

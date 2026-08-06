@@ -35,6 +35,10 @@ export const SCHEMA_CHECKS: SchemaCheck[] = [
     columns: ["external_id", "display_name"],
     migration: "0016_multi_bank_connections",
   },
+  { table: "savings_goals", columns: [], migration: "0017_workspace_editions" },
+  { table: "savings_contributions", columns: [], migration: "0017_workspace_editions" },
+  { table: "workspaces", columns: ["type"], migration: "0017_workspace_editions" },
+  { table: "budgets", columns: ["category_id", "rollover"], migration: "0017_workspace_editions" },
 ];
 
 export interface SchemaDrift {
