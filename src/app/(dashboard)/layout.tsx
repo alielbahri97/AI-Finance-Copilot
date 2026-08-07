@@ -1,17 +1,18 @@
 import type { Metadata } from "next";
 import { redirect, unstable_rethrow } from "next/navigation";
 
-import { PasskeySetupPrompt } from "@/components/auth/passkey-setup-prompt";
 import { DatabaseUnavailable } from "@/components/dashboard/database-unavailable";
 import { Header } from "@/components/dashboard/header";
 import { MobileTabBar } from "@/components/dashboard/mobile-nav";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { HelpLauncher } from "@/components/help/help-launcher";
+import { FirstRunPrompts } from "@/components/tour/first-run-prompts";
 import { getOrCreateProfile } from "@/lib/data";
 import { classifyDatabaseFailure, describeDatabaseError } from "@/lib/db-errors";
 import { logger } from "@/lib/logger";
 import { isOnboardingDone } from "@/lib/onboarding/benchmarks";
 import { isPersonalOnboardingDone } from "@/lib/onboarding/personal";
+import { isProductTourDone } from "@/lib/tour/steps";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 import { localeForCurrency } from "@/lib/utils";
@@ -81,7 +82,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </div>
         <MobileTabBar isAdmin={profile.isAdmin} workspaceType={ctx.workspace.type} />
         <HelpLauncher edition={editionForWorkspaceType(ctx.workspace.type)} />
-        <PasskeySetupPrompt />
+        <FirstRunPrompts
+          tourCompleted={isProductTourDone(profile)}
+          edition={editionForWorkspaceType(ctx.workspace.type)}
+        />
       </div>
     );
   } catch (error) {

@@ -163,6 +163,7 @@ describe("schema expectations", () => {
     expect(migrations).toContain("0018_ai_categorization");
     expect(migrations).toContain("0019_customer_dunning");
     expect(migrations).toContain("0020_net_worth");
+    expect(migrations).toContain("0023_product_tour");
   });
 
   it("names real migrations, and every one from the oldest it names onwards", () => {

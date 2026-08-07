@@ -329,7 +329,7 @@ const SHARED_AND_BUSINESS_TOPICS = (edition: Edition): EditionTopic[] => [
 
 1. A default set of income and expense categories is created for you; add your own with the new-category button.
 2. Create **auto-categorization rules** that match text in a transaction's description or counterparty (e.g. "spotify" → Subscriptions). Rules apply to future CSV imports and bank syncs automatically.
-3. To recategorize existing transactions, use the [Transactions](/transactions) page: change the category inline on a row, or select multiple rows and set the category in bulk.`,
+3. To recategorize existing transactions, use the [Transactions](/transactions) page: change the category inline on a row, or select multiple rows and set the category in bulk. For a focused pass, open [Categorize](/transactions/categorize) — it walks uncategorized transactions largest-first with big category buttons.`,
   },
   {
     id: "transactions",

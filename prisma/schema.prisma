@@ -309,6 +309,9 @@ model Profile {
   referralCode String? @unique @map("referral_code")
   /// The user who referred this account, captured from /signup?ref=CODE.
   referredById String? @map("referred_by_id") @db.Uuid
+  /// When the first-login product tour was completed or skipped. Null means
+  /// the guided tour should still run after onboarding.
+  tourCompletedAt DateTime? @map("tour_completed_at")
   createdAt  DateTime   @default(now()) @map("created_at")
   updatedAt  DateTime   @updatedAt @map("updated_at")
 

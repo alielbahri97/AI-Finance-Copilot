@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { UploadIcon } from "lucide-react";
+import { TagsIcon, UploadIcon } from "lucide-react";
 
 import { TableCardSkeleton } from "@/components/dashboard/section-skeletons";
 import { TransactionDialog } from "@/components/transactions/transaction-dialog";
@@ -14,6 +14,7 @@ import {
   DEFAULT_SORT,
   DEFAULT_SORT_DIRECTION,
   PAGE_SIZE_OPTIONS,
+  SORT_DEFAULT_DIRECTION,
   type BatchOption,
   type CategoryOption,
   type SortDirection,
@@ -113,10 +114,18 @@ export default async function TransactionsPage({
         <div className="min-w-0 space-y-1">
           <PageHeading>Transactions</PageHeading>
           <p className="text-muted-foreground text-sm">
-            Your income and expenses, ready to search and sort.
+            Search and sort everything — or categorize the biggest ones first.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {canEdit && (
+            <Button className="rounded-xl" asChild>
+              <Link href="/transactions/categorize">
+                <TagsIcon />
+                Categorize
+              </Link>
+            </Button>
+          )}
           {canEdit && <TransactionDialog categories={categoryOptions} />}
           {canEdit && (
             <Button variant="ghost" size="sm" className="text-muted-foreground" asChild>
@@ -156,8 +165,17 @@ async function TransactionsContent({
   const max = parseAmountParam(first(params, "max"));
   const requestedPage = Math.max(1, Number(first(params, "page") ?? "1") || 1);
   const pageSize = parsePageSize(first(params, "size"));
-  const sort = parseSort(first(params, "sort"));
-  const direction = parseDirection(first(params, "dir"));
+  const sortParam = first(params, "sort");
+  const dirParam = first(params, "dir");
+  // Uncategorized list leads with the biggest amounts unless the user chose a sort.
+  const sort: TransactionSortKey = sortParam
+    ? parseSort(sortParam)
+    : category === "uncategorized"
+      ? "amount"
+      : DEFAULT_SORT;
+  const direction: SortDirection = dirParam
+    ? parseDirection(dirParam)
+    : SORT_DEFAULT_DIRECTION[sort];
 
   const where: Prisma.TransactionWhereInput = { workspaceId: ctx.workspace.id };
   if (q) {

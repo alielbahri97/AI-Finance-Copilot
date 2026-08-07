@@ -63,6 +63,11 @@ export const SCHEMA_CHECKS: SchemaCheck[] = [
   { table: "scenarios", columns: [], migration: "0021_forecast_scenarios" },
   { table: "assumptions", columns: ["scenario_id"], migration: "0021_forecast_scenarios" },
   { table: "personal_profiles", columns: [], migration: "0022_personal_profile" },
+  {
+    table: "profiles",
+    columns: ["tour_completed_at"],
+    migration: "0023_product_tour",
+  },
 ];
 
 export interface SchemaDrift {
