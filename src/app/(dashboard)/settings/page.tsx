@@ -310,7 +310,7 @@ export default async function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card id="security">
         <CardHeader>
           <CardTitle>Security</CardTitle>
           <CardDescription>

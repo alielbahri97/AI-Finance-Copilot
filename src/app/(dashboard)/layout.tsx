@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect, unstable_rethrow } from "next/navigation";
 
+import { PasskeySetupPrompt } from "@/components/auth/passkey-setup-prompt";
 import { DatabaseUnavailable } from "@/components/dashboard/database-unavailable";
 import { Header } from "@/components/dashboard/header";
 import { MobileTabBar } from "@/components/dashboard/mobile-nav";
@@ -80,6 +81,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </div>
         <MobileTabBar isAdmin={profile.isAdmin} workspaceType={ctx.workspace.type} />
         <HelpLauncher edition={editionForWorkspaceType(ctx.workspace.type)} />
+        <PasskeySetupPrompt />
       </div>
     );
   } catch (error) {
