@@ -11,7 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { PageHeading } from "@/components/ui/page-heading";
+import { PageHeader } from "@/components/ui/page-heading";
 import { prisma } from "@/lib/prisma";
 import { getWorkspaceContext } from "@/lib/workspace/context";
 
@@ -39,12 +39,10 @@ export default async function ImportPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="space-y-1">
-        <PageHeading>Import bank statement</PageHeading>
-        <p className="text-muted-foreground text-sm">
-          Upload a statement. Duplicates are skipped, and every import can be undone.
-        </p>
-      </div>
+      <PageHeader
+        title="Import"
+        description="Upload a statement. Duplicates are skipped, and every import can be undone."
+      />
 
       <ImportWizard currency={ctx.workspace.currency} />
 

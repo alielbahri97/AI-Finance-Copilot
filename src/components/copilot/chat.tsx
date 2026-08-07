@@ -249,13 +249,13 @@ export function CopilotChat({
   const lastPrompt = [...messages].reverse().find((message) => message.role === "USER")?.content;
 
   return (
-    <div className="bg-card flex h-full min-h-0 flex-col rounded-xl border border-border/60 shadow-xs">
-      <div className="flex items-center justify-between border-b px-4 py-3">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <div className="bg-primary text-primary-foreground flex size-7 items-center justify-center rounded-lg">
+    <div className="bg-card flex h-full min-h-0 flex-col rounded-2xl border border-border/60 shadow-xs">
+      <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
+        <div className="flex items-center gap-2.5 text-sm font-medium">
+          <div className="bg-primary/10 text-primary flex size-8 items-center justify-center rounded-xl">
             <BotIcon className="size-4" />
           </div>
-          Finance Copilot
+          Copilot
         </div>
         {onOpenHistory && (
           <Button
@@ -281,15 +281,14 @@ export function CopilotChat({
           className="flex-1 space-y-4 overflow-y-auto p-4"
         >
           {isEmpty ? (
-            <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
-              <div className="bg-accent text-accent-foreground flex size-12 items-center justify-center rounded-full">
-                <BotIcon className="size-6" />
+            <div className="flex h-full flex-col items-center justify-center gap-5 px-2 text-center">
+              <div className="bg-primary/10 text-primary flex size-14 items-center justify-center rounded-2xl">
+                <BotIcon className="size-7" />
               </div>
-              <div>
-                <p className="font-medium">Ask me anything about your finances</p>
-                <p className="text-muted-foreground mx-auto max-w-sm text-sm">
-                  I can see your transactions, categories, balances, trends and forecasts — and
-                  I answer with your real numbers.
+              <div className="space-y-1.5">
+                <p className="text-base font-semibold tracking-tight">Ask about your money</p>
+                <p className="text-muted-foreground mx-auto max-w-sm text-sm leading-relaxed">
+                  Balances, spending, trends and forecasts — answered with your real numbers.
                 </p>
               </div>
               <div className="flex max-w-xl flex-wrap justify-center gap-2">
@@ -298,7 +297,7 @@ export function CopilotChat({
                     key={suggestion}
                     type="button"
                     onClick={() => sendMessage(suggestion)}
-                    className="bg-muted hover:bg-accent hover:text-accent-foreground cursor-pointer rounded-full px-3 py-1.5 text-xs transition-colors"
+                    className="bg-muted hover:bg-accent hover:text-accent-foreground cursor-pointer rounded-full px-3.5 py-2 text-xs transition-colors duration-150"
                   >
                     {suggestion}
                   </button>

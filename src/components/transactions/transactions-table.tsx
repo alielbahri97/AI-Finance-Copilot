@@ -25,6 +25,7 @@ import {
   useTableSearchParams,
 } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
+import { MoneyText } from "@/components/ui/money-text";
 import {
   Select,
   SelectContent,
@@ -332,8 +333,16 @@ export function TransactionsTable({
     );
   }
 
-  const amountClass = (type: TransactionRow["type"]) =>
-    cn("font-semibold tabular-nums", type === "INCOME" ? "text-success" : "text-foreground");
+  const amountNode = (tx: TransactionRow, size: "sm" | "md" = "sm") => (
+    <MoneyText
+      amount={tx.amount}
+      currency={currency}
+      locale={locale}
+      signed={tx.type === "INCOME" ? "income" : "expense"}
+      size={size}
+      tone={tx.type === "INCOME" ? "success" : "default"}
+    />
+  );
 
   const deleteDialog = (tx: TransactionRow) => (
     <ConfirmDialog
@@ -360,26 +369,35 @@ export function TransactionsTable({
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-border/60 px-4 py-3 shadow-xs">
           <p className="text-muted-foreground text-xs font-medium">Income</p>
-          <p className="text-success mt-1 text-xl font-semibold tracking-tight tabular-nums sm:text-2xl">
-            {formatCurrency(totals.income, currency, locale)}
-          </p>
+          <MoneyText
+            amount={totals.income}
+            currency={currency}
+            locale={locale}
+            size="lg"
+            tone="success"
+            className="mt-1 block"
+          />
         </div>
         <div className="rounded-xl border border-border/60 px-4 py-3 shadow-xs">
           <p className="text-muted-foreground text-xs font-medium">Expenses</p>
-          <p className="mt-1 text-xl font-semibold tracking-tight tabular-nums sm:text-2xl">
-            {formatCurrency(totals.expenses, currency, locale)}
-          </p>
+          <MoneyText
+            amount={totals.expenses}
+            currency={currency}
+            locale={locale}
+            size="lg"
+            className="mt-1 block"
+          />
         </div>
         <div className="rounded-xl border border-border/60 px-4 py-3 shadow-xs">
           <p className="text-muted-foreground text-xs font-medium">Net</p>
-          <p
-            className={cn(
-              "mt-1 text-xl font-semibold tracking-tight tabular-nums sm:text-2xl",
-              totals.net < 0 ? "text-destructive" : "text-success"
-            )}
-          >
-            {formatCurrency(totals.net, currency, locale)}
-          </p>
+          <MoneyText
+            amount={totals.net}
+            currency={currency}
+            locale={locale}
+            size="lg"
+            tone={totals.net < 0 ? "destructive" : "success"}
+            className="mt-1 block"
+          />
         </div>
       </div>
 
@@ -469,14 +487,14 @@ export function TransactionsTable({
           <div
             key={tx.id}
             data-state={selected.has(tx.id) ? "selected" : undefined}
-            className="data-[state=selected]:bg-muted flex flex-col gap-2 rounded-xl border border-border/60 p-3"
+            className="data-[state=selected]:bg-muted flex flex-col gap-2.5 rounded-xl border border-border/60 p-3.5 shadow-xs"
           >
             <div className="flex items-start gap-2.5">
               <Checkbox
                 checked={selected.has(tx.id)}
                 onCheckedChange={() => toggleOne(tx.id)}
                 aria-label={`Select ${tx.description}`}
-                className="mt-0.5"
+                className="mt-1"
               />
               <div className="min-w-0 flex-1">
                 <p className="flex items-center gap-1.5 text-sm font-medium">
@@ -496,10 +514,7 @@ export function TransactionsTable({
                   {tx.counterparty ? ` · ${tx.counterparty}` : ""}
                 </p>
               </div>
-              <span className={cn(amountClass(tx.type), "text-sm")}>
-                {tx.type === "INCOME" ? "+" : "-"}
-                {formatCurrency(tx.amount, currency, locale)}
-              </span>
+              {amountNode(tx, "md")}
             </div>
             <div className="flex items-center gap-1">
               <div className="min-w-0 flex-1">
@@ -612,10 +627,7 @@ export function TransactionsTable({
                     ariaLabel={`Category for ${tx.description}`}
                   />
                 </TableCell>
-                <TableCell className={cn("text-right", amountClass(tx.type))}>
-                  {tx.type === "INCOME" ? "+" : "-"}
-                  {formatCurrency(tx.amount, currency, locale)}
-                </TableCell>
+                <TableCell className="text-right">{amountNode(tx, "md")}</TableCell>
                 <TableCell>{deleteDialog(tx)}</TableCell>
               </TableRow>
             ))}

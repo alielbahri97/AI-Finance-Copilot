@@ -69,7 +69,7 @@ function toCardData(detail: GoalDetail): GoalCardData {
   };
 }
 
-function PageHeader() {
+function GoalsPageHeader() {
   return (
     <div className="space-y-1">
       <PageHeading>Savings goals</PageHeading>
@@ -90,7 +90,7 @@ export default async function GoalsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader />
+      <GoalsPageHeader />
       <Suspense fallback={<GoalsBodySkeleton />}>
         <GoalsBody
           workspaceId={ctx.workspace.id}

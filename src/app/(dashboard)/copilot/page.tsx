@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import type { ChatMessageItem } from "@/components/copilot/chat";
 import type { ConversationItem } from "@/components/copilot/conversation-sidebar";
 import { CopilotShell } from "@/components/copilot/copilot-shell";
-import { PageHeading } from "@/components/ui/page-heading";
+import { PageHeader } from "@/components/ui/page-heading";
 import { buildFinancialSnapshot } from "@/lib/ai/context";
 import { buildSuggestedQuestions } from "@/lib/ai/suggestions";
 import { checkLimit, getEntitlements } from "@/lib/billing/entitlements";
@@ -71,12 +71,10 @@ export default async function CopilotPage({
 
   return (
     <div className="flex flex-1 flex-col gap-4">
-      <div>
-        <PageHeading>AI Copilot</PageHeading>
-        <p className="text-muted-foreground text-sm">
-          Ask about your money — grounded in your own data.
-        </p>
-      </div>
+      <PageHeader
+        title="Copilot"
+        description="Ask about your money — grounded in your own data."
+      />
       <CopilotShell
         conversations={conversationItems}
         activeId={activeId}

@@ -37,7 +37,7 @@ export function Sidebar({ isAdmin = false, workspaceType }: SidebarProps) {
         href={item.href}
         aria-current={isActive ? "page" : undefined}
         className={cn(
-          "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+          "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-[color,background-color,box-shadow] duration-150",
           isActive
             ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-xs"
             : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"

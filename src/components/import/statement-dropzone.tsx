@@ -54,10 +54,10 @@ export function StatementDropzone({ onFile, isLoading }: StatementDropzoneProps)
         handleFile(event.dataTransfer.files?.[0]);
       }}
       className={cn(
-        "flex w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border/60 px-6 py-16 text-center shadow-xs transition-colors",
+        "flex w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border/60 bg-card px-6 py-14 text-center shadow-xs transition-[border-color,background-color,box-shadow] duration-150",
         isDragging
-          ? "border-primary bg-accent/60"
-          : "hover:border-primary/50 hover:bg-accent/30",
+          ? "border-primary bg-primary/[0.04] shadow-sm"
+          : "hover:border-primary/45 hover:bg-muted/30",
         isLoading && "pointer-events-none opacity-60"
       )}
       aria-label="Upload a bank statement"
@@ -72,7 +72,7 @@ export function StatementDropzone({ onFile, isLoading }: StatementDropzoneProps)
           event.target.value = "";
         }}
       />
-      <div className="bg-accent text-accent-foreground flex size-14 items-center justify-center rounded-full">
+      <div className="bg-primary/10 text-primary flex size-14 items-center justify-center rounded-2xl">
         {isLoading ? (
           <Loader2Icon className="size-7 animate-spin" />
         ) : isDragging ? (
@@ -82,12 +82,12 @@ export function StatementDropzone({ onFile, isLoading }: StatementDropzoneProps)
         )}
       </div>
       <div>
-        <p className="font-medium">
-          {isLoading ? "Analyzing your file…" : "Drop your bank statement here"}
+        <p className="text-base font-semibold tracking-tight">
+          {isLoading ? "Analyzing your file…" : "Drop your statement here"}
         </p>
-        <p className="text-muted-foreground mt-1 text-sm">
-          or click to browse — {ACCEPTED_FORMATS_SENTENCE} exports up to {MAX_IMPORT_FILE_MB} MB.
-          Delimiters, encodings, number formats and dates are detected automatically.
+        <p className="text-muted-foreground mx-auto mt-1.5 max-w-md text-sm leading-relaxed">
+          or click to browse — {ACCEPTED_FORMATS_SENTENCE} up to {MAX_IMPORT_FILE_MB} MB.
+          Columns and formats are detected automatically.
         </p>
       </div>
     </button>

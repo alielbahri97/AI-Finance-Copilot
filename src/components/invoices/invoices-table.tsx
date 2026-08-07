@@ -25,6 +25,7 @@ import {
   useTableSearchParams,
 } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
+import { MoneyText } from "@/components/ui/money-text";
 import {
   Table,
   TableBody,
@@ -34,7 +35,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { InvoiceDto } from "@/lib/invoices/serialize";
-import { cn, formatCurrency, formatDate } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import {
   DEFAULT_PAGE_SIZE,
   DEFAULT_SORT,
@@ -122,6 +123,36 @@ export function InvoicesTable({
     }
   }
 
+  function statusAction(invoice: InvoiceDto) {
+    if (busyId === invoice.id) {
+      return <Loader2Icon className="text-muted-foreground size-4 animate-spin" />;
+    }
+    if (invoice.status === "PAID") {
+      return (
+        <Button
+          size="sm"
+          variant="ghost"
+          className="text-muted-foreground h-7"
+          onClick={() => setStatus(invoice, "UNPAID")}
+        >
+          <UndoIcon />
+          Unpaid
+        </Button>
+      );
+    }
+    return (
+      <Button
+        size="sm"
+        variant="ghost"
+        className="text-success h-7"
+        onClick={() => setStatus(invoice, "PAID")}
+      >
+        <CheckIcon />
+        Paid
+      </Button>
+    );
+  }
+
   if (invoices.length === 0) {
     return hasFilters ? (
       <EmptyState
@@ -146,7 +177,53 @@ export function InvoicesTable({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className={TABLE_SCROLL_AREA}>
+      <div className="flex flex-col gap-2 sm:hidden">
+        {invoices.map((invoice) => (
+          <div
+            key={invoice.id}
+            className="flex flex-col gap-2.5 rounded-xl border border-border/60 p-3.5 shadow-xs"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <Link
+                  href={`/invoices/${invoice.id}`}
+                  className="focus-visible:ring-ring block truncate text-sm font-medium focus-visible:ring-2 focus-visible:outline-none"
+                >
+                  {invoice.vendor || "Unknown vendor"}
+                </Link>
+                <p className="text-muted-foreground truncate text-xs">
+                  {invoice.dueDate
+                    ? `Due ${formatDate(invoice.dueDate, locale)}`
+                    : invoice.invoiceDate
+                      ? formatDate(invoice.invoiceDate, locale)
+                      : invoice.fileName}
+                </p>
+              </div>
+              <MoneyText
+                amount={invoice.total}
+                currency={invoice.currency}
+                locale={locale}
+                size="md"
+                className="shrink-0"
+              />
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <InvoiceStatusBadge status={invoice.derivedStatus} />
+                {invoice.transaction ? (
+                  <Link2Icon
+                    className="text-success size-3.5 shrink-0"
+                    aria-label="Linked to a transaction"
+                  />
+                ) : null}
+              </div>
+              <div onClick={(event) => event.stopPropagation()}>{statusAction(invoice)}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className={cn("hidden sm:block", TABLE_SCROLL_AREA)}>
         <Table>
           <TableHeader>
             <TableRow>
@@ -166,7 +243,7 @@ export function InvoicesTable({
                 sort={sort}
                 direction={direction}
                 onSort={applySort}
-                className="hidden sm:table-cell"
+                className="hidden lg:table-cell"
               />
               <SortHeader
                 column="due"
@@ -220,7 +297,7 @@ export function InvoicesTable({
                 <TableCell className="text-muted-foreground hidden md:table-cell">
                   {invoice.invoiceNumber ?? "—"}
                 </TableCell>
-                <TableCell className="text-muted-foreground hidden sm:table-cell">
+                <TableCell className="text-muted-foreground hidden lg:table-cell">
                   {invoice.invoiceDate ? formatDate(invoice.invoiceDate, locale) : "—"}
                 </TableCell>
                 <TableCell
@@ -232,8 +309,13 @@ export function InvoicesTable({
                 >
                   {invoice.dueDate ? formatDate(invoice.dueDate, locale) : "—"}
                 </TableCell>
-                <TableCell className="text-right font-semibold tabular-nums">
-                  {formatCurrency(invoice.total, invoice.currency, locale)}
+                <TableCell className="text-right">
+                  <MoneyText
+                    amount={invoice.total}
+                    currency={invoice.currency}
+                    locale={locale}
+                    size="md"
+                  />
                 </TableCell>
                 <TableCell>
                   <InvoiceStatusBadge status={invoice.derivedStatus} />
@@ -242,29 +324,7 @@ export function InvoicesTable({
                   className="relative z-10 text-right"
                   onClick={(event) => event.stopPropagation()}
                 >
-                  {busyId === invoice.id ? (
-                    <Loader2Icon className="text-muted-foreground ml-auto size-4 animate-spin" />
-                  ) : invoice.status === "PAID" ? (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-muted-foreground h-7"
-                      onClick={() => setStatus(invoice, "UNPAID")}
-                    >
-                      <UndoIcon />
-                      Unpaid
-                    </Button>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-success h-7"
-                      onClick={() => setStatus(invoice, "PAID")}
-                    >
-                      <CheckIcon />
-                      Paid
-                    </Button>
-                  )}
+                  {statusAction(invoice)}
                 </TableCell>
               </TableRow>
             ))}

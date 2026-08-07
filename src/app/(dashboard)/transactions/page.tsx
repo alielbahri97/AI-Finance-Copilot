@@ -23,7 +23,7 @@ import {
 } from "@/components/transactions/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { PageHeading } from "@/components/ui/page-heading";
+import { PageHeader } from "@/components/ui/page-heading";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { localeForCurrency } from "@/lib/utils";
@@ -110,34 +110,32 @@ export default async function TransactionsPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 space-y-1">
-          <PageHeading>Transactions</PageHeading>
-          <p className="text-muted-foreground text-sm">
-            Search and sort everything — or categorize the biggest ones first.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {canEdit && (
-            <Button className="rounded-xl" asChild>
-              <Link href="/transactions/categorize">
-                <TagsIcon />
-                Categorize
-              </Link>
-            </Button>
-          )}
-          {canEdit && <TransactionDialog categories={categoryOptions} />}
-          {canEdit && (
-            <Button variant="ghost" size="sm" className="text-muted-foreground" asChild>
-              <Link href="/import">
-                <UploadIcon />
-                Import
-              </Link>
-            </Button>
-          )}
-          {canExport && <TransactionsExportButton workspaceId={ctx.workspace.id} />}
-        </div>
-      </div>
+      <PageHeader
+        title="Transactions"
+        description="Search and sort everything — or categorize the biggest ones first."
+        actions={
+          <>
+            {canEdit && (
+              <Button asChild>
+                <Link href="/transactions/categorize">
+                  <TagsIcon />
+                  Categorize
+                </Link>
+              </Button>
+            )}
+            {canEdit && <TransactionDialog categories={categoryOptions} />}
+            {canEdit && (
+              <Button variant="ghost" size="sm" className="text-muted-foreground" asChild>
+                <Link href="/import">
+                  <UploadIcon />
+                  Import
+                </Link>
+              </Button>
+            )}
+            {canExport && <TransactionsExportButton workspaceId={ctx.workspace.id} />}
+          </>
+        }
+      />
 
       <Suspense fallback={<TableCardSkeleton />}>
         <TransactionsContent ctx={ctx} params={params} categories={categoryOptions} />

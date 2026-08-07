@@ -10,6 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import type { DashboardData } from "@/lib/data";
+import { cn } from "@/lib/utils";
 
 /**
  * True when the workspace has nothing for the dashboard to draw: no
@@ -29,26 +30,26 @@ const OPTIONS: Array<{
   icon: LucideIcon;
   title: string;
   description: string;
+  primary?: boolean;
 }> = [
   {
     href: "/integrations",
     icon: PlugIcon,
     title: "Connect a bank",
-    description:
-      "Log in at your bank to grant read-only access. Transactions and balances arrive on their own and keep updating.",
+    description: "Read-only access. Balances and transactions keep updating on their own.",
+    primary: true,
   },
   {
     href: "/import",
     icon: UploadIcon,
     title: "Upload a statement",
-    description:
-      "Export a CSV, Excel, PDF or MT940 statement from your bank and drop the file in. You map the columns once; duplicates are skipped.",
+    description: "Drop a CSV, Excel, PDF or MT940 export. Duplicates are skipped.",
   },
   {
     href: "/transactions",
     icon: PlusIcon,
     title: "Add one manually",
-    description: "Type in a single income or expense to see how it reads.",
+    description: "Type a single income or expense to see how it reads.",
   },
 ];
 
@@ -71,11 +72,11 @@ export function GettingStarted({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Nothing to show yet</CardTitle>
+        <CardTitle>Let&apos;s get your money in</CardTitle>
         <CardDescription>
           {edition === "personal"
-            ? "There are no transactions from the last six months, so once some are in, this page shows what you have, what came in and went out each month, and where the money goes."
-            : "There are no transactions from the last six months, so once some are in, this page shows your cash position, monthly income and expenses, and where the money goes by category."}
+            ? "Once a few transactions are here, this page shows what you have, what came in and went out, and where it goes."
+            : "Once a few transactions are here, this page shows cash position, monthly income and expenses, and where money goes by category."}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -85,13 +86,27 @@ export function GettingStarted({
               <Link
                 key={option.href}
                 href={option.href}
-                className="hover:border-primary/50 hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-ring/50 flex flex-col gap-2 rounded-lg border p-4 transition-colors outline-none focus-visible:ring-[3px]"
+                className={cn(
+                  "focus-visible:border-ring focus-visible:ring-ring/50 flex flex-col gap-2.5 rounded-xl border p-4 outline-none transition-[border-color,background-color,box-shadow] duration-150 focus-visible:ring-[3px]",
+                  option.primary
+                    ? "border-primary/40 bg-primary/[0.04] hover:border-primary/60 hover:bg-primary/[0.07]"
+                    : "hover:border-primary/40 hover:bg-muted/40"
+                )}
               >
-                <span className="bg-muted text-muted-foreground flex size-9 items-center justify-center rounded-md">
+                <span
+                  className={cn(
+                    "flex size-9 items-center justify-center rounded-lg",
+                    option.primary
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground"
+                  )}
+                >
                   <option.icon className="size-4" />
                 </span>
-                <span className="text-sm font-medium">{option.title}</span>
-                <span className="text-muted-foreground text-sm">{option.description}</span>
+                <span className="text-sm font-semibold tracking-tight">{option.title}</span>
+                <span className="text-muted-foreground text-sm leading-relaxed">
+                  {option.description}
+                </span>
               </Link>
             ))}
           </div>

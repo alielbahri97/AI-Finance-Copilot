@@ -3,8 +3,9 @@ import { ArrowDownLeftIcon, ArrowUpRightIcon, ReceiptTextIcon } from "lucide-rea
 
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { MoneyText } from "@/components/ui/money-text";
 import type { TransactionSummary } from "@/lib/data";
-import { cn, formatCurrency, formatDate, localeForCurrency } from "@/lib/utils";
+import { cn, formatDate, localeForCurrency } from "@/lib/utils";
 
 interface RecentTransactionsProps {
   transactions: TransactionSummary[];
@@ -23,7 +24,7 @@ export function RecentTransactions({ transactions, currency }: RecentTransaction
         action={
           <div className="flex flex-wrap justify-center gap-2">
             <Button size="sm" asChild>
-              <Link href="/import">Import CSV</Link>
+              <Link href="/import">Import statement</Link>
             </Button>
             <Button size="sm" variant="outline" asChild>
               <Link href="/transactions">Add a transaction</Link>
@@ -35,12 +36,12 @@ export function RecentTransactions({ transactions, currency }: RecentTransaction
   }
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-0.5">
       {transactions.map((tx) => (
         <Link
           key={tx.id}
           href={`/transactions?q=${encodeURIComponent(tx.description)}`}
-          className="hover:bg-muted/50 focus-visible:ring-ring flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors focus-visible:ring-2 focus-visible:outline-none"
+          className="hover:bg-muted/50 focus-visible:ring-ring flex items-center gap-3 rounded-xl px-2 py-2.5 transition-colors duration-150 focus-visible:ring-2 focus-visible:outline-none"
         >
           <div
             className={cn(
@@ -76,15 +77,15 @@ export function RecentTransactions({ transactions, currency }: RecentTransaction
             />
             {tx.category ?? "Uncategorized"}
           </span>
-          <span
-            className={cn(
-              "numeric text-sm font-semibold",
-              tx.type === "INCOME" ? "text-success" : "text-foreground"
-            )}
-          >
-            {tx.type === "INCOME" ? "+" : "-"}
-            {formatCurrency(tx.amount, currency, locale)}
-          </span>
+          <MoneyText
+            amount={tx.amount}
+            currency={currency}
+            locale={locale}
+            signed={tx.type === "INCOME" ? "income" : "expense"}
+            size="md"
+            tone={tx.type === "INCOME" ? "success" : "default"}
+            className="shrink-0"
+          />
         </Link>
       ))}
       <Link

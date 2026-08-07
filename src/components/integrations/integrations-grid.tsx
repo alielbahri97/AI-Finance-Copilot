@@ -36,7 +36,7 @@ function tileStatus(data: IntegrationCardData, locked: boolean): TileStatus {
   if (connections.length === 0) return { label: "Available", dotClass: "bg-sky-500" };
 
   const count = connections.length;
-  const suffix = count > 1 ? ` · ${count} connected` : "";
+  const suffix = count > 1 ? ` · ${count}` : "";
   if (connections.some((connection) => connection.status === "ERROR")) {
     return { label: `Error${suffix}`, dotClass: "bg-destructive" };
   }
@@ -61,26 +61,38 @@ function IntegrationTile({
   const status = tileStatus(data, locked);
   const connected =
     !locked && data.connections.some((connection) => connection.status === "CONNECTED");
+  const needsAttention =
+    !locked &&
+    data.connections.some(
+      (connection) => connection.status === "ERROR" || connection.status === "EXPIRED"
+    );
 
   return (
     <button
       type="button"
       onClick={onOpen}
       className={cn(
-        "bg-card hover:border-primary/40 hover:shadow-xs focus-visible:ring-ring/50 group flex flex-col items-start gap-3 rounded-xl border border-border/60 p-4 text-left shadow-xs transition-all focus-visible:ring-2 focus-visible:outline-none",
-        connected && "border-emerald-500/40"
+        "bg-card focus-visible:ring-ring/50 group flex flex-col items-start gap-3 rounded-2xl border p-4 text-left shadow-xs transition-[border-color,box-shadow,background-color,transform] duration-150 hover:shadow-sm focus-visible:ring-2 focus-visible:outline-none active:scale-[0.99]",
+        connected && !needsAttention
+          ? "border-emerald-500/35 bg-emerald-500/[0.03]"
+          : needsAttention
+            ? "border-amber-500/35"
+            : "border-border/60 hover:border-primary/35",
+        locked && "opacity-90"
       )}
     >
       <div className="flex w-full items-start justify-between gap-2">
         <ProviderIcon providerId={data.id} className={cn(locked && "opacity-60 grayscale-[35%]")} />
         {locked ? <LockIcon className="text-muted-foreground size-4" /> : null}
       </div>
-      <div className="min-w-0 space-y-0.5">
-        <p className="truncate text-sm font-medium">{data.name}</p>
-        <p className="text-muted-foreground line-clamp-2 text-xs">{data.description}</p>
+      <div className="min-w-0 space-y-1">
+        <p className="truncate text-sm font-semibold tracking-tight">{data.name}</p>
+        <p className="text-muted-foreground line-clamp-2 text-xs leading-relaxed">
+          {data.description}
+        </p>
       </div>
       <p className="text-muted-foreground mt-auto flex items-center gap-1.5 text-xs">
-        <span className={cn("size-1.5 rounded-full", status.dotClass)} aria-hidden />
+        <span className={cn("size-1.5 shrink-0 rounded-full", status.dotClass)} aria-hidden />
         {status.label}
       </p>
     </button>
@@ -129,14 +141,18 @@ export function IntegrationsGrid({
           if (list.length === 0) return null;
           return (
             <section key={group.label} className="space-y-3">
-              <h2 className="text-lg font-medium">{group.label}</h2>
+              <h2 className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+                {group.label}
+              </h2>
               {renderTiles(list)}
             </section>
           );
         })}
         {leftovers.length > 0 ? (
           <section className="space-y-3">
-            <h2 className="text-lg font-medium">Other</h2>
+            <h2 className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+              Other
+            </h2>
             {renderTiles(leftovers)}
           </section>
         ) : null}

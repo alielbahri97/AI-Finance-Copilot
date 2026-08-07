@@ -27,8 +27,8 @@ export function CopilotShell({
   const [historyOpen, setHistoryOpen] = useState(false);
 
   return (
-    <div className="grid min-h-[420px] flex-1 gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
-      <div className="bg-card hidden rounded-xl border border-border/60 p-3 shadow-xs lg:block">
+    <div className="grid min-h-[420px] flex-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+      <div className="bg-card hidden rounded-2xl border border-border/60 p-3 shadow-xs lg:block">
         <ConversationSidebar conversations={conversations} activeId={activeId} />
       </div>
 

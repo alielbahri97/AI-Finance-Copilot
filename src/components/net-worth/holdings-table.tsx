@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { MoneyText } from "@/components/ui/money-text";
 import {
   Table,
   TableBody,
@@ -16,7 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ASSET_KIND_LABELS } from "@/lib/personal/net-worth";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatDate, localeForCurrency } from "@/lib/utils";
 
 import type { HoldingRow } from "./types";
 
@@ -44,6 +45,7 @@ export function HoldingsTable({
 }: HoldingsTableProps) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
+  const locale = localeForCurrency(currency);
 
   async function remove(holding: HoldingRow) {
     setBusy(holding.id);
@@ -113,26 +115,26 @@ export function HoldingsTable({
                 <span className="text-xs"> · {holding.valuationCount} figures</span>
               ) : null}
             </TableCell>
-            <TableCell className="text-right tabular-nums">
+            <TableCell className="text-right">
               {holding.change === null || holding.change === 0 ? (
                 <span className="text-muted-foreground">—</span>
               ) : (
-                <span
-                  className={
+                <MoneyText
+                  amount={holding.change}
+                  currency={currency}
+                  locale={locale}
+                  size="sm"
+                  signed={holding.change > 0 ? "income" : "expense"}
+                  tone={
                     // Up is good for an asset and bad for a debt, so the colour
                     // follows what the movement means rather than its sign.
-                    holding.change > 0 === !holding.isLiability
-                      ? "text-success"
-                      : "text-destructive"
+                    holding.change > 0 === !holding.isLiability ? "success" : "destructive"
                   }
-                >
-                  {holding.change > 0 ? "+" : "−"}
-                  {formatCurrency(Math.abs(holding.change), currency)}
-                </span>
+                />
               )}
             </TableCell>
-            <TableCell className="text-right font-semibold tabular-nums">
-              {formatCurrency(holding.value, currency)}
+            <TableCell className="text-right">
+              <MoneyText amount={holding.value} currency={currency} locale={locale} size="md" />
             </TableCell>
             {canEdit ? (
               <TableCell className="text-right whitespace-nowrap">

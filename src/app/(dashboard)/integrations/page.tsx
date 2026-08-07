@@ -11,7 +11,7 @@ import { IntegrationsGrid } from "@/components/integrations/integrations-grid";
 import type { ConnectionData, IntegrationCardData } from "@/components/integrations/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { PageHeading } from "@/components/ui/page-heading";
+import { PageHeader } from "@/components/ui/page-heading";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { isSchemaOutOfDate } from "@/lib/db-errors";
 import { logger, serializeError } from "@/lib/logger";
@@ -222,15 +222,11 @@ export default async function IntegrationsPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <PageHeading>Integrations</PageHeading>
-          <p className="text-muted-foreground text-sm">
-            Connect a bank or tool. Synced sources refresh every few hours.
-          </p>
-        </div>
-        {ctx.permissions.has("export_data") && <BanksExportButton />}
-      </div>
+      <PageHeader
+        title="Integrations"
+        description="Connect a bank or tool. Synced sources refresh every few hours."
+        actions={ctx.permissions.has("export_data") ? <BanksExportButton /> : undefined}
+      />
 
       <Suspense fallback={<IntegrationsGridSkeleton />}>
         <IntegrationsContent ctx={ctx} params={params} />

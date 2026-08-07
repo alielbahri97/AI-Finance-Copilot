@@ -3,7 +3,7 @@ import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * The one shape an empty panel takes: an icon in a muted disc, a short
+ * The one shape an empty panel takes: an icon in a soft disc, a short
  * statement of what is missing, optionally why, and a way out.
  *
  * Extracted from the Subscriptions page, which had the only complete version —
@@ -33,18 +33,22 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center gap-3 px-4 py-12 text-center",
+        "flex flex-col items-center justify-center gap-3.5 px-4 py-12 text-center",
         className
       )}
     >
-      <div className="bg-muted/80 flex size-11 items-center justify-center rounded-2xl">
-        <Icon aria-hidden className="text-muted-foreground size-5" />
+      <div className="bg-primary/10 text-primary flex size-12 items-center justify-center rounded-2xl">
+        <Icon aria-hidden className="size-5" />
       </div>
-      <p className="text-base font-medium tracking-tight">{title}</p>
-      {description ? (
-        <p className="text-muted-foreground max-w-md text-sm leading-relaxed">{description}</p>
-      ) : null}
-      {action}
+      <div className="space-y-1.5">
+        <p className="text-base font-semibold tracking-tight">{title}</p>
+        {description ? (
+          <p className="text-muted-foreground mx-auto max-w-sm text-sm leading-relaxed">
+            {description}
+          </p>
+        ) : null}
+      </div>
+      {action ? <div className="pt-0.5">{action}</div> : null}
     </div>
   );
 }

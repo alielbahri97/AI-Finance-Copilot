@@ -1,8 +1,9 @@
 import { ReceiptIcon } from "lucide-react";
 
 import { EmptyState } from "@/components/ui/empty-state";
+import { MoneyText } from "@/components/ui/money-text";
 import type { TransactionSummary } from "@/lib/data";
-import { cn, formatCurrency, formatDate, localeForCurrency } from "@/lib/utils";
+import { cn, formatDate, localeForCurrency } from "@/lib/utils";
 
 interface LargestExpensesProps {
   expenses: TransactionSummary[];
@@ -11,7 +12,14 @@ interface LargestExpensesProps {
 
 export function LargestExpenses({ expenses, currency }: LargestExpensesProps) {
   if (expenses.length === 0) {
-    return <EmptyState className="h-72" icon={ReceiptIcon} title="No expenses recorded yet" />;
+    return (
+      <EmptyState
+        className="h-72"
+        icon={ReceiptIcon}
+        title="No expenses yet"
+        description="Once spending lands here, the biggest items show up first."
+      />
+    );
   }
 
   const locale = localeForCurrency(currency);
@@ -44,14 +52,18 @@ export function LargestExpenses({ expenses, currency }: LargestExpensesProps) {
                 </span>
               )}
             </div>
-            <span className="shrink-0 text-sm font-semibold tabular-nums">
-              {formatCurrency(expense.amount, currency, locale)}
-            </span>
+            <MoneyText
+              amount={expense.amount}
+              currency={currency}
+              locale={locale}
+              size="md"
+              className="shrink-0"
+            />
           </div>
           <div className="flex items-center gap-3">
             <div className="bg-muted h-1.5 flex-1 overflow-hidden rounded-full">
               <div
-                className="bg-destructive/70 h-full rounded-full"
+                className="bg-destructive/70 h-full rounded-full transition-[width] duration-300"
                 style={{ width: `${Math.max((expense.amount / max) * 100, 4)}%` }}
               />
             </div>

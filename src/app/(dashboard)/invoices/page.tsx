@@ -27,7 +27,7 @@ import {
 import { UploadInvoice } from "@/components/invoices/upload-invoice";
 import { InvoicesExportButton } from "@/components/exports/invoices-export-button";
 import { Card, CardContent } from "@/components/ui/card";
-import { PageHeading } from "@/components/ui/page-heading";
+import { PageHeader } from "@/components/ui/page-heading";
 import type { Prisma } from "@/generated/prisma/client";
 import { getInvoiceReminders } from "@/lib/invoices/reminders";
 import { serializeInvoice } from "@/lib/invoices/serialize";
@@ -99,18 +99,16 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 space-y-1">
-          <PageHeading>Invoices</PageHeading>
-          <p className="text-muted-foreground text-sm">
-            What you owe, and what is already paid.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {canExport && <InvoicesExportButton workspaceId={ctx.workspace.id} />}
-          {canEdit && <UploadInvoice />}
-        </div>
-      </div>
+      <PageHeader
+        title="Invoices"
+        description="What you owe, and what is already paid."
+        actions={
+          <>
+            {canEdit && <UploadInvoice />}
+            {canExport && <InvoicesExportButton workspaceId={ctx.workspace.id} />}
+          </>
+        }
+      />
 
       <Suspense
         fallback={

@@ -52,7 +52,7 @@ function NavSheet({
                     onClick={() => setOpen(false)}
                     aria-current={isActive ? "page" : undefined}
                     className={cn(
-                      "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+                      "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-[color,background-color,box-shadow] duration-150",
                       isActive
                         ? "bg-accent text-accent-foreground shadow-xs"
                         : "text-muted-foreground hover:bg-accent/60 hover:text-accent-foreground"
@@ -107,14 +107,14 @@ export function MobileTabBar({ isAdmin = false, workspaceType }: MobileNavProps)
             href={item.href}
             aria-current={isActive ? "page" : undefined}
             className={cn(
-              "text-2xs flex flex-1 flex-col items-center gap-0.5 px-1 py-2 font-medium transition-colors",
+              "text-2xs flex flex-1 flex-col items-center gap-0.5 px-1 py-2 font-medium transition-colors duration-150",
               isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
             )}
           >
             <span
               className={cn(
-                "flex size-8 items-center justify-center rounded-full transition-colors",
-                isActive && "bg-primary/10"
+                "flex size-8 items-center justify-center rounded-full transition-[background-color,transform] duration-150",
+                isActive && "bg-primary/10 scale-105"
               )}
             >
               <item.icon className="size-5" />

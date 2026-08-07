@@ -38,7 +38,8 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
-import { formatCurrency, formatDate, formatDateTime, localeForCurrency } from "@/lib/utils";
+import { MoneyText } from "@/components/ui/money-text";
+import { formatDate, formatDateTime, localeForCurrency } from "@/lib/utils";
 
 import { GoCardlessConnectButton } from "./gocardless-connect";
 import { PlaidConnectButton } from "./plaid-connect";
@@ -92,10 +93,6 @@ export function StatusBadge({ data }: { data: IntegrationCardData }) {
     );
   }
   return <ConnectionStatusBadge status={data.connections[0].status} />;
-}
-
-function formatMoney(amount: number, currency: string | null, fallback: string): string {
-  return formatCurrency(amount, currency ?? fallback, localeForCurrency(fallback));
 }
 
 function CopyEnvVar({ name }: { name: string }) {
@@ -385,7 +382,7 @@ function ConnectionRow({ data, connection }: { data: IntegrationCardData; connec
   };
 
   return (
-    <div className="space-y-3 rounded-lg border p-3">
+    <div className="space-y-3 rounded-xl border border-border/60 p-3.5 shadow-xs">
       <div className="flex items-start gap-3">
         <ConnectionLogo connection={connection} providerId={data.id} />
         <div className="min-w-0 flex-1 space-y-1">
@@ -397,9 +394,17 @@ function ConnectionRow({ data, connection }: { data: IntegrationCardData; connec
             {connection.accounts.length > 0 ? (
               <p>
                 {connection.accounts.length} account{connection.accounts.length === 1 ? "" : "s"}
-                {connection.includedBalance !== null
-                  ? ` · ${formatMoney(connection.includedBalance, connection.balanceCurrency, data.currency)} counted`
-                  : ""}
+                {connection.includedBalance !== null ? " · " : ""}
+                {connection.includedBalance !== null ? (
+                  <MoneyText
+                    amount={connection.includedBalance}
+                    currency={connection.balanceCurrency ?? data.currency}
+                    locale={locale}
+                    size="sm"
+                    className="inline"
+                  />
+                ) : null}
+                {connection.includedBalance !== null ? " counted" : ""}
               </p>
             ) : connection.accountLabel ? (
               <p className="truncate">{connection.accountLabel}</p>
@@ -443,16 +448,24 @@ function ConnectionRow({ data, connection }: { data: IntegrationCardData; connec
       ) : null}
 
       {connection.accounts.length > 0 ? (
-        <ul className="divide-y rounded-md border">
+        <ul className="divide-y rounded-xl border border-border/60">
           {connection.accounts.map((account) => (
-            <li key={account.id} className="flex items-center gap-3 px-3 py-2">
+            <li key={account.id} className="flex items-center gap-3 px-3 py-2.5">
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm">{account.label}</p>
-                <p className="text-muted-foreground text-xs">
-                  {account.balance !== null
-                    ? formatMoney(account.balance, account.currency, data.currency)
-                    : "No balance yet"}
+                <p className="text-muted-foreground truncate text-xs font-medium tracking-wide uppercase">
+                  {account.label}
                 </p>
+                {account.balance !== null ? (
+                  <MoneyText
+                    amount={account.balance}
+                    currency={account.currency ?? data.currency}
+                    locale={locale}
+                    size="md"
+                    className="mt-0.5 block"
+                  />
+                ) : (
+                  <p className="text-muted-foreground text-sm">No balance yet</p>
+                )}
               </div>
               <Label
                 htmlFor={`include-${account.id}`}

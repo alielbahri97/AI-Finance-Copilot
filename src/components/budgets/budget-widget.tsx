@@ -10,6 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { MoneyText } from "@/components/ui/money-text";
 import { Progress } from "@/components/ui/progress";
 import { budgetStatus, monthLabel, type BudgetSummary } from "@/lib/personal/budgets";
 import { formatCurrency, localeForCurrency } from "@/lib/utils";
@@ -55,10 +56,10 @@ export function BudgetWidget({ summary, currency }: BudgetWidgetProps) {
           <EmptyState
             className="py-6"
             icon={WalletIcon}
-            title="No budgets set for this month"
-            description="Put a limit on a category or two and this card shows how much of it is left."
+            title="No budgets this month"
+            description="Set a limit on a category or two and this card shows how much is left."
             action={
-              <Button size="sm" variant="outline" asChild>
+              <Button size="sm" asChild>
                 <Link href="/budgets">Set a monthly limit</Link>
               </Button>
             }
@@ -67,9 +68,12 @@ export function BudgetWidget({ summary, currency }: BudgetWidgetProps) {
           <>
             <div className="flex flex-col gap-2">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="text-lg font-semibold tracking-tight">
-                  {money(summary.totalSpent)}
-                </span>
+                <MoneyText
+                  amount={summary.totalSpent}
+                  currency={currency}
+                  locale={locale}
+                  size="lg"
+                />
                 <span className="text-muted-foreground text-sm">
                   of {money(summary.totalAvailable)} budgeted
                 </span>

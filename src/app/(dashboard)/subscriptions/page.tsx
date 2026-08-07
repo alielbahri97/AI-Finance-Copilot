@@ -24,7 +24,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { PageHeading } from "@/components/ui/page-heading";
+import { PageHeader } from "@/components/ui/page-heading";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import {
   REVIEW_MAX_MONTHLY_AMOUNT,
@@ -52,12 +52,10 @@ export default async function SubscriptionsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="space-y-1">
-        <PageHeading>Subscriptions</PageHeading>
-        <p className="text-muted-foreground text-sm">
-          Recurring charges and what they cost each month.
-        </p>
-      </div>
+      <PageHeader
+        title="Subscriptions"
+        description="Recurring charges and what they cost each month."
+      />
 
       <Suspense
         fallback={
