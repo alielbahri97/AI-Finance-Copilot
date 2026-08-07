@@ -1,4 +1,4 @@
-import { StatRow, statCardSpan } from "@/components/dashboard/stat-card";
+import { StatRow, statCardChrome, statCardSpan } from "@/components/dashboard/stat-card";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -16,13 +16,16 @@ export function StatRowSkeleton({ count = 4, hero = false }: { count?: number; h
   const cards = Array.from({ length: count }).map((_, index) => {
     const isHero = hero && index === 0;
     return (
-      <Card key={index} className={cn("gap-2", isHero && statCardSpan("hero"))}>
+      <Card
+        key={index}
+        className={cn(statCardChrome(isHero ? "hero" : "default"), isHero && statCardSpan("hero"))}
+      >
         <CardHeader>
           <Skeleton className="h-4 w-24" />
         </CardHeader>
         <CardContent className="space-y-2">
-          {/* h-10 / h-7 / h-8 are the line boxes of text-4xl / text-xl / text-2xl. */}
-          <Skeleton className={isHero ? "h-10 w-48" : hero ? "h-7 w-28" : "h-8 w-28"} />
+          {/* h-12 / h-7 / h-8 are the line boxes of text-5xl / text-xl / text-2xl. */}
+          <Skeleton className={isHero ? "h-12 w-52" : hero ? "h-7 w-28" : "h-8 w-28"} />
           <Skeleton className="h-3 w-20" />
         </CardContent>
       </Card>

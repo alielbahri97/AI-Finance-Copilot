@@ -6,8 +6,8 @@
   "start_url": "https://app.ballastmoney.com/dashboard",
   "scope": "https://app.ballastmoney.com/",
   "display": "standalone",
-  "background_color": "#EEF2FF",
-  "theme_color": "#4F46E5",
+  "background_color": "#E9F3FF",
+  "theme_color": "#005ADB",
   "icons": [
     {
       "src": "https://app.ballastmoney.com/icons/icon-192.png",

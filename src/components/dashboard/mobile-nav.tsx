@@ -52,9 +52,9 @@ function NavSheet({
                     onClick={() => setOpen(false)}
                     aria-current={isActive ? "page" : undefined}
                     className={cn(
-                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                      "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
                       isActive
-                        ? "bg-accent text-accent-foreground"
+                        ? "bg-accent text-accent-foreground shadow-xs"
                         : "text-muted-foreground hover:bg-accent/60 hover:text-accent-foreground"
                     )}
                   >
@@ -97,7 +97,7 @@ export function MobileTabBar({ isAdmin = false, workspaceType }: MobileNavProps)
   return (
     <nav
       aria-label="Mobile tabs"
-      className="bg-background/95 fixed inset-x-0 bottom-0 z-40 flex h-[var(--tab-bar-height)] border-t pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
+      className="bg-background/95 fixed inset-x-0 bottom-0 z-40 flex h-[var(--tab-bar-height)] border-t border-border/70 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden"
     >
       {items.map((item) => {
         const isActive = pathname.startsWith(item.href);
@@ -107,11 +107,18 @@ export function MobileTabBar({ isAdmin = false, workspaceType }: MobileNavProps)
             href={item.href}
             aria-current={isActive ? "page" : undefined}
             className={cn(
-              "text-2xs flex flex-1 flex-col items-center gap-1 px-1 py-2 font-medium transition-colors",
+              "text-2xs flex flex-1 flex-col items-center gap-0.5 px-1 py-2 font-medium transition-colors",
               isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
             )}
           >
-            <item.icon className="size-5" />
+            <span
+              className={cn(
+                "flex size-8 items-center justify-center rounded-full transition-colors",
+                isActive && "bg-primary/10"
+              )}
+            >
+              <item.icon className="size-5" />
+            </span>
             {item.title}
           </Link>
         );
@@ -123,11 +130,18 @@ export function MobileTabBar({ isAdmin = false, workspaceType }: MobileNavProps)
           <button
             type="button"
             className={cn(
-              "text-2xs flex flex-1 cursor-pointer flex-col items-center gap-1 px-1 py-2 font-medium transition-colors",
+              "text-2xs flex flex-1 cursor-pointer flex-col items-center gap-0.5 px-1 py-2 font-medium transition-colors",
               onTabRoute ? "text-muted-foreground hover:text-foreground" : "text-primary"
             )}
           >
-            <EllipsisIcon className="size-5" />
+            <span
+              className={cn(
+                "flex size-8 items-center justify-center rounded-full transition-colors",
+                !onTabRoute && "bg-primary/10"
+              )}
+            >
+              <EllipsisIcon className="size-5" />
+            </span>
             More
           </button>
         }

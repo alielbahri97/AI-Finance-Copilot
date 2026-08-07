@@ -9,45 +9,49 @@
  * greens/ambers that read well on a dark card are kept in `.dark` only.
  */
 :root {
-  --radius: 0.625rem;
-  --background: oklch(0.968 0.004 247.9);
-  --foreground: oklch(0.13 0.028 261.692);
+  /*
+   * Revolut-inspired electric blue (hue 255) replaces the previous indigo
+   * (hue ~277). Surfaces stay cool and clean; primary is dark enough for
+   * white button labels (≥4.5:1) while still reading as a bright fintech blue.
+   */
+  --radius: 0.75rem;
+  --background: oklch(0.985 0.004 250);
+  --foreground: oklch(0.145 0.02 255);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.13 0.028 261.692);
+  --card-foreground: oklch(0.145 0.02 255);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.13 0.028 261.692);
-  --primary: oklch(0.511 0.262 276.966);
-  --primary-foreground: oklch(0.985 0.002 247.839);
-  --secondary: oklch(0.967 0.003 264.542);
-  --secondary-foreground: oklch(0.21 0.034 264.665);
-  --muted: oklch(0.945 0.005 264.5);
+  --popover-foreground: oklch(0.145 0.02 255);
+  --primary: oklch(0.5 0.22 255);
+  --primary-foreground: oklch(0.985 0.002 250);
+  --secondary: oklch(0.965 0.008 250);
+  --secondary-foreground: oklch(0.22 0.03 255);
+  --muted: oklch(0.955 0.008 250);
   /*
    * Tuned against `--muted`, not `--card`. The chip pattern `bg-muted
    * text-muted-foreground` (Draft invoices, inactive tabs, empty-state icons)
-   * puts this on the 0.945 surface, where the card-tuned 0.54 only reached
-   * 4.31:1. Darkening by 0.015 clears AA there and lifts every other use.
+   * puts this on a light wash, where a card-tuned grey can miss AA.
    */
-  --muted-foreground: oklch(0.525 0.027 264.364);
-  --accent: oklch(0.951 0.015 276.966);
-  --accent-foreground: oklch(0.424 0.199 276.966);
+  --muted-foreground: oklch(0.52 0.025 255);
+  --accent: oklch(0.95 0.025 255);
+  --accent-foreground: oklch(0.42 0.19 255);
   --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0.002 247.839);
-  --border: oklch(0.928 0.006 264.531);
-  --input: oklch(0.928 0.006 264.531);
-  --ring: oklch(0.511 0.262 276.966);
-  --chart-1: oklch(0.511 0.262 276.966);
+  --destructive-foreground: oklch(0.985 0.002 250);
+  --border: oklch(0.92 0.01 250);
+  --input: oklch(0.92 0.01 250);
+  --ring: oklch(0.5 0.22 255);
+  --chart-1: oklch(0.5 0.22 255);
   --chart-2: oklch(0.56 0.14 162.5);
   --chart-3: oklch(0.62 0.16 55);
   --chart-4: oklch(0.56 0.24 303.9);
   --chart-5: oklch(0.58 0.22 16.4);
   --sidebar: oklch(1 0 0);
-  --sidebar-foreground: oklch(0.13 0.028 261.692);
-  --sidebar-primary: oklch(0.511 0.262 276.966);
-  --sidebar-primary-foreground: oklch(0.985 0.002 247.839);
-  --sidebar-accent: oklch(0.951 0.015 276.966);
-  --sidebar-accent-foreground: oklch(0.424 0.199 276.966);
-  --sidebar-border: oklch(0.928 0.006 264.531);
-  --sidebar-ring: oklch(0.511 0.262 276.966);
+  --sidebar-foreground: oklch(0.145 0.02 255);
+  --sidebar-primary: oklch(0.5 0.22 255);
+  --sidebar-primary-foreground: oklch(0.985 0.002 250);
+  --sidebar-accent: oklch(0.95 0.025 255);
+  --sidebar-accent-foreground: oklch(0.42 0.19 255);
+  --sidebar-border: oklch(0.92 0.01 250);
+  --sidebar-ring: oklch(0.5 0.22 255);
   --success: oklch(0.5 0.16 149.2);
   /*
    * Dark enough to survive being printed on a 10% wash of itself, which is how
@@ -116,18 +120,18 @@
    * coloured page. Aliased to --shadow-* in @theme so `shadow-sm` and friends
    * pick the right treatment up per theme.
    */
-  --elevation-xs: 0 1px 2px 0 oklch(0.13 0.028 261.692 / 0.05);
+  --elevation-xs: 0 1px 2px 0 oklch(0.145 0.02 255 / 0.04);
   --elevation-sm:
-    0 1px 2px 0 oklch(0.13 0.028 261.692 / 0.06), 0 1px 3px 0 oklch(0.13 0.028 261.692 / 0.08);
+    0 1px 2px 0 oklch(0.145 0.02 255 / 0.05), 0 1px 3px 0 oklch(0.145 0.02 255 / 0.06);
   --elevation-md:
-    0 2px 4px -1px oklch(0.13 0.028 261.692 / 0.06), 0 4px 8px -2px oklch(0.13 0.028 261.692 / 0.1);
+    0 2px 4px -1px oklch(0.145 0.02 255 / 0.05), 0 4px 8px -2px oklch(0.145 0.02 255 / 0.08);
   --elevation-lg:
-    0 4px 6px -2px oklch(0.13 0.028 261.692 / 0.06),
-    0 12px 20px -4px oklch(0.13 0.028 261.692 / 0.12);
+    0 4px 6px -2px oklch(0.145 0.02 255 / 0.05),
+    0 12px 20px -4px oklch(0.145 0.02 255 / 0.1);
   --elevation-xl:
-    0 8px 12px -4px oklch(0.13 0.028 261.692 / 0.08),
-    0 24px 32px -8px oklch(0.13 0.028 261.692 / 0.14);
-  --elevation-2xl: 0 32px 64px -12px oklch(0.13 0.028 261.692 / 0.22);
+    0 8px 12px -4px oklch(0.145 0.02 255 / 0.06),
+    0 24px 32px -8px oklch(0.145 0.02 255 / 0.12);
+  --elevation-2xl: 0 32px 64px -12px oklch(0.145 0.02 255 / 0.18);
 
   /*
    * The mobile tab bar is fixed to the bottom edge, so everything else that
@@ -147,53 +151,45 @@
 }
 
 .dark {
-  --background: oklch(0.13 0.028 261.692);
-  --foreground: oklch(0.985 0.002 247.839);
-  --card: oklch(0.18 0.03 262.5);
-  --card-foreground: oklch(0.985 0.002 247.839);
-  --popover: oklch(0.18 0.03 262.5);
-  --popover-foreground: oklch(0.985 0.002 247.839);
+  /* Near-black Revolut-like surfaces — low chroma so they stay true black, not navy. */
+  --background: oklch(0.11 0.01 255);
+  --foreground: oklch(0.98 0.004 250);
+  --card: oklch(0.16 0.012 255);
+  --card-foreground: oklch(0.98 0.004 250);
+  --popover: oklch(0.16 0.012 255);
+  --popover-foreground: oklch(0.98 0.004 250);
   /*
-   * The two things this token has to do in dark mode pull against each other:
-   * carry near-white text as a solid button, and be read as text itself on
-   * `--card`. Those two ratios multiply to a constant that depends only on
-   * `--primary-foreground` and `--card` — 18.03 here — so whatever indigo goes
-   * in, min(button, link) can never exceed sqrt(18.03) = 4.25:1. (Even pure
-   * white button text only lifts the ceiling to 4.34.) AA on both is therefore
-   * unreachable without either inverting the button foreground to navy or
-   * darkening every card, so this sits exactly on the balance point at
-   * 4.25/4.24 rather than letting one side fail outright.
-   *
-   * Chroma drops from 0.233 to 0.22 because the balanced lightness at 0.233
-   * falls outside sRGB — it would render clipped, i.e. not the colour declared.
-   * Hue is held at the light-mode/app-icon indigo.
+   * Dark primary still balances button fill (white text) vs link text on
+   * `--card`. Near-black cards lift the link side enough that L≈0.57 clears
+   * ~4.25:1 on both — the same practical ceiling the previous indigo theme
+   * accepted. Hue stays locked to the light-mode electric blue.
    */
-  --primary: oklch(0.589 0.22 276.966);
-  --primary-foreground: oklch(0.985 0.002 247.839);
-  --secondary: oklch(0.24 0.034 264.665);
-  --secondary-foreground: oklch(0.985 0.002 247.839);
-  --muted: oklch(0.24 0.034 264.665);
-  --muted-foreground: oklch(0.707 0.022 261.325);
-  --accent: oklch(0.28 0.06 276.966);
-  --accent-foreground: oklch(0.882 0.059 276.966);
+  --primary: oklch(0.57 0.19 255);
+  --primary-foreground: oklch(0.985 0.002 250);
+  --secondary: oklch(0.22 0.02 255);
+  --secondary-foreground: oklch(0.98 0.004 250);
+  --muted: oklch(0.22 0.02 255);
+  --muted-foreground: oklch(0.72 0.02 255);
+  --accent: oklch(0.26 0.05 255);
+  --accent-foreground: oklch(0.86 0.08 255);
   --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0.002 247.839);
-  --border: oklch(1 0 0 / 16%);
-  --input: oklch(1 0 0 / 16%);
-  --ring: oklch(0.589 0.22 276.966);
-  --chart-1: oklch(0.589 0.22 276.966);
+  --destructive-foreground: oklch(0.985 0.002 250);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.57 0.19 255);
+  --chart-1: oklch(0.57 0.19 255);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.72 0.18 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.16 0.03 262.5);
-  --sidebar-foreground: oklch(0.985 0.002 247.839);
-  --sidebar-primary: oklch(0.589 0.22 276.966);
-  --sidebar-primary-foreground: oklch(0.985 0.002 247.839);
-  --sidebar-accent: oklch(0.28 0.06 276.966);
-  --sidebar-accent-foreground: oklch(0.882 0.059 276.966);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.589 0.22 276.966);
+  --sidebar: oklch(0.13 0.01 255);
+  --sidebar-foreground: oklch(0.98 0.004 250);
+  --sidebar-primary: oklch(0.57 0.19 255);
+  --sidebar-primary-foreground: oklch(0.985 0.002 250);
+  --sidebar-accent: oklch(0.26 0.05 255);
+  --sidebar-accent-foreground: oklch(0.86 0.08 255);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.57 0.19 255);
   --success: oklch(0.723 0.219 149.579);
   --warning: oklch(0.795 0.184 86.047);
   --warning-foreground: oklch(0.21 0.034 264.665);

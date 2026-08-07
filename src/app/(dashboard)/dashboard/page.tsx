@@ -29,7 +29,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { PageHeading } from "@/components/ui/page-heading";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import type { PlanLimits } from "@/lib/billing/plans";
-import { editionBranding } from "@/lib/branding";
 import { getDashboardData, getOrCreateProfile } from "@/lib/data";
 import { buildForecast } from "@/lib/finance/data";
 import { getInvoiceReminders } from "@/lib/invoices/reminders";
@@ -62,33 +61,33 @@ export default async function DashboardPage() {
   const edition = editionForWorkspaceType(workspace.type);
 
   const heading = (
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <PageHeading>{firstName ? `Welcome back, ${firstName}` : "Dashboard"}</PageHeading>
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="min-w-0 space-y-1">
+        <PageHeading className="text-3xl font-semibold tracking-tight">
+          {firstName ? `Hi, ${firstName}` : "Home"}
+        </PageHeading>
         <p className="text-muted-foreground text-sm">
-          {edition === "personal"
-            ? "Your money over the last six months — spending, budgets and what's coming up."
-            : `Built for ${editionBranding("business").audience} — your overview for the last six months.`}
+          {edition === "personal" ? "Your money at a glance." : "Your business money at a glance."}
         </p>
       </div>
-      <div className="flex gap-2">
-        {canExport && <DashboardExportButton workspaceId={workspace.id} />}
+      <div className="flex flex-wrap items-center gap-2">
         {canEditTransactions && (
-          <>
-            <Button asChild>
-              <Link href="/transactions">
-                <PlusIcon />
-                Add transaction
-              </Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href="/import">
-                <UploadIcon />
-                Import
-              </Link>
-            </Button>
-          </>
+          <Button className="rounded-xl" asChild>
+            <Link href="/transactions">
+              <PlusIcon />
+              Add transaction
+            </Link>
+          </Button>
         )}
+        {canEditTransactions && (
+          <Button variant="ghost" size="sm" className="text-muted-foreground" asChild>
+            <Link href="/import">
+              <UploadIcon />
+              Import
+            </Link>
+          </Button>
+        )}
+        {canExport && <DashboardExportButton workspaceId={workspace.id} />}
       </div>
     </div>
   );
@@ -272,7 +271,7 @@ async function InvoiceAlertSection({
     <Link href="/invoices" className="group">
       <Card className="hover:border-destructive/40 gap-2 py-4 transition-colors">
         <CardContent className="flex flex-wrap items-center gap-x-8 gap-y-3">
-          <div className="bg-destructive/10 text-destructive flex size-10 shrink-0 items-center justify-center rounded-lg">
+          <div className="bg-destructive/10 text-destructive flex size-10 shrink-0 items-center justify-center rounded-2xl">
             <ReceiptTextIcon className="size-5" />
           </div>
           <div className="min-w-0">
@@ -316,7 +315,7 @@ async function ForecastTeaserSection({
     <Link href="/forecast" className="group">
       <Card className="hover:border-primary/40 gap-2 py-4 transition-colors">
         <CardContent className="flex flex-wrap items-center gap-x-8 gap-y-3">
-          <div className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-lg">
+          <div className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-2xl">
             <ChartSplineIcon className="size-5" />
           </div>
           <div className="min-w-0">

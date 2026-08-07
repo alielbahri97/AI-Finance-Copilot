@@ -72,19 +72,19 @@ function EditionChoice({ edition }: { edition: Edition }) {
   const price = startingPrice(edition);
 
   return (
-    <Card className="flex flex-col">
+    <Card className="flex flex-col border-border/80 shadow-sm transition-shadow hover:shadow-md">
       <CardContent className="flex flex-1 flex-col gap-5">
         <div className="flex items-start gap-3">
-          <div className="bg-accent text-accent-foreground flex size-10 shrink-0 items-center justify-center rounded-lg">
+          <div className="bg-primary/10 text-primary flex size-11 shrink-0 items-center justify-center rounded-2xl">
             <Icon className={`size-5 ${branding.accentClassName}`} />
           </div>
           <div>
-            <h2 className="text-lg font-semibold">{branding.choiceLabel}</h2>
+            <h2 className="text-lg font-semibold tracking-tight">{branding.choiceLabel}</h2>
             <p className="text-muted-foreground text-sm">{branding.choiceDescription}</p>
           </div>
         </div>
 
-        <ul className="flex-1 space-y-2">
+        <ul className="flex-1 space-y-2.5">
           {branding.highlights.map((highlight) => (
             <li key={highlight} className="flex items-start gap-2 text-sm">
               <CheckIcon className={`mt-0.5 size-4 shrink-0 ${branding.accentClassName}`} />
@@ -94,7 +94,7 @@ function EditionChoice({ edition }: { edition: Edition }) {
         </ul>
 
         <div className="flex flex-col gap-2">
-          <Button size="lg" asChild>
+          <Button size="lg" className="rounded-xl" asChild>
             <Link href={`/signup?${EDITION_PARAM}=${edition}`}>
               {branding.choiceLabel}
               <ArrowRightIcon />
@@ -126,10 +126,14 @@ export default async function LandingPage() {
   }
 
   return (
-    <div className="flex min-h-svh flex-col">
-      <header className="border-b">
+    <div className="relative flex min-h-svh flex-col overflow-hidden">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,oklch(0.5_0.22_255/0.1),transparent_55%)] dark:bg-[radial-gradient(ellipse_at_top,oklch(0.57_0.19_255/0.16),transparent_50%)]"
+      />
+      <header className="border-border/60 border-b bg-background/70 backdrop-blur-md">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 sm:px-6">
-          <div className="flex items-center gap-2 font-semibold">
+          <div className="flex items-center gap-2 text-[0.95rem] font-semibold tracking-tight">
             <BallastBadge />
             {BRAND.name}
           </div>
@@ -138,7 +142,7 @@ export default async function LandingPage() {
             <Button variant="ghost" asChild>
               <Link href="/login">Sign in</Link>
             </Button>
-            <Button asChild>
+            <Button className="rounded-xl" asChild>
               <Link href="/signup">Get started</Link>
             </Button>
           </div>
@@ -146,13 +150,16 @@ export default async function LandingPage() {
       </header>
 
       <main id="main-content" tabIndex={-1} className="flex-1 outline-none">
-        <section className="mx-auto flex w-full max-w-6xl flex-col items-center gap-6 px-4 pt-24 pb-12 text-center sm:px-6">
-          <h1 className="max-w-3xl text-4xl font-bold tracking-tight text-balance sm:text-6xl">
+        <section className="mx-auto flex w-full max-w-6xl flex-col items-center gap-5 px-4 pt-20 pb-10 text-center sm:px-6 sm:pt-24">
+          <div className="flex flex-col items-center gap-3">
+            <BallastBadge className="size-14 rounded-2xl" markClassName="size-8" />
+            <p className="text-5xl font-bold tracking-tight sm:text-6xl">{BRAND.name}</p>
+          </div>
+          <h1 className="text-muted-foreground max-w-2xl text-xl font-medium text-balance sm:text-2xl">
             {BRAND.tagline}
           </h1>
-          <p className="text-muted-foreground max-w-2xl text-lg text-balance">
-            {BRAND.name} turns your bank statements into clear numbers, forecasts and answers.
-            It comes in two editions — pick the one that matches whose money you are looking at.
+          <p className="text-muted-foreground max-w-xl text-base text-balance sm:text-lg">
+            Clear numbers from your bank data — pick Business or Personal to get started.
           </p>
         </section>
 
@@ -164,27 +171,26 @@ export default async function LandingPage() {
           <EditionChoice edition="personal" />
         </section>
 
-        <p className="text-muted-foreground mx-auto max-w-4xl px-4 pb-20 text-center text-sm sm:px-6">
+        <p className="text-muted-foreground mx-auto max-w-4xl px-4 pb-16 text-center text-sm sm:px-6">
           Not sure? Start with either — you can add a workspace of the other kind later, and both
           live in the same account.
         </p>
 
-        <section className="bg-muted/40 border-y py-16">
+        <section className="border-border/60 border-y py-16">
           <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
-            <h2 className="text-center text-2xl font-semibold tracking-tight">
-              In both editions
-            </h2>
-            <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <h2 className="text-center text-2xl font-semibold tracking-tight">In both editions</h2>
+            <p className="text-muted-foreground mx-auto mt-2 max-w-lg text-center text-sm">
+              The same clear tools, whether you are looking at a company or your own money.
+            </p>
+            <div className="mt-10 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
               {SHARED_FEATURES.map((feature) => (
-                <Card key={feature.title}>
-                  <CardContent className="flex flex-col gap-3">
-                    <div className="bg-accent text-accent-foreground flex size-10 items-center justify-center rounded-lg">
-                      <feature.icon className="size-5" />
-                    </div>
-                    <h3 className="font-semibold">{feature.title}</h3>
-                    <p className="text-muted-foreground text-sm">{feature.description}</p>
-                  </CardContent>
-                </Card>
+                <div key={feature.title} className="flex flex-col gap-3">
+                  <div className="bg-primary/10 text-primary flex size-10 items-center justify-center rounded-2xl">
+                    <feature.icon className="size-5" />
+                  </div>
+                  <h3 className="font-semibold tracking-tight">{feature.title}</h3>
+                  <p className="text-muted-foreground text-sm leading-relaxed">{feature.description}</p>
+                </div>
               ))}
             </div>
           </div>
@@ -192,13 +198,13 @@ export default async function LandingPage() {
 
         <section className="mx-auto flex w-full max-w-6xl flex-col items-center gap-4 px-4 py-16 text-center sm:px-6">
           <h2 className="text-2xl font-semibold tracking-tight">Already have an account?</h2>
-          <Button size="lg" variant="outline" asChild>
+          <Button size="lg" variant="outline" className="rounded-xl" asChild>
             <Link href="/login">Sign in to your account</Link>
           </Button>
         </section>
       </main>
 
-      <footer className="border-t">
+      <footer className="border-border/60 border-t">
         <div className="text-muted-foreground mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-3 px-4 text-sm sm:px-6">
           <span>{BRAND.name}</span>
           <span className="hidden sm:inline">Built with Next.js, Supabase &amp; AI</span>

@@ -328,8 +328,8 @@ function roundedRectPath(x: number, y: number, width: number, height: number, ra
 /* Icon composition                                                    */
 /* ------------------------------------------------------------------ */
 
-/** Brand indigo, matching `theme_color` in the manifest and the viewport. */
-const BRAND_COLOR = "#4F46E5";
+/** Brand electric blue, matching `theme_color` in the manifest and the viewport. */
+const BRAND_COLOR = "#005ADB";
 const MARK_COLOR = "#FFFFFF";
 
 const MARK_POLYGONS = MARK_PATHS.flatMap((d) => flattenPath(d));

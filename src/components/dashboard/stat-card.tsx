@@ -14,7 +14,16 @@ export type StatEmphasis = "default" | "hero";
  * The grid a hero stat row lives in: five columns at xl so the hero can take
  * two of them and the three supporting cards still fit on one line.
  */
-export const STAT_ROW_GRID = "grid gap-4 sm:grid-cols-2 xl:grid-cols-5";
+export const STAT_ROW_GRID = "grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-5";
+
+/**
+ * Soft chrome so money figures lead. Hero cards drop the border weight further
+ * and pick up a touch more padding for the oversized figure.
+ */
+export const statCardChrome = (emphasis: StatEmphasis) =>
+  emphasis === "hero"
+    ? "gap-3 border-border/50 py-5 shadow-xs"
+    : "gap-2 border-border/60 shadow-xs";
 
 /**
  * A stat row containing a hero. The `data-hero` marker is what quiets the
@@ -48,8 +57,8 @@ export const statCardSpan = (emphasis: StatEmphasis) =>
  */
 export const statValueClass = (emphasis: StatEmphasis) =>
   emphasis === "hero"
-    ? "text-4xl font-bold"
-    : "text-2xl font-bold group-data-hero/stat-row:text-xl group-data-hero/stat-row:font-semibold";
+    ? "text-4xl font-bold tracking-tight sm:text-5xl"
+    : "text-2xl font-semibold tracking-tight group-data-hero/stat-row:text-lg group-data-hero/stat-row:font-semibold sm:group-data-hero/stat-row:text-xl";
 
 interface StatCardProps {
   title: string;
@@ -78,7 +87,7 @@ export function StatCard({
   const isGood = showTrend && (changePct >= 0 ? increaseIsGood : !increaseIsGood);
 
   return (
-    <Card className={cn("gap-2", statCardSpan(emphasis))}>
+    <Card className={cn(statCardChrome(emphasis), statCardSpan(emphasis))}>
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle className="text-muted-foreground text-sm font-medium">{title}</CardTitle>
         <Icon className="text-muted-foreground size-4" />
@@ -87,7 +96,7 @@ export function StatCard({
         <div className="flex flex-wrap items-baseline gap-2">
           <span
             className={cn(
-              "numeric tracking-tight",
+              "numeric",
               statValueClass(emphasis),
               tone === "positive" && "text-success",
               tone === "negative" && "text-destructive"
@@ -112,7 +121,7 @@ export function StatCard({
             </span>
           )}
         </div>
-        <p className="text-muted-foreground mt-1 text-xs">{hint}</p>
+        <p className="text-muted-foreground mt-1.5 text-xs">{hint}</p>
       </CardContent>
     </Card>
   );

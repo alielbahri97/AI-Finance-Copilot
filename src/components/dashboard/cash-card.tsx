@@ -1,6 +1,7 @@
 import { WalletIcon } from "lucide-react";
 
 import {
+  statCardChrome,
   statCardSpan,
   statValueClass,
   type StatEmphasis,
@@ -25,7 +26,7 @@ export function CashCard({
   const locale = localeForCurrency(cash.currency);
 
   return (
-    <Card className={cn("gap-2", statCardSpan(emphasis))}>
+    <Card className={cn(statCardChrome(emphasis), statCardSpan(emphasis))}>
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle className="text-muted-foreground text-sm font-medium">Total cash</CardTitle>
         <WalletIcon className="text-muted-foreground size-4" />
@@ -33,14 +34,14 @@ export function CashCard({
       <CardContent>
         <span
           className={cn(
-            "numeric tracking-tight",
+            "numeric",
             statValueClass(emphasis),
             cash.total >= 0 ? "text-success" : "text-destructive"
           )}
         >
           {formatCurrency(cash.total, cash.currency, locale)}
         </span>
-        <p className="text-muted-foreground mt-1 text-xs">{hint(cash)}</p>
+        <p className="text-muted-foreground mt-1.5 text-xs">{hint(cash)}</p>
 
         {hasBreakdown ? (
           <details className="group mt-2">

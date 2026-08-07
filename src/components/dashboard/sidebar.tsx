@@ -37,9 +37,9 @@ export function Sidebar({ isAdmin = false, workspaceType }: SidebarProps) {
         href={item.href}
         aria-current={isActive ? "page" : undefined}
         className={cn(
-          "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+          "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
           isActive
-            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+            ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-xs"
             : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
         )}
       >
@@ -52,7 +52,7 @@ export function Sidebar({ isAdmin = false, workspaceType }: SidebarProps) {
   return (
     <aside className="bg-sidebar text-sidebar-foreground border-sidebar-border sticky top-0 hidden h-svh w-60 shrink-0 flex-col border-r lg:flex">
       <div className="flex h-16 shrink-0 flex-col justify-center gap-0.5 border-b px-5">
-        <span className="flex items-center gap-2 font-semibold">
+        <span className="flex items-center gap-2 text-[0.95rem] font-semibold tracking-tight">
           <BallastBadge />
           {BRAND.name}
         </span>
@@ -60,10 +60,10 @@ export function Sidebar({ isAdmin = false, workspaceType }: SidebarProps) {
           {edition}
         </span>
       </div>
-      <nav aria-label="Main" className="flex flex-1 flex-col gap-4 overflow-y-auto p-3">
+      <nav aria-label="Main" className="flex flex-1 flex-col gap-5 overflow-y-auto p-3">
         {primarySections.map((section) => (
           <div key={section.id} className="flex flex-col gap-1">
-            <p className="text-muted-foreground text-2xs px-3 pb-0.5 font-semibold tracking-wider uppercase">
+            <p className="text-muted-foreground text-2xs px-3 pb-1 font-semibold tracking-wider uppercase">
               {section.label}
             </p>
             {section.items.map(renderItem)}

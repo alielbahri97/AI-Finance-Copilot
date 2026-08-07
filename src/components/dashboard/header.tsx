@@ -27,10 +27,10 @@ export function Header({
   locale,
 }: HeaderProps) {
   return (
-    <header className="bg-background/80 sticky top-0 z-40 flex h-16 items-center justify-between gap-2 border-b px-4 backdrop-blur sm:px-6">
+    <header className="bg-background/85 sticky top-0 z-40 flex h-14 items-center justify-between gap-2 border-b border-border/70 px-4 backdrop-blur-md sm:px-6 lg:h-16">
       <MobileNav isAdmin={isAdmin} workspaceType={currentWorkspaceType} />
       <WorkspaceSwitcher workspaces={workspaces} currentId={currentWorkspaceId} />
-      <div className="ml-auto flex items-center gap-1.5">
+      <div className="ml-auto flex items-center gap-1">
         <NotificationBell locale={locale} />
         <ThemeToggle />
         <UserNav email={email} fullName={fullName} avatarUrl={avatarUrl} />
