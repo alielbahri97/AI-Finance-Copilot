@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import { describe, expect, it } from "vitest";
+import * as XLSX from "xlsx";
 
 import {
   detectStatementFormat,
@@ -54,9 +55,20 @@ async function pdfBuffer(): Promise<ArrayBuffer> {
   return bufferOf(bytes);
 }
 
-/** OLE2 compound file header: legacy .xls and encrypted OOXML workbooks. */
-const OLE2 = new Uint8Array(512);
-OLE2.set([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+/** OLE2 compound file header only — not a valid workbook. */
+const OLE2_HEADER_ONLY = new Uint8Array(512);
+OLE2_HEADER_ONLY.set([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+
+function legacyXlsBuffer(): ArrayBuffer {
+  const workbook = XLSX.utils.book_new();
+  const sheet = XLSX.utils.aoa_to_sheet([
+    ["Date", "Description", "Amount"],
+    ["2026-07-01", "Coffee shop", -3.2],
+  ]);
+  XLSX.utils.book_append_sheet(workbook, sheet, "Sheet1");
+  const bytes = XLSX.write(workbook, { type: "buffer", bookType: "xls" }) as Buffer;
+  return bufferOf(new Uint8Array(bytes));
+}
 
 async function rejection(fileName: string, buffer: ArrayBuffer): Promise<StatementParseError> {
   try {
@@ -89,7 +101,8 @@ describe("statement format detection", () => {
     expect(detectStatementFormat("export.xls", bytesOf("<html><table></table></html>"))).toBe(
       "excel"
     );
-    expect(detectStatementFormat("export.xls", OLE2)).toBe("excel");
+    expect(detectStatementFormat("export.xls", OLE2_HEADER_ONLY)).toBe("excel");
+    expect(detectStatementFormat("export.xls", new Uint8Array(legacyXlsBuffer()))).toBe("excel");
   });
 });
 
@@ -99,6 +112,15 @@ describe("statement dispatch", () => {
     expect((await parseStatement("export.xlsx", await xlsxBuffer())).format).toBe("excel");
     expect((await parseStatement("export.pdf", await pdfBuffer())).format).toBe("pdf");
     expect((await parseStatement("export.txt", bufferOf(bytesOf(MT940)))).format).toBe("mt940");
+  });
+
+  it("reads a real Excel 97-2003 .xls workbook", async () => {
+    const statement = await parseStatement("export.xls", legacyXlsBuffer());
+    expect(statement.format).toBe("excel");
+    expect(statement.source).toMatch(/Excel 97-2003 sheet/i);
+    expect(statement.headers).toEqual(["Date", "Description", "Amount"]);
+    expect(statement.rows).toHaveLength(1);
+    expect(statement.rows[0][1]).toBe("Coffee shop");
   });
 
   it("reads a .xls that is really an HTML table", async () => {
@@ -128,10 +150,10 @@ describe("statement dispatch", () => {
     expect(error.status).toBe(400);
   });
 
-  it("explains how to convert a legacy or encrypted .xls", async () => {
-    const error = await rejection("export.xls", bufferOf(OLE2));
+  it("explains how to convert a corrupt or encrypted OLE2 workbook", async () => {
+    const error = await rejection("export.xls", bufferOf(OLE2_HEADER_ONLY));
     expect(error.status).toBe(415);
-    expect(error.message).toMatch(/save it as \.xlsx or CSV/i);
+    expect(error.message).toMatch(/re-save it as \.xlsx or CSV|password-protected/i);
   });
 
   it("rejects a corrupt PDF with a readable message", async () => {

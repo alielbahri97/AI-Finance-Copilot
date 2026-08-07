@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import * as XLSX from "xlsx";
 
 import { buildGrid } from "./grid";
 import { StatementParseError } from "./types";
@@ -140,6 +141,104 @@ export async function parseExcelWorkbook(buffer: ArrayBuffer): Promise<ParsedSta
     delimiter: "",
     format: "excel",
     source: `Excel sheet "${best.sheet.name}"`,
+  };
+}
+
+function formatSheetJsCell(value: XLSX.CellObject["v"], cell: XLSX.CellObject): string {
+  if (value === null || value === undefined) return "";
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (typeof value === "number") {
+    const numFmt = typeof cell.z === "string" ? cell.z : undefined;
+    if (cell.t === "d" || isDateNumberFormat(numFmt)) {
+      return excelSerialToIso(value) ?? formatNumber(value);
+    }
+    return formatNumber(value);
+  }
+  if (typeof value === "boolean") return value ? "TRUE" : "FALSE";
+  return String(value).trim();
+}
+
+function sheetJsRows(sheet: XLSX.WorkSheet): string[][] {
+  const ref = sheet["!ref"];
+  if (!ref) return [];
+  const range = XLSX.utils.decode_range(ref);
+  const rows: string[][] = [];
+  for (let rowIndex = range.s.r; rowIndex <= range.e.r; rowIndex++) {
+    const cells: string[] = [];
+    for (let colIndex = range.s.c; colIndex <= range.e.c; colIndex++) {
+      const address = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
+      const cell = sheet[address] as XLSX.CellObject | undefined;
+      cells.push(cell ? formatSheetJsCell(cell.v, cell) : "");
+    }
+    rows.push(cells);
+  }
+  return rows;
+}
+
+/**
+ * Reads a real Excel 97-2003 (BIFF) workbook. Password-protected OLE2 packages
+ * and truncated files fall through to a clear conversion message.
+ */
+export async function parseLegacyExcelWorkbook(buffer: ArrayBuffer): Promise<ParsedStatement> {
+  let workbook: XLSX.WorkBook;
+  try {
+    workbook = XLSX.read(Buffer.from(buffer), {
+      type: "buffer",
+      cellDates: true,
+      dense: false,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/password|encrypt|CFB|compound/i.test(message)) {
+      throw new StatementParseError(
+        "This Excel file is password-protected. Remove the password and upload it again, or re-save it as .xlsx or CSV.",
+        415
+      );
+    }
+    throw new StatementParseError(
+      "This legacy Excel workbook could not be opened. Re-save it as .xlsx or CSV in Excel, LibreOffice or Google Sheets, then upload that file.",
+      415
+    );
+  }
+
+  const hiddenByName = new Map(
+    (workbook.Workbook?.Sheets ?? []).map((meta) => [meta.name, meta.Hidden ?? 0])
+  );
+  const sheetNames = workbook.SheetNames.filter((name) => {
+    if (!workbook.Sheets[name]) return false;
+    // 0 = visible, 1 = hidden, 2 = very hidden
+    return (hiddenByName.get(name) ?? 0) === 0;
+  });
+  if (sheetNames.length === 0) {
+    throw new StatementParseError("This workbook has no sheets.", 422);
+  }
+
+  let best: { name: string; rows: string[][]; score: number } | null = null;
+  for (const name of sheetNames) {
+    const rows = sheetJsRows(workbook.Sheets[name]);
+    const score = tableRowCount(rows);
+    if (!best || score > best.score) best = { name, rows, score };
+  }
+  if (!best || best.score === 0) {
+    throw new StatementParseError(
+      "No transaction rows were found in this workbook — every sheet is empty.",
+      422
+    );
+  }
+
+  const grid = buildGrid(best.rows);
+  if (grid.rows.length === 0) {
+    throw new StatementParseError(
+      `The sheet "${best.name}" has no data rows below its header.`,
+      422
+    );
+  }
+
+  return {
+    ...grid,
+    delimiter: "",
+    format: "excel",
+    source: `Excel 97-2003 sheet "${best.name}"`,
   };
 }
 

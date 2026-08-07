@@ -158,6 +158,14 @@ export function PersonalOnboardingWizard({
       return;
     }
     if (step === "focus") {
+      const months = form.getValues("emergencyMonths");
+      if (!Number.isFinite(months)) {
+        form.setValue("emergencyMonths", 0, { shouldValidate: false });
+      } else {
+        form.setValue("emergencyMonths", Math.min(24, Math.max(0, Math.trunc(months))), {
+          shouldValidate: false,
+        });
+      }
       const ok = await form.trigger(["primaryFocus", "hasDebt", "emergencyMonths"]);
       if (ok) setStep("snapshot");
       return;
@@ -297,10 +305,29 @@ export function PersonalOnboardingWizard({
                     <FormControl>
                       <Input
                         type="number"
+                        inputMode="numeric"
                         min={0}
                         max={24}
-                        value={field.value}
-                        onChange={(event) => field.onChange(Number(event.target.value) || 0)}
+                        // Allow clearing while typing; coerce empty → 0 on blur.
+                        value={Number.isFinite(field.value) ? field.value : ""}
+                        onChange={(event) => {
+                          const raw = event.target.value;
+                          if (raw === "") {
+                            field.onChange(NaN);
+                            return;
+                          }
+                          const next = Number(raw);
+                          field.onChange(Number.isFinite(next) ? next : field.value);
+                        }}
+                        onBlur={() => {
+                          field.onBlur();
+                          const current = form.getValues("emergencyMonths");
+                          if (!Number.isFinite(current) || current < 0) {
+                            field.onChange(0);
+                            return;
+                          }
+                          field.onChange(Math.min(24, Math.trunc(current)));
+                        }}
                       />
                     </FormControl>
                     <FormDescription>0 if you are just starting. 3–6 is a common target.</FormDescription>

@@ -276,7 +276,7 @@ Good to know:
 - Every import is tracked as a batch — the **import history** list on the Import page has an **Undo** button per batch that removes exactly those transactions.
 ${freeLine}
 - PDF statements are read from the printed layout, so they are best-effort: always check the preview before importing. A scanned or photographed PDF has no text to read and will be rejected.
-- Legacy Excel 97-2003 workbooks and password-protected files cannot be opened — re-save them as .xlsx or CSV first.`;
+- Password-protected Excel files cannot be opened — remove the password or re-save as .xlsx or CSV first.`;
 }
 
 function integrationsContent(edition: Edition): string {

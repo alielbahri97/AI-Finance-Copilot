@@ -1,6 +1,11 @@
 import { decodeCsvBuffer, parseCsv } from "@/lib/csv/parse";
 
-import { looksLikeSpreadsheetMarkup, parseExcelWorkbook, parseSpreadsheetMarkup } from "./excel";
+import {
+  looksLikeSpreadsheetMarkup,
+  parseExcelWorkbook,
+  parseLegacyExcelWorkbook,
+  parseSpreadsheetMarkup,
+} from "./excel";
 import {
   ACCEPTED_FORMATS_SENTENCE,
   detectStatementFormat,
@@ -31,16 +36,11 @@ function parseDelimited(buffer: ArrayBuffer): ParsedStatement {
 /**
  * `.xls` covers three very different things in practice: real OOXML zipped
  * workbooks, the HTML/SpreadsheetML tables most banks actually emit, and the
- * genuine binary 97-2003 format.
+ * genuine binary 97-2003 format (parsed via SheetJS).
  */
 async function parseExcelLike(buffer: ArrayBuffer, bytes: Uint8Array): Promise<ParsedStatement> {
   if (isZipContainer(bytes)) return parseExcelWorkbook(buffer);
-  if (isOle2Container(bytes)) {
-    throw new StatementParseError(
-      "This is a legacy Excel 97-2003 workbook (or a password-protected one), which cannot be read directly. Open it in Excel, LibreOffice or Google Sheets and save it as .xlsx or CSV, then upload that file.",
-      415
-    );
-  }
+  if (isOle2Container(bytes)) return parseLegacyExcelWorkbook(buffer);
   const text = decodeCsvBuffer(buffer);
   if (looksLikeSpreadsheetMarkup(text)) return parseSpreadsheetMarkup(text);
   return parseDelimited(buffer);
