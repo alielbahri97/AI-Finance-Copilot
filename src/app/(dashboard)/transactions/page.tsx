@@ -108,27 +108,25 @@ export default async function TransactionsPage({
   const categoryOptions: CategoryOption[] = categories;
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 space-y-1">
           <PageHeading>Transactions</PageHeading>
           <p className="text-muted-foreground text-sm">
-            Search, filter and categorize your income and expenses.
+            Your income and expenses, ready to search and sort.
           </p>
         </div>
-        <div className="flex gap-2">
-          {canExport && <TransactionsExportButton workspaceId={ctx.workspace.id} />}
+        <div className="flex flex-wrap items-center gap-2">
+          {canEdit && <TransactionDialog categories={categoryOptions} />}
           {canEdit && (
-            <>
-              <TransactionDialog categories={categoryOptions} />
-              <Button asChild>
-                <Link href="/import">
-                  <UploadIcon />
-                  Import CSV
-                </Link>
-              </Button>
-            </>
+            <Button variant="ghost" size="sm" className="text-muted-foreground" asChild>
+              <Link href="/import">
+                <UploadIcon />
+                Import
+              </Link>
+            </Button>
           )}
+          {canExport && <TransactionsExportButton workspaceId={ctx.workspace.id} />}
         </div>
       </div>
 

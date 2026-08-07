@@ -31,7 +31,7 @@ export function GoalsSummaryCard({ summary, currency }: GoalsSummaryCardProps) {
       <CardContent className="space-y-4">
         <div className="space-y-1.5">
           <div className="flex items-baseline justify-between gap-2">
-            <span className="text-xl font-semibold tracking-tight tabular-nums">
+            <span className="text-4xl font-bold tracking-tight tabular-nums sm:text-5xl">
               {money(summary.totalSaved)}
             </span>
             <span className="text-muted-foreground text-sm tabular-nums">

@@ -10,6 +10,7 @@ import type { HoldingRow } from "@/components/net-worth/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeading } from "@/components/ui/page-heading";
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { EDITION_PLAN_ORDER, getPlan } from "@/lib/billing/plans";
 import {
@@ -54,11 +55,10 @@ function toRow(
 
 function PageHeader() {
   return (
-    <div>
-      <h1 className="text-2xl font-semibold tracking-tight">Net worth</h1>
+    <div className="space-y-1">
+      <PageHeading>Net worth</PageHeading>
       <p className="text-muted-foreground text-sm">
-        Everything you own, less everything you owe — your bank balances plus the things
-        they cannot see, month by month.
+        Everything you own, less everything you owe.
       </p>
     </div>
   );

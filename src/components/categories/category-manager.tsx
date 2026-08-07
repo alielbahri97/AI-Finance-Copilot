@@ -25,8 +25,8 @@ interface CategoryManagerProps {
 }
 
 const RANDOM_COLORS = [
-  "#6366f1", "#f59e0b", "#3b82f6", "#ef4444", "#ec4899",
-  "#22c55e", "#a855f7", "#0ea5e9", "#f97316", "#8b5cf6",
+  "#005ADB", "#f59e0b", "#3b82f6", "#ef4444", "#ec4899",
+  "#22c55e", "#0ea5e9", "#f97316", "#14b8a6", "#64748b",
 ];
 
 export function CategoryManager({ categories }: CategoryManagerProps) {

@@ -48,7 +48,7 @@ export default async function ProfilePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
+      <div className="space-y-1">
         <PageHeading>{profile.fullName ?? "Your profile"}</PageHeading>
         <p className="text-muted-foreground text-sm">{profile.email}</p>
       </div>

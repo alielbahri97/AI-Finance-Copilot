@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 
 import { StatRowSkeleton, TableCardSkeleton } from "@/components/dashboard/section-skeletons";
-import { StatCard } from "@/components/dashboard/stat-card";
+import { StatCard, StatRow } from "@/components/dashboard/stat-card";
 import { SubscriptionList } from "@/components/subscriptions/subscription-list";
 import { UpcomingCharges } from "@/components/subscriptions/upcoming-charges";
 import { Button } from "@/components/ui/button";
@@ -52,18 +52,17 @@ export default async function SubscriptionsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
+      <div className="space-y-1">
         <PageHeading>Subscriptions</PageHeading>
         <p className="text-muted-foreground text-sm">
-          Recurring charges found in your transactions, what they cost each month, and which ones
-          are worth a second look.
+          Recurring charges and what they cost each month.
         </p>
       </div>
 
       <Suspense
         fallback={
           <>
-            <StatRowSkeleton count={3} />
+            <StatRowSkeleton count={3} hero />
             <TableCardSkeleton />
           </>
         }
@@ -94,12 +93,13 @@ async function SubscriptionsContent({ ctx }: { ctx: WorkspaceContext }) {
 
   return (
     <>
-      <div className="grid gap-4 sm:grid-cols-3">
+      <StatRow>
         <StatCard
           title="Subscriptions per month"
           value={money(overview.totalMonthlyCost)}
           hint={`${money(overview.annualisedCost)} a year at this rate`}
           icon={CreditCardIcon}
+          emphasis="hero"
         />
         <StatCard
           title="Worth reviewing"
@@ -118,7 +118,7 @@ async function SubscriptionsContent({ ctx }: { ctx: WorkspaceContext }) {
           hint="Housing, utilities, insurance and loans, counted separately"
           icon={HouseIcon}
         />
-      </div>
+      </StatRow>
 
       <Card>
         <CardHeader>

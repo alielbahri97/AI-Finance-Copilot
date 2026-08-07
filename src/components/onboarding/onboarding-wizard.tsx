@@ -285,7 +285,7 @@ export function OnboardingWizard({
                   <h1
                     ref={headingRef}
                     tabIndex={-1}
-                    className="text-2xl font-bold tracking-tight outline-none"
+                    className="text-3xl font-bold tracking-tight outline-none"
                   >
                     Tell us about your business
                   </h1>
@@ -346,7 +346,7 @@ export function OnboardingWizard({
                   <h1
                     ref={headingRef}
                     tabIndex={-1}
-                    className="text-2xl font-bold tracking-tight outline-none"
+                    className="text-3xl font-bold tracking-tight outline-none"
                   >
                     Team and location
                   </h1>
@@ -405,7 +405,7 @@ export function OnboardingWizard({
                   <h1
                     ref={headingRef}
                     tabIndex={-1}
-                    className="text-2xl font-bold tracking-tight outline-none"
+                    className="text-3xl font-bold tracking-tight outline-none"
                   >
                     Monthly snapshot
                   </h1>
@@ -507,7 +507,7 @@ export function OnboardingWizard({
             <h1
               ref={headingRef}
               tabIndex={-1}
-              className="text-2xl font-bold tracking-tight outline-none"
+              className="text-3xl font-bold tracking-tight outline-none"
             >
               Bring in your numbers
             </h1>
@@ -522,9 +522,9 @@ export function OnboardingWizard({
               <Link
                 key={option.href}
                 href={option.href}
-                className="hover:border-primary/50 hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-ring/50 group flex items-start gap-3 rounded-lg border p-4 text-left transition-colors outline-none focus-visible:ring-[3px]"
+                className="hover:border-primary/50 hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-ring/50 group flex items-start gap-3 rounded-xl border border-border/60 p-4 text-left shadow-xs transition-colors outline-none focus-visible:ring-[3px]"
               >
-                <span className="bg-muted text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-md">
+                <span className="bg-muted text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-xl">
                   <option.icon className="size-4" />
                 </span>
                 <span className="min-w-0 flex-1">
@@ -560,7 +560,7 @@ export function OnboardingWizard({
               <h1
                 ref={headingRef}
                 tabIndex={-1}
-                className="text-2xl font-bold tracking-tight outline-none"
+                className="text-3xl font-bold tracking-tight outline-none"
               >
                 Your recommended targets
               </h1>

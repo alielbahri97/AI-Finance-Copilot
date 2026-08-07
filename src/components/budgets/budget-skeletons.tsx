@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export function BudgetsBodySkeleton({ rows = 5 }: { rows?: number }) {
   return (
     <>
-      <StatRowSkeleton />
+      <StatRowSkeleton hero />
       <Card>
         <CardHeader>
           <Skeleton className="h-5 w-32" />

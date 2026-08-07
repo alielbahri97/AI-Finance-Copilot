@@ -90,7 +90,7 @@ export function RulesManager({ rules, categories }: RulesManagerProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <form onSubmit={createRule} className="bg-card flex flex-wrap items-end gap-3 rounded-lg border p-3">
+      <form onSubmit={createRule} className="bg-card flex flex-wrap items-end gap-3 rounded-xl border border-border/60 p-3 shadow-xs">
         <div className="grid min-w-44 flex-1 gap-1.5">
           <label htmlFor="rule-pattern" className="text-muted-foreground text-xs">
             When the description contains…

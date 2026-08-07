@@ -187,7 +187,7 @@ export function PersonalOnboardingWizard({
         <p className="text-muted-foreground text-sm font-medium tracking-wide uppercase">
           Personal setup
         </p>
-        <h1 className="text-2xl font-semibold tracking-tight">
+        <h1 className="text-3xl font-semibold tracking-tight">
           Help {BRAND.name} understand your goals
         </h1>
         <p className="text-muted-foreground text-sm">
@@ -280,7 +280,7 @@ export function PersonalOnboardingWizard({
                 control={form.control}
                 name="hasDebt"
                 render={({ field }) => (
-                  <FormItem className="border-border flex flex-row items-start gap-3 rounded-lg border p-4">
+                  <FormItem className="border-border/60 flex flex-row items-start gap-3 rounded-xl border p-4 shadow-xs">
                     <FormControl>
                       <Checkbox
                         checked={field.value}

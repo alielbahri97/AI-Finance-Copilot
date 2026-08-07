@@ -223,11 +223,10 @@ export default async function IntegrationsPage({
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0 space-y-1">
           <PageHeading>Integrations</PageHeading>
           <p className="text-muted-foreground text-sm">
-            Pick a tool to see what it does and how to connect it. Connected sources sync
-            automatically every few hours.
+            Connect a bank or tool. Synced sources refresh every few hours.
           </p>
         </div>
         {ctx.permissions.has("export_data") && <BanksExportButton />}

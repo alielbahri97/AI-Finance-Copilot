@@ -13,7 +13,7 @@ import {
 
 import { BudgetManager } from "@/components/budgets/budget-manager";
 import { BudgetsBodySkeleton } from "@/components/budgets/budget-skeletons";
-import { StatCard } from "@/components/dashboard/stat-card";
+import { StatCard, StatRow } from "@/components/dashboard/stat-card";
 import { Button } from "@/components/ui/button";
 import { PageHeading } from "@/components/ui/page-heading";
 import {
@@ -62,11 +62,11 @@ export default async function BudgetsPage({ searchParams }: BudgetsPageProps) {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 space-y-1">
           <PageHeading>Budgets</PageHeading>
           <p className="text-muted-foreground text-sm">
-            A monthly limit per category, and how {monthLabel(period)} is tracking against it.
+            How {monthLabel(period)} is tracking against your limits.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -117,7 +117,15 @@ async function BudgetsBody({ workspaceId, currency, period, canEdit }: BudgetsBo
 
   return (
     <>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <StatRow>
+        <StatCard
+          title="Remaining"
+          value={money(summary.totalRemaining)}
+          hint={summary.totalRemaining < 0 ? "Spending is past the total" : "Left to spend this month"}
+          icon={PiggyBankIcon}
+          tone={summary.totalRemaining < 0 ? "negative" : "positive"}
+          emphasis="hero"
+        />
         <StatCard
           title="Budgeted"
           value={money(summary.totalAvailable)}
@@ -135,27 +143,19 @@ async function BudgetsBody({ workspaceId, currency, period, canEdit }: BudgetsBo
           icon={TrendingDownIcon}
         />
         <StatCard
-          title="Remaining"
-          value={money(summary.totalRemaining)}
-          hint={summary.totalRemaining < 0 ? "Spending is past the total" : "Left to spend"}
-          icon={PiggyBankIcon}
-          tone={summary.totalRemaining < 0 ? "negative" : "positive"}
-        />
-        <StatCard
           title="Over budget"
           value={String(summary.overCount)}
           hint={summary.overCount === 1 ? "Category past its limit" : "Categories past their limit"}
           icon={AlertTriangleIcon}
           tone={summary.overCount > 0 ? "negative" : "default"}
         />
-      </div>
+      </StatRow>
 
       <Card>
         <CardHeader>
           <CardTitle>{monthLabel(period)}</CardTitle>
           <CardDescription>
-            Rollover carries an underspend into the next month and takes an overspend out of it, so
-            a category settles over time instead of resetting.
+            Underspend rolls forward; overspend comes out of next month.
           </CardDescription>
         </CardHeader>
         <CardContent>

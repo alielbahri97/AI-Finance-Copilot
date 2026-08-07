@@ -16,7 +16,7 @@ import {
   ChartRowSkeleton,
   StatRowSkeleton,
 } from "@/components/dashboard/section-skeletons";
-import { StatCard } from "@/components/dashboard/stat-card";
+import { StatCard, StatRow } from "@/components/dashboard/stat-card";
 import {
   AssumptionsManager,
   type AssumptionItem,
@@ -89,11 +89,11 @@ export default async function ForecastPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 space-y-1">
           <PageHeading>Cash flow forecast</PageHeading>
           <p className="text-muted-foreground text-sm">
-            Deterministic projection from your recurring patterns, spending trend and assumptions.
+            Where your cash is headed from the patterns you already have.
           </p>
         </div>
         {ctx.permissions.has("export_data") && (
@@ -105,7 +105,7 @@ export default async function ForecastPage({
         key={`${scenarioParam ?? ""}|${compareParam ?? ""}`}
         fallback={
           <>
-            <StatRowSkeleton />
+            <StatRowSkeleton hero />
             <ChartRowSkeleton />
           </>
         }
@@ -175,13 +175,14 @@ async function ForecastContent({
 
   return (
     <>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <StatRow>
         <StatCard
           title="Cash runway"
           value={runway.value}
           hint={runway.hint}
           icon={HourglassIcon}
           tone={metrics.runwayMonths === null ? "positive" : metrics.runwayMonths < 6 ? "negative" : "default"}
+          emphasis="hero"
         />
         <StatCard
           title={isBurning ? "Net burn rate" : "Net cash added"}
@@ -203,7 +204,7 @@ async function ForecastContent({
           icon={WalletIcon}
           tone={metrics.projectedBalance30d >= 0 ? "default" : "negative"}
         />
-      </div>
+      </StatRow>
 
       {showScenarios ? (
         <Card>

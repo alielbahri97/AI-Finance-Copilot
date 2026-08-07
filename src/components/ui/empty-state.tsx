@@ -37,12 +37,12 @@ export function EmptyState({
         className
       )}
     >
-      <div className="bg-muted flex size-10 items-center justify-center rounded-full">
+      <div className="bg-muted/80 flex size-11 items-center justify-center rounded-2xl">
         <Icon aria-hidden className="text-muted-foreground size-5" />
       </div>
-      <p className="text-sm font-medium">{title}</p>
+      <p className="text-base font-medium tracking-tight">{title}</p>
       {description ? (
-        <p className="text-muted-foreground max-w-md text-sm">{description}</p>
+        <p className="text-muted-foreground max-w-md text-sm leading-relaxed">{description}</p>
       ) : null}
       {action}
     </div>

@@ -175,14 +175,14 @@ export function GoalCard({ goal, currency, canEdit, onEdit }: GoalCardProps) {
 
       <CardContent className="space-y-4">
         <div className="space-y-1.5">
-          <div className="flex items-baseline justify-between gap-2 text-sm">
-            <span className="font-medium tabular-nums">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl">
               {money(goal.saved)}{" "}
-              <span className="text-muted-foreground font-normal">
+              <span className="text-muted-foreground text-base font-normal sm:text-lg">
                 of {money(goal.targetAmount)}
               </span>
             </span>
-            <span className="text-muted-foreground tabular-nums">
+            <span className="text-muted-foreground text-sm tabular-nums">
               {Math.round(goal.progress * 100)}%
             </span>
           </div>

@@ -122,12 +122,12 @@ export default async function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
+      <div className="space-y-1">
         <PageHeading>Settings</PageHeading>
         <p className="text-muted-foreground text-sm">
           {sharing
-            ? "Manage your workspace, team, appearance, AI provider and account security."
-            : "Manage your workspace, appearance, AI provider and account security."}
+            ? "Workspace, team, appearance, and security."
+            : "Workspace, appearance, and security."}
         </p>
       </div>
 

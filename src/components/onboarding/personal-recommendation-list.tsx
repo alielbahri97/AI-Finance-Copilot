@@ -47,7 +47,7 @@ export function PersonalRecommendationList({
         {recommendations.suggestedGoals.map((goal) => (
           <li
             key={goal.id}
-            className="border-border flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-start sm:justify-between"
+            className="border-border/60 flex flex-col gap-3 rounded-xl border p-4 shadow-xs sm:flex-row sm:items-start sm:justify-between"
           >
             <div className="min-w-0 space-y-1">
               <div className="flex flex-wrap items-center gap-2">

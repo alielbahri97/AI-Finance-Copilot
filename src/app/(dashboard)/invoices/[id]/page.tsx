@@ -18,6 +18,7 @@ import {
 import { PageHeading } from "@/components/ui/page-heading";
 import { serializeInvoice } from "@/lib/invoices/serialize";
 import { prisma } from "@/lib/prisma";
+import { formatCurrency, localeForCurrency } from "@/lib/utils";
 import { getWorkspaceContext } from "@/lib/workspace/context";
 
 export const metadata: Metadata = { title: "Invoice" };
@@ -40,11 +41,12 @@ export default async function InvoiceDetailPage({ params }: InvoiceDetailPagePro
   if (!invoice) notFound();
 
   const dto = serializeInvoice(invoice);
+  const locale = localeForCurrency(dto.currency);
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 flex-col gap-2">
           <Link
             href="/invoices"
             className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm transition-colors"
@@ -58,6 +60,9 @@ export default async function InvoiceDetailPage({ params }: InvoiceDetailPagePro
             </PageHeading>
             <InvoiceStatusBadge status={dto.derivedStatus} />
           </div>
+          <p className="text-4xl font-bold tracking-tight tabular-nums sm:text-5xl">
+            {formatCurrency(dto.total, dto.currency, locale)}
+          </p>
           <p className="text-muted-foreground text-sm">
             {dto.invoiceNumber ? `Invoice ${dto.invoiceNumber}` : dto.fileName}
           </p>
@@ -66,7 +71,7 @@ export default async function InvoiceDetailPage({ params }: InvoiceDetailPagePro
       </div>
 
       {dto.status === "DRAFT" && (
-        <div className="border-warning/40 bg-warning/10 flex items-start gap-2 rounded-lg border px-4 py-3 text-sm">
+        <div className="border-warning/40 bg-warning/10 flex items-start gap-2 rounded-xl border px-4 py-3 text-sm">
           <ScanSearchIcon className="mt-0.5 size-4 shrink-0" />
           <div className="flex flex-col gap-1">
             <span>

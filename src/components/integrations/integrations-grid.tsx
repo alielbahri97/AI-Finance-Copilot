@@ -67,7 +67,7 @@ function IntegrationTile({
       type="button"
       onClick={onOpen}
       className={cn(
-        "bg-card hover:border-primary/40 hover:shadow-sm focus-visible:ring-ring/50 group flex flex-col items-start gap-3 rounded-xl border p-4 text-left transition-all focus-visible:ring-2 focus-visible:outline-none",
+        "bg-card hover:border-primary/40 hover:shadow-xs focus-visible:ring-ring/50 group flex flex-col items-start gap-3 rounded-xl border border-border/60 p-4 text-left shadow-xs transition-all focus-visible:ring-2 focus-visible:outline-none",
         connected && "border-emerald-500/40"
       )}
     >

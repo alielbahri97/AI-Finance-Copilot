@@ -5,5 +5,5 @@ import { cn } from "@/lib/utils";
  * mix of font-bold and font-semibold it had before.
  */
 export function PageHeading({ className, ...props }: React.ComponentProps<"h1">) {
-  return <h1 className={cn("text-2xl font-semibold tracking-tight", className)} {...props} />;
+  return <h1 className={cn("text-3xl font-semibold tracking-tight", className)} {...props} />;
 }

@@ -356,9 +356,35 @@ export function TransactionsTable({
   );
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border border-border/60 px-4 py-3 shadow-xs">
+          <p className="text-muted-foreground text-xs font-medium">Income</p>
+          <p className="text-success mt-1 text-xl font-semibold tracking-tight tabular-nums sm:text-2xl">
+            {formatCurrency(totals.income, currency, locale)}
+          </p>
+        </div>
+        <div className="rounded-xl border border-border/60 px-4 py-3 shadow-xs">
+          <p className="text-muted-foreground text-xs font-medium">Expenses</p>
+          <p className="mt-1 text-xl font-semibold tracking-tight tabular-nums sm:text-2xl">
+            {formatCurrency(totals.expenses, currency, locale)}
+          </p>
+        </div>
+        <div className="rounded-xl border border-border/60 px-4 py-3 shadow-xs">
+          <p className="text-muted-foreground text-xs font-medium">Net</p>
+          <p
+            className={cn(
+              "mt-1 text-xl font-semibold tracking-tight tabular-nums sm:text-2xl",
+              totals.net < 0 ? "text-destructive" : "text-success"
+            )}
+          >
+            {formatCurrency(totals.net, currency, locale)}
+          </p>
+        </div>
+      </div>
+
       {selected.size > 0 && (
-        <div className="bg-accent/60 flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2">
+        <div className="bg-accent/60 flex flex-wrap items-center gap-3 rounded-xl border border-border/60 px-3 py-2">
           <span className="text-sm font-medium">
             {selected.size} selected
             {selectedOffPage > 0 && (
@@ -443,7 +469,7 @@ export function TransactionsTable({
           <div
             key={tx.id}
             data-state={selected.has(tx.id) ? "selected" : undefined}
-            className="data-[state=selected]:bg-muted flex flex-col gap-2 rounded-lg border p-3"
+            className="data-[state=selected]:bg-muted flex flex-col gap-2 rounded-xl border border-border/60 p-3"
           >
             <div className="flex items-start gap-2.5">
               <Checkbox
@@ -607,23 +633,8 @@ export function TransactionsTable({
         noun="transaction"
         locale={locale}
         summary={
-          <span className="tabular-nums">
-            Income{" "}
-            <span className="text-success font-medium">
-              {formatCurrency(totals.income, currency, locale)}
-            </span>
-            {" · "}
-            Expenses{" "}
-            <span className="text-foreground font-medium">
-              {formatCurrency(totals.expenses, currency, locale)}
-            </span>
-            {" · "}
-            Net{" "}
-            <span
-              className={cn("font-medium", totals.net < 0 ? "text-destructive" : "text-success")}
-            >
-              {formatCurrency(totals.net, currency, locale)}
-            </span>
+          <span className="text-muted-foreground tabular-nums">
+            {totalCount.toLocaleString(locale)} matching
           </span>
         }
       />

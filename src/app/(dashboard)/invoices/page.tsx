@@ -13,7 +13,7 @@ import {
   StatRowSkeleton,
   TableCardSkeleton,
 } from "@/components/dashboard/section-skeletons";
-import { StatCard } from "@/components/dashboard/stat-card";
+import { StatCard, StatRow } from "@/components/dashboard/stat-card";
 import { InvoicesTable } from "@/components/invoices/invoices-table";
 import { InvoicesToolbar } from "@/components/invoices/invoices-toolbar";
 import {
@@ -99,11 +99,11 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 space-y-1">
           <PageHeading>Invoices</PageHeading>
           <p className="text-muted-foreground text-sm">
-            Upload documents, review extracted data and track what needs to be paid.
+            What you owe, and what is already paid.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -115,7 +115,7 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
       <Suspense
         fallback={
           <>
-            <StatRowSkeleton />
+            <StatRowSkeleton hero />
             <TableCardSkeleton />
           </>
         }
@@ -188,12 +188,13 @@ async function InvoicesContent({ ctx, params }: { ctx: WorkspaceContext; params:
 
   return (
     <>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <StatRow>
         <StatCard
           title="Outstanding"
           value={formatCurrency(outstanding, currency, locale)}
           hint={`${unpaidAggregate._count} unpaid invoice${unpaidAggregate._count === 1 ? "" : "s"}`}
           icon={ReceiptTextIcon}
+          emphasis="hero"
         />
         <StatCard
           title="Overdue"
@@ -215,11 +216,11 @@ async function InvoicesContent({ ctx, params }: { ctx: WorkspaceContext; params:
           icon={CheckCircle2Icon}
           tone="positive"
         />
-      </div>
+      </StatRow>
 
       {reminders.overdue.length > 0 && params.status !== "OVERDUE" && (
         <Link href="/invoices?status=OVERDUE">
-          <div className="border-destructive/30 bg-destructive/5 text-destructive-tinted flex items-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium transition-colors hover:bg-destructive/10">
+          <div className="border-destructive/30 bg-destructive/5 text-destructive-tinted flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors hover:bg-destructive/10">
             <AlertTriangleIcon className="size-4 shrink-0" />
             {reminders.overdue.length === 1
               ? "1 invoice is overdue"

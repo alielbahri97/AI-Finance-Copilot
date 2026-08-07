@@ -51,10 +51,10 @@ export default async function AdminPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
+      <div className="space-y-1">
         <PageHeading>Admin</PageHeading>
         <p className="text-muted-foreground text-sm">
-          Users, subscriptions and product analytics.
+          Users, plans, and product analytics.
         </p>
       </div>
 

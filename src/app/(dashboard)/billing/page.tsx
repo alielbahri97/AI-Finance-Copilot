@@ -34,7 +34,6 @@ import {
 } from "@/lib/billing/plans";
 import { getReferralStats } from "@/lib/billing/referrals";
 import { getStripe, isBillingConfigured } from "@/lib/billing/stripe";
-import { editionBranding } from "@/lib/branding";
 import { getAppUrl } from "@/lib/env-url";
 import { logger, serializeError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
@@ -122,11 +121,11 @@ export default async function BillingPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 space-y-1">
           <PageHeading>Billing</PageHeading>
           <p className="text-muted-foreground text-sm">
-            {editionBranding(edition).name} — your plan, usage and invoices, all in one place.
+            Your plan, usage, and invoices.
           </p>
         </div>
         <PortalButton disabled={!billingConfigured || !entitlements.hasStripeCustomer} />

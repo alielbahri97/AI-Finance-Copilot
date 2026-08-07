@@ -63,10 +63,10 @@ export default async function CategoriesPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
+      <div className="space-y-1">
         <PageHeading>Categories</PageHeading>
         <p className="text-muted-foreground text-sm">
-          Organize your spending with categories and auto-categorization rules.
+          Labels for your spending, plus rules that apply them for you.
         </p>
       </div>
 

@@ -59,15 +59,15 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 space-y-1">
           <PageHeading>
             {counterparties ? "Executive reports" : "Reports"}
           </PageHeading>
           <p className="text-muted-foreground text-sm">
             {counterparties
-              ? `KPIs, trends and exports for ${period.label}.`
-              : `Where your money went, and what you kept, for ${period.label}.`}
+              ? `Your numbers for ${period.label}.`
+              : `Where your money went in ${period.label}.`}
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-4">

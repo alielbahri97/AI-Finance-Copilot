@@ -73,7 +73,7 @@ export function PlanCards({ plans, currentPlanId, isTrial, billingConfigured }: 
         return (
           <Card
             key={plan.id}
-            className={cn("flex flex-col", isCurrent && "border-primary shadow-sm")}
+            className={cn("flex flex-col", isCurrent && "border-primary shadow-xs")}
           >
             <CardHeader>
               <div className="flex items-center justify-between gap-2">

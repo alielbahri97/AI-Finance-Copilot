@@ -33,11 +33,11 @@ export default async function HelpPage() {
 
   return (
     <div className="flex min-h-[28rem] flex-1 flex-col gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="space-y-1">
           <PageHeading>Help & support</PageHeading>
           <p className="text-muted-foreground text-sm">
-            Ask how to do anything in the app and get step-by-step instructions.
+            How to do anything in Ballast, step by step.
           </p>
         </div>
         <p className="text-muted-foreground flex items-center gap-1.5 text-sm">
@@ -49,7 +49,7 @@ export default async function HelpPage() {
         </p>
       </div>
 
-      <div className="bg-card min-h-0 flex-1 rounded-xl border shadow-sm">
+      <div className="bg-card min-h-0 flex-1 rounded-xl border border-border/60 shadow-xs">
         <HelpChat initialMessages={messages} edition={edition} />
       </div>
     </div>

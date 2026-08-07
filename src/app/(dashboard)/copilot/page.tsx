@@ -74,7 +74,7 @@ export default async function CopilotPage({
       <div>
         <PageHeading>AI Copilot</PageHeading>
         <p className="text-muted-foreground text-sm">
-          A financial assistant grounded in your transactions, trends and forecasts.
+          Ask about your money — grounded in your own data.
         </p>
       </div>
       <CopilotShell

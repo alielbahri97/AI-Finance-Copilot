@@ -249,7 +249,7 @@ export function CopilotChat({
   const lastPrompt = [...messages].reverse().find((message) => message.role === "USER")?.content;
 
   return (
-    <div className="bg-card flex h-full min-h-0 flex-col rounded-xl border shadow-sm">
+    <div className="bg-card flex h-full min-h-0 flex-col rounded-xl border border-border/60 shadow-xs">
       <div className="flex items-center justify-between border-b px-4 py-3">
         <div className="flex items-center gap-2 text-sm font-medium">
           <div className="bg-primary text-primary-foreground flex size-7 items-center justify-center rounded-lg">

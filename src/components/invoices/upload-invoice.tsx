@@ -125,10 +125,10 @@ export function UploadInvoice() {
               handleFile(event.dataTransfer.files?.[0]);
             }}
             className={cn(
-              "flex w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed px-6 py-12 text-center transition-colors",
+              "flex w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border/60 px-6 py-12 text-center shadow-xs transition-colors",
               isDragging
                 ? "border-primary bg-accent/60"
-                : "border-border hover:border-primary/50 hover:bg-accent/30",
+                : "hover:border-primary/50 hover:bg-accent/30",
               isUploading && "pointer-events-none opacity-60"
             )}
             aria-label="Upload an invoice document"

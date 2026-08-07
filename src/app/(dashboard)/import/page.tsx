@@ -39,11 +39,10 @@ export default async function ImportPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
+      <div className="space-y-1">
         <PageHeading>Import bank statement</PageHeading>
         <p className="text-muted-foreground text-sm">
-          Upload a CSV, Excel, PDF or MT940 export from your bank. Duplicates are skipped
-          automatically and every import can be undone.
+          Upload a statement. Duplicates are skipped, and every import can be undone.
         </p>
       </div>
 

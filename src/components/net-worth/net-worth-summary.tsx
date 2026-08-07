@@ -41,7 +41,7 @@ export function NetWorthSummaryCard({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className="text-3xl font-bold tracking-tight tabular-nums">
+          <span className="text-4xl font-bold tracking-tight tabular-nums sm:text-5xl">
             {money(position.netWorth)}
           </span>
           {trend.monthChange !== null && trend.monthChange !== 0 ? (

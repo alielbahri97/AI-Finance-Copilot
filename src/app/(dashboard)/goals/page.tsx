@@ -71,11 +71,10 @@ function toCardData(detail: GoalDetail): GoalCardData {
 
 function PageHeader() {
   return (
-    <div>
+    <div className="space-y-1">
       <PageHeading>Savings goals</PageHeading>
       <p className="text-muted-foreground text-sm">
-        What you are saving for, how far along you are, and when you get there at the rate you
-        are actually saving.
+        What you are saving for, and how far along you are.
       </p>
     </div>
   );
