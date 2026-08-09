@@ -70,13 +70,21 @@ describe("feedback preferences", () => {
   it("vibrates for tap when haptics are enabled", async () => {
     const { feedback } = await load();
     feedback.tap();
-    expect(vibrate).toHaveBeenCalledWith(8);
+    expect(vibrate).toHaveBeenCalledWith(4);
   });
 
   it("skips vibration when haptics are disabled", async () => {
     const { feedback, setFeedbackPreference } = await load();
     setFeedbackPreference("haptics", false);
     feedback.tap();
+    expect(vibrate).not.toHaveBeenCalled();
+  });
+
+  it("respects prefs updated before the feedback call in the same turn", async () => {
+    const { feedback, setFeedbackPreference } = await load();
+    setFeedbackPreference("haptics", false);
+    // Mirrors Switch calling the consumer first, then feedback.toggle().
+    feedback.toggle();
     expect(vibrate).not.toHaveBeenCalled();
   });
 });

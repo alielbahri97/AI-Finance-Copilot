@@ -22,13 +22,13 @@ const STORAGE_KEYS = {
 } as const;
 
 const VIBRATE: Record<FeedbackKind, number | number[]> = {
-  tap: 8,
-  select: 10,
-  toggle: 8,
-  success: [12, 36, 18],
-  error: [36, 28, 36],
-  warning: 22,
-  celebration: [14, 40, 14, 40, 28],
+  tap: 4,
+  select: 5,
+  toggle: 4,
+  success: [6, 18, 9],
+  error: [18, 14, 18],
+  warning: 11,
+  celebration: [7, 20, 7, 20, 14],
 };
 
 type Tone = { freq: number; duration: number; gain: number; type?: OscillatorType; delay?: number };

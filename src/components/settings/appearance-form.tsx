@@ -77,9 +77,12 @@ export function AppearanceForm() {
           <Switch
             id="feedback-sound"
             checked={mounted ? sound : true}
+            withFeedback={false}
             onCheckedChange={(checked) => {
               setFeedbackPreference("sound", checked);
               setSound(checked);
+              // Preview only after the pref is on — and skip Switch's own tick so
+              // turning sound off does not still chirp.
               if (checked) feedback.success();
             }}
           />
@@ -94,6 +97,7 @@ export function AppearanceForm() {
           <Switch
             id="feedback-haptics"
             checked={mounted ? haptics : true}
+            withFeedback={false}
             onCheckedChange={(checked) => {
               setFeedbackPreference("haptics", checked);
               setHaptics(checked);

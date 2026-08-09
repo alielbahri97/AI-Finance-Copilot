@@ -9,8 +9,12 @@ import { cn } from "@/lib/utils";
 function Switch({
   className,
   onCheckedChange,
+  withFeedback = true,
   ...props
-}: React.ComponentProps<typeof SwitchPrimitive.Root>) {
+}: React.ComponentProps<typeof SwitchPrimitive.Root> & {
+  /** Soft tick on change. Set false when the caller plays its own cue after updating prefs. */
+  withFeedback?: boolean;
+}) {
   return (
     <SwitchPrimitive.Root
       data-slot="switch"
@@ -20,10 +24,18 @@ function Switch({
       )}
       {...props}
       onCheckedChange={(checked) => {
-        feedback.toggle();
+        // Consumer first so preference toggles can persist before any cue runs.
         onCheckedChange?.(checked);
+        if (withFeedback) feedback.toggle();
       }}
-    />
+    >
+      <SwitchPrimitive.Thumb
+        data-slot="switch-thumb"
+        className={cn(
+          "bg-background dark:data-[state=unchecked]:bg-foreground dark:data-[state=checked]:bg-primary-foreground pointer-events-none block size-4 rounded-full ring-0 transition-transform data-[state=checked]:translate-x-[calc(100%-2px)] data-[state=unchecked]:translate-x-0"
+        )}
+      />
+    </SwitchPrimitive.Root>
   );
 }
 

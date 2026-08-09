@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { feedback } from "@/lib/feedback";
 
 export type CelebrationVariant = "enterprise" | "welcome";
 
@@ -55,6 +56,7 @@ export function WelcomeCelebration({ variant, onDone }: Props) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    feedback.celebration();
     const { stop } = runCelebration(canvas);
     return stop;
   }, []);
