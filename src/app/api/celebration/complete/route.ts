@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 
 import { apiError } from "@/lib/api/response";
-import { isCompedEnterpriseEmail } from "@/lib/billing/plan-overrides";
 import { getOrCreateProfile } from "@/lib/data";
 import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 
 /**
- * Marks the complimentary Enterprise celebration as seen.
+ * Marks the one-shot welcome/Enterprise celebration as seen for any member.
  * Idempotent: a second call is a no-op success.
  */
 export async function POST() {
@@ -18,31 +17,28 @@ export async function POST() {
     }
 
     const profile = await getOrCreateProfile(user);
-    if (!isCompedEnterpriseEmail(profile.email)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
 
-    if (profile.enterprisePromoSeenAt) {
+    if (profile.celebrationSeenAt) {
       return NextResponse.json({
-        enterprisePromoSeenAt: profile.enterprisePromoSeenAt.toISOString(),
+        celebrationSeenAt: profile.celebrationSeenAt.toISOString(),
         alreadyDone: true,
       });
     }
 
     const updated = await prisma.profile.update({
       where: { id: user.id },
-      data: { enterprisePromoSeenAt: new Date() },
-      select: { enterprisePromoSeenAt: true },
+      data: { celebrationSeenAt: new Date() },
+      select: { celebrationSeenAt: true },
     });
 
     return NextResponse.json({
-      enterprisePromoSeenAt: updated.enterprisePromoSeenAt!.toISOString(),
+      celebrationSeenAt: updated.celebrationSeenAt!.toISOString(),
       alreadyDone: false,
     });
   } catch (error) {
     return apiError(
-      "POST /api/billing/enterprise-promo/complete",
-      "Failed to complete enterprise promo",
+      "POST /api/celebration/complete",
+      "Failed to complete celebration",
       error
     );
   }

@@ -1,6 +1,6 @@
 /**
- * Full-viewport Enterprise celebration particles.
- * Multi-origin bursts + falling gems/sparkles; respects prefers-reduced-motion.
+ * Full-viewport celebration particles (gems, confetti, sparkles).
+ * Multi-origin bursts + falling rain; respects prefers-reduced-motion.
  */
 
 export type ParticleKind = "confetti" | "gem" | "sparkle" | "ribbon";
@@ -246,7 +246,7 @@ export type CelebrationHandle = {
  * Runs a ~3.5s multi-wave celebration on a full-viewport canvas.
  * Particles are pointer-events-none via CSS on the canvas element.
  */
-export function runEnterpriseCelebration(canvas: HTMLCanvasElement): CelebrationHandle {
+export function runCelebration(canvas: HTMLCanvasElement): CelebrationHandle {
   const ctx = canvas.getContext("2d");
   if (!ctx) return { stop: () => {} };
 

@@ -93,8 +93,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
         <HelpLauncher edition={editionForWorkspaceType(ctx.workspace.type)} />
         <FirstRunPrompts
           tourCompleted={isProductTourDone(profile)}
-          showEnterprisePromo={
-            isCompedEnterpriseEmail(profile.email) && !profile.enterprisePromoSeenAt
+          showCelebration={!profile.celebrationSeenAt}
+          celebrationVariant={
+            isCompedEnterpriseEmail(profile.email) ? "enterprise" : "welcome"
           }
           edition={editionForWorkspaceType(ctx.workspace.type)}
         />
