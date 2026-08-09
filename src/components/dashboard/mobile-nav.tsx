@@ -10,6 +10,7 @@ import { navSectionsFor, tabBarItemsFor } from "@/components/dashboard/nav-items
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { BRAND } from "@/lib/branding";
+import { feedback } from "@/lib/feedback";
 import type { WorkspaceType } from "@/lib/workspace/editions";
 import { cn } from "@/lib/utils";
 
@@ -49,7 +50,10 @@ function NavSheet({
                   <Link
                     key={item.href}
                     href={item.href}
-                    onClick={() => setOpen(false)}
+                    onClick={() => {
+                      feedback.select();
+                      setOpen(false);
+                    }}
                     aria-current={isActive ? "page" : undefined}
                     className={cn(
                       "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-[color,background-color,box-shadow] duration-150",
@@ -105,6 +109,7 @@ export function MobileTabBar({ isAdmin = false, workspaceType }: MobileNavProps)
           <Link
             key={item.href}
             href={item.href}
+            onClick={() => feedback.select()}
             aria-current={isActive ? "page" : undefined}
             className={cn(
               "text-2xs flex flex-1 flex-col items-center gap-0.5 px-1 py-2 font-medium transition-colors duration-150",
@@ -129,6 +134,7 @@ export function MobileTabBar({ isAdmin = false, workspaceType }: MobileNavProps)
         trigger={
           <button
             type="button"
+            onClick={() => feedback.select()}
             className={cn(
               "text-2xs flex flex-1 cursor-pointer flex-col items-center gap-0.5 px-1 py-2 font-medium transition-colors",
               onTabRoute ? "text-muted-foreground hover:text-foreground" : "text-primary"

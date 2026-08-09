@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { BugIcon, LogOutIcon, SettingsIcon, UserIcon } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 import { ReportIssueButton } from "@/components/report-issue/report-issue-button";
 

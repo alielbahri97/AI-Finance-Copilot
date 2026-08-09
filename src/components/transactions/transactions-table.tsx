@@ -11,7 +11,7 @@ import {
   SearchXIcon,
   Trash2Icon,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 import { TransactionCategorizeSheet } from "@/components/transactions/transaction-categorize-sheet";
 import { TransactionDialog } from "@/components/transactions/transaction-dialog";

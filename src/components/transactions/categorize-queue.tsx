@@ -11,7 +11,7 @@ import {
   SparklesIcon,
   TagsIcon,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 import {
   TEACH_SESSION_SIZE,

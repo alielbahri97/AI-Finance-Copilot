@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { FileSpreadsheetIcon, Loader2Icon, UploadCloudIcon } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 import {
   ACCEPTED_FORMATS_SENTENCE,

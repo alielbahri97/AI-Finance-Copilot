@@ -16,6 +16,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import type { buttonVariants } from "@/components/ui/button";
+import { feedback } from "@/lib/feedback";
 
 interface ConfirmDialogProps {
   title: React.ReactNode;
@@ -59,6 +60,7 @@ export function ConfirmDialog({
 
   async function handleConfirm(event: React.MouseEvent<HTMLButtonElement>) {
     event.preventDefault();
+    feedback.tap();
     setPending(true);
     try {
       await onConfirm();

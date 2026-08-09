@@ -15,7 +15,7 @@ import {
   TriangleAlertIcon,
   UserIcon,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 import { Markdown } from "@/components/copilot/markdown-lazy";
 import { Button } from "@/components/ui/button";

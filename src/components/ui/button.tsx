@@ -1,7 +1,10 @@
+"use client";
+
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 
+import { feedback } from "@/lib/feedback";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
@@ -40,6 +43,8 @@ function Button({
   variant,
   size,
   asChild = false,
+  onPointerDown,
+  disabled,
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
@@ -51,7 +56,16 @@ function Button({
     <Comp
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
+      disabled={disabled}
       {...props}
+      onPointerDown={(event) => {
+        // Soft tick on press — skip links and disabled controls so the cue
+        // stays tied to real actions, like Revolut's button haptics.
+        if (!disabled && variant !== "link" && event.button === 0) {
+          feedback.tap();
+        }
+        onPointerDown?.(event);
+      }}
     />
   );
 }

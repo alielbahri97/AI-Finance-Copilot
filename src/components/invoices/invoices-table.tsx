@@ -11,7 +11,7 @@ import {
   SearchXIcon,
   UndoIcon,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 import { InvoiceStatusBadge } from "@/components/invoices/status-badge";
 import { UploadInvoice } from "@/components/invoices/upload-invoice";

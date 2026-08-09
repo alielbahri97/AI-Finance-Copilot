@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckIcon, Trash2Icon, UndoIcon } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 import { RemindCustomerDialog } from "@/components/invoices/remind-customer-dialog";
 import { Button } from "@/components/ui/button";

@@ -10,7 +10,7 @@ import {
   Loader2Icon,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 import { PersonalRecommendationList } from "@/components/onboarding/personal-recommendation-list";
 import { Button } from "@/components/ui/button";

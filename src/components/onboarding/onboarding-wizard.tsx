@@ -15,7 +15,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 import { RecommendationList } from "@/components/onboarding/recommendation-list";
 import { Button } from "@/components/ui/button";

@@ -3,6 +3,7 @@
 import * as React from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 
+import { feedback } from "@/lib/feedback";
 import { cn } from "@/lib/utils";
 
 function Tabs({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Root>) {
@@ -28,7 +29,11 @@ function TabsList({ className, ...props }: React.ComponentProps<typeof TabsPrimi
   );
 }
 
-function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
+function TabsTrigger({
+  className,
+  onPointerDown,
+  ...props
+}: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
   return (
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
@@ -37,6 +42,10 @@ function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsPr
         className
       )}
       {...props}
+      onPointerDown={(event) => {
+        if (!props.disabled && event.button === 0) feedback.select();
+        onPointerDown?.(event);
+      }}
     />
   );
 }

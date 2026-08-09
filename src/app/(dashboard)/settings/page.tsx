@@ -234,7 +234,9 @@ export default async function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Appearance</CardTitle>
-          <CardDescription>Choose how {BRAND.name} looks on this device.</CardDescription>
+          <CardDescription>
+            Theme, sounds, and vibration on this device.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <AppearanceForm />
