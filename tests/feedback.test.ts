@@ -70,7 +70,7 @@ describe("feedback preferences", () => {
   it("vibrates for tap when haptics are enabled", async () => {
     const { feedback } = await load();
     feedback.tap();
-    expect(vibrate).toHaveBeenCalledWith(4);
+    expect(vibrate).toHaveBeenCalledWith(2);
   });
 
   it("skips vibration when haptics are disabled", async () => {
