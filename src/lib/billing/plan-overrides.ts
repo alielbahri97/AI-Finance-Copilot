@@ -15,6 +15,7 @@ import type { PlanId } from "./plans";
 const COMPED_ENTERPRISE_EMAILS = new Set([
   "dimitrsspirakis@gmail.com",
   "nour.bahri@icloud.com",
+  "alihbahri@gmail.com",
 ]);
 
 export function normalizeBillingEmail(email: string | null | undefined): string | null {
