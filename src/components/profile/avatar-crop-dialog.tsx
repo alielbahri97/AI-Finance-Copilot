@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Cropper, { type Area } from "react-easy-crop";
 import { Loader2Icon } from "lucide-react";
 import { toast } from "@/lib/toast";
@@ -17,6 +17,7 @@ import {
 import { getCroppedImageBlob } from "@/lib/avatars/crop-image";
 
 interface AvatarCropDialogProps {
+  /** Local object URL for the selected photo. */
   imageSrc: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -36,23 +37,39 @@ export function AvatarCropDialog({
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+  const croppedAreaRef = useRef<Area | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  // Delay mounting the Cropper until the dialog has opened so its container
+  // has a real size (Radix animates from scale 0.95 → 1).
+  const [cropperReady, setCropperReady] = useState(false);
 
-  const onCropComplete = useCallback((_: Area, pixels: Area) => {
+  useEffect(() => {
+    if (!open) {
+      setCropperReady(false);
+      return;
+    }
+    const id = window.setTimeout(() => setCropperReady(true), 50);
+    return () => window.clearTimeout(id);
+  }, [open]);
+
+  const onCropAreaChange = useCallback((_: Area, pixels: Area) => {
+    croppedAreaRef.current = pixels;
     setCroppedAreaPixels(pixels);
   }, []);
 
   function resetCropState() {
     setCrop({ x: 0, y: 0 });
     setZoom(1);
+    croppedAreaRef.current = null;
     setCroppedAreaPixels(null);
   }
 
   async function handleSave() {
-    if (!imageSrc || !croppedAreaPixels || isSaving) return;
+    const pixels = croppedAreaRef.current ?? croppedAreaPixels;
+    if (!imageSrc || !pixels || isSaving) return;
     setIsSaving(true);
     try {
-      const blob = await getCroppedImageBlob(imageSrc, croppedAreaPixels);
+      const blob = await getCroppedImageBlob(imageSrc, pixels);
       const file = new File([blob], "avatar.jpg", { type: "image/jpeg" });
       await onCropped(file);
       onOpenChange(false);
@@ -73,7 +90,11 @@ export function AvatarCropDialog({
         if (!next) resetCropState();
       }}
     >
-      <DialogContent className="sm:max-w-md" showCloseButton={!isSaving}>
+      <DialogContent
+        className="sm:max-w-md"
+        showCloseButton={!isSaving}
+        onOpenAutoFocus={(event) => event.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>Crop photo</DialogTitle>
           <DialogDescription>
@@ -82,7 +103,7 @@ export function AvatarCropDialog({
         </DialogHeader>
 
         <div className="relative h-72 w-full overflow-hidden rounded-md bg-muted">
-          {imageSrc ? (
+          {imageSrc && cropperReady ? (
             <Cropper
               image={imageSrc}
               crop={crop}
@@ -91,7 +112,8 @@ export function AvatarCropDialog({
               cropShape="round"
               showGrid={false}
               onCropChange={setCrop}
-              onCropComplete={onCropComplete}
+              onCropComplete={onCropAreaChange}
+              onCropAreaChange={onCropAreaChange}
               onZoomChange={setZoom}
             />
           ) : null}
@@ -123,7 +145,11 @@ export function AvatarCropDialog({
           >
             Cancel
           </Button>
-          <Button type="button" disabled={isSaving || !croppedAreaPixels} onClick={() => void handleSave()}>
+          <Button
+            type="button"
+            disabled={isSaving || !croppedAreaPixels}
+            onClick={() => void handleSave()}
+          >
             {isSaving ? <Loader2Icon className="animate-spin" /> : null}
             Save photo
           </Button>

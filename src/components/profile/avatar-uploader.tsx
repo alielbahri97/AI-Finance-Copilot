@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2Icon, Trash2Icon, UploadIcon } from "lucide-react";
 import { toast } from "@/lib/toast";
@@ -32,15 +32,26 @@ export function AvatarUploader({ email, fullName, avatarUrl }: AvatarUploaderPro
   const [cropOpen, setCropOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
+  // Keep the live object URL in a ref so cleanup always revokes the right one.
+  const cropSrcRef = useRef<string | null>(null);
 
   const displayUrl = previewUrl ?? avatarUrl;
   const busy = isUploading || isRemoving;
   const hasPhoto = Boolean(displayUrl);
 
-  function revokeCropSrc() {
-    if (cropSrc) URL.revokeObjectURL(cropSrc);
+  function clearCropSrc() {
+    if (cropSrcRef.current) {
+      URL.revokeObjectURL(cropSrcRef.current);
+      cropSrcRef.current = null;
+    }
     setCropSrc(null);
   }
+
+  useEffect(() => {
+    return () => {
+      if (cropSrcRef.current) URL.revokeObjectURL(cropSrcRef.current);
+    };
+  }, []);
 
   function handleFilePick(file: File | undefined) {
     if (!file || busy) return;
@@ -60,8 +71,9 @@ export function AvatarUploader({ email, fullName, avatarUrl }: AvatarUploaderPro
       return;
     }
 
-    revokeCropSrc();
+    clearCropSrc();
     const objectUrl = URL.createObjectURL(file);
+    cropSrcRef.current = objectUrl;
     setCropSrc(objectUrl);
     setCropOpen(true);
     if (inputRef.current) inputRef.current.value = "";
@@ -79,18 +91,20 @@ export function AvatarUploader({ email, fullName, avatarUrl }: AvatarUploaderPro
       if (!response.ok) {
         toast.error("Upload failed", { description: body?.error ?? "Try again." });
         setPreviewUrl(null);
+        URL.revokeObjectURL(localPreview);
         return;
       }
+      const nextUrl = typeof body?.avatarUrl === "string" ? body.avatarUrl : null;
+      setPreviewUrl(nextUrl);
+      URL.revokeObjectURL(localPreview);
       toast.success("Avatar updated");
-      setPreviewUrl(typeof body?.avatarUrl === "string" ? body.avatarUrl : null);
       router.refresh();
     } catch {
       toast.error("Network error", { description: "Please try again." });
       setPreviewUrl(null);
+      URL.revokeObjectURL(localPreview);
     } finally {
       setIsUploading(false);
-      URL.revokeObjectURL(localPreview);
-      revokeCropSrc();
     }
   }
 
@@ -163,7 +177,8 @@ export function AvatarUploader({ email, fullName, avatarUrl }: AvatarUploaderPro
         open={cropOpen}
         onOpenChange={(open) => {
           setCropOpen(open);
-          if (!open) revokeCropSrc();
+          // Only revoke after the dialog closes so Save can still read the blob.
+          if (!open) clearCropSrc();
         }}
         onCropped={uploadCroppedFile}
       />

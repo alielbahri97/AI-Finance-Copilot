@@ -4,11 +4,23 @@ const DEFAULT_OUTPUT_SIZE = 512;
 const DEFAULT_MIME = "image/jpeg";
 const DEFAULT_QUALITY = 0.92;
 
+type DrawableImage = CanvasImageSource & { width: number; height: number };
+
 /**
- * Loads an image from a blob URL / data URL. Rejects if the browser cannot
- * decode it (corrupt file, unsupported format).
+ * Loads an image from a blob URL / data URL. Prefers `createImageBitmap` so
+ * EXIF orientation from phone cameras is applied before cropping.
  */
-function loadImage(src: string): Promise<HTMLImageElement> {
+async function loadImage(src: string): Promise<DrawableImage> {
+  try {
+    const response = await fetch(src);
+    const blob = await response.blob();
+    if (typeof createImageBitmap === "function") {
+      return await createImageBitmap(blob);
+    }
+  } catch {
+    // Fall through to HTMLImageElement.
+  }
+
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.addEventListener("load", () => resolve(image));
@@ -59,6 +71,10 @@ export async function getCroppedImageBlob(
     size,
     size
   );
+
+  if ("close" in image && typeof image.close === "function") {
+    image.close();
+  }
 
   return new Promise((resolve, reject) => {
     canvas.toBlob(
