@@ -171,12 +171,9 @@ export function SessionLockScreen({ email, userId, onUnlocked }: SessionLockScre
       role="dialog"
       aria-modal="true"
       aria-labelledby="session-lock-title"
+      data-testid="session-lock-screen"
       className="bg-background/95 fixed inset-0 z-[100] flex flex-col items-center justify-center gap-8 overflow-y-auto px-4 py-10 backdrop-blur-md"
     >
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,oklch(0.5_0.22_255/0.08),transparent_55%)] dark:bg-[radial-gradient(ellipse_at_top,oklch(0.57_0.19_255/0.14),transparent_50%)]"
-      />
       <BallastLogo />
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center gap-2 text-center">

@@ -1,5 +1,5 @@
 /**
- * Soft session lock (Revolut-style): after the tab/app is hidden long enough,
+ * Soft session lock (Revolut-style): after the tab/app is inactive long enough,
  * the UI requires passkey or password before showing authenticated content again.
  *
  * The Supabase session cookie stays intact — this is an app lock, not a full
@@ -17,7 +17,7 @@ function defaultStorage(): SessionLockStorage | null {
   return typeof window !== "undefined" ? window.sessionStorage : null;
 }
 
-/** True when the user has been away (hidden) for at least `thresholdMs`. */
+/** True when the user has been away (inactive) for at least `thresholdMs`. */
 export function shouldLockAfterHidden(input: {
   hiddenAt: number | null;
   now: number;
@@ -27,6 +27,18 @@ export function shouldLockAfterHidden(input: {
   if (hiddenAt == null || !Number.isFinite(hiddenAt) || hiddenAt <= 0) return false;
   if (!Number.isFinite(now)) return false;
   return now - hiddenAt >= thresholdMs;
+}
+
+/** Ms until the lock should engage, or 0 if already due. Null when not inactive. */
+export function msUntilSessionLock(input: {
+  hiddenAt: number | null;
+  now: number;
+  thresholdMs?: number;
+}): number | null {
+  const { hiddenAt, now, thresholdMs = SESSION_LOCK_AFTER_MS } = input;
+  if (hiddenAt == null || !Number.isFinite(hiddenAt) || hiddenAt <= 0) return null;
+  if (!Number.isFinite(now)) return null;
+  return Math.max(0, thresholdMs - (now - hiddenAt));
 }
 
 export function readSessionLockFlag(
@@ -79,6 +91,18 @@ export function readSessionLockHiddenAt(
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   } catch {
     return null;
+  }
+}
+
+/** Drop the inactivity timestamp without clearing an already-engaged lock flag. */
+export function clearSessionLockHiddenAt(
+  storage: SessionLockStorage | null = defaultStorage()
+): void {
+  if (!storage) return;
+  try {
+    storage.removeItem(SESSION_LOCK_HIDDEN_AT_KEY);
+  } catch {
+    // Private mode / blocked storage — ignore.
   }
 }
 

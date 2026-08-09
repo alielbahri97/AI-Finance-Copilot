@@ -1,10 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   SESSION_LOCK_AFTER_MS,
   SESSION_LOCK_FLAG_KEY,
   SESSION_LOCK_HIDDEN_AT_KEY,
   clearSessionLock,
+  clearSessionLockHiddenAt,
+  msUntilSessionLock,
   readSessionLockFlag,
   readSessionLockHiddenAt,
   shouldLockAfterHidden,
@@ -74,6 +76,32 @@ describe("shouldLockAfterHidden", () => {
   });
 });
 
+describe("msUntilSessionLock", () => {
+  const hiddenAt = 1_000_000;
+
+  it("returns null when inactive timestamp is missing", () => {
+    expect(msUntilSessionLock({ hiddenAt: null, now: hiddenAt })).toBeNull();
+  });
+
+  it("returns remaining ms before the threshold", () => {
+    expect(
+      msUntilSessionLock({
+        hiddenAt,
+        now: hiddenAt + 2_500,
+      })
+    ).toBe(SESSION_LOCK_AFTER_MS - 2_500);
+  });
+
+  it("returns 0 once the threshold has passed", () => {
+    expect(
+      msUntilSessionLock({
+        hiddenAt,
+        now: hiddenAt + SESSION_LOCK_AFTER_MS + 100,
+      })
+    ).toBe(0);
+  });
+});
+
 describe("session lock storage helpers", () => {
   it("persists and clears the locked flag", () => {
     const storage = memoryStorage();
@@ -90,5 +118,50 @@ describe("session lock storage helpers", () => {
     expect(readSessionLockFlag(storage)).toBe(false);
     expect(storage.getItem(SESSION_LOCK_FLAG_KEY)).toBeNull();
     expect(storage.getItem(SESSION_LOCK_HIDDEN_AT_KEY)).toBeNull();
+  });
+
+  it("can clear only the hidden timestamp while keeping the lock flag", () => {
+    const storage = memoryStorage();
+    writeSessionLockFlag(true, storage);
+    writeSessionLockHiddenAt(99, storage);
+
+    clearSessionLockHiddenAt(storage);
+
+    expect(readSessionLockFlag(storage)).toBe(true);
+    expect(readSessionLockHiddenAt(storage)).toBeNull();
+  });
+});
+
+describe("inactivity arm/resolve timing (simulated)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("engages after the threshold while still inactive", () => {
+    vi.useFakeTimers();
+    const storage = memoryStorage();
+    const start = 5_000_000;
+    vi.setSystemTime(start);
+
+    writeSessionLockHiddenAt(start, storage);
+    const wait = msUntilSessionLock({
+      hiddenAt: readSessionLockHiddenAt(storage),
+      now: Date.now(),
+    });
+    expect(wait).toBe(SESSION_LOCK_AFTER_MS);
+
+    let locked = false;
+    const timer = setTimeout(() => {
+      writeSessionLockFlag(true, storage);
+      locked = true;
+    }, wait!);
+
+    vi.advanceTimersByTime(SESSION_LOCK_AFTER_MS - 1);
+    expect(locked).toBe(false);
+
+    vi.advanceTimersByTime(1);
+    expect(locked).toBe(true);
+    expect(readSessionLockFlag(storage)).toBe(true);
+    clearTimeout(timer);
   });
 });
