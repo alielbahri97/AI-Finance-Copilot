@@ -107,8 +107,15 @@ const SECTION_LABELS: Record<NavSectionId, string> = {
   account: "Account",
 };
 
-/** Reachable in one tap from the mobile tab bar; the rest live behind More. */
-const TAB_BAR_HREFS = ["/dashboard", "/transactions", "/copilot"];
+/**
+ * Reachable in one tap from the mobile tab bar; the rest live behind More.
+ * Personal swaps Copilot for Budgets — the everyday personal destination —
+ * so the bar never looks empty after filtering edition-only routes.
+ */
+const TAB_BAR_HREFS: Record<WorkspaceType, readonly string[]> = {
+  BUSINESS: ["/dashboard", "/transactions", "/copilot"],
+  PERSONAL: ["/dashboard", "/transactions", "/budgets"],
+};
 
 export function navItemsFor(type: WorkspaceType, isAdmin = false): NavItem[] {
   const items = NAV_ITEMS.filter(
@@ -130,5 +137,5 @@ export function navSectionsFor(type: WorkspaceType, isAdmin = false): NavSection
 
 export function tabBarItemsFor(type: WorkspaceType): NavItem[] {
   const items = navItemsFor(type);
-  return TAB_BAR_HREFS.flatMap((href) => items.filter((item) => item.href === href));
+  return TAB_BAR_HREFS[type].flatMap((href) => items.filter((item) => item.href === href));
 }

@@ -45,7 +45,7 @@ function NavSheet({
                 {section.label}
               </p>
               {section.items.map((item) => {
-                const isActive = pathname.startsWith(item.href);
+                const isActive = pathMatchesTab(pathname, item.href);
                 return (
                   <Link
                     key={item.href}
@@ -89,22 +89,33 @@ export function MobileNav({ isAdmin = false, workspaceType }: MobileNavProps) {
   );
 }
 
+/** True when `pathname` is this tab or a nested route under it. */
+function pathMatchesTab(pathname: string, href: string): boolean {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 /**
  * Bottom tab bar for the destinations people reach every day. Everything else
  * stays one tap further away, behind More.
+ *
+ * Height is intrinsic (tap row + safe-area padding). We deliberately do NOT
+ * size the bar with `--tab-bar-height`: that variable is zeroed at the `lg`
+ * breakpoint for page clearance, and using it here collapsed the bar to 0px
+ * whenever the clearance media query and `lg:hidden` got out of sync (or
+ * when safe-area was double-counted into both height and padding).
  */
 export function MobileTabBar({ isAdmin = false, workspaceType }: MobileNavProps) {
   const pathname = usePathname();
   const items = tabBarItemsFor(workspaceType);
-  const onTabRoute = items.some((item) => pathname.startsWith(item.href));
+  const onTabRoute = items.some((item) => pathMatchesTab(pathname, item.href));
 
   return (
     <nav
       aria-label="Mobile tabs"
-      className="bg-background/95 fixed inset-x-0 bottom-0 z-40 flex h-[var(--tab-bar-height)] border-t border-border/70 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden"
+      className="bg-background/95 fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-border/70 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur-md lg:hidden"
     >
       {items.map((item) => {
-        const isActive = pathname.startsWith(item.href);
+        const isActive = pathMatchesTab(pathname, item.href);
         return (
           <Link
             key={item.href}
@@ -112,7 +123,7 @@ export function MobileTabBar({ isAdmin = false, workspaceType }: MobileNavProps)
             onClick={() => feedback.select()}
             aria-current={isActive ? "page" : undefined}
             className={cn(
-              "text-2xs flex flex-1 flex-col items-center gap-0.5 px-1 py-2 font-medium transition-colors duration-150",
+              "text-2xs flex h-14 flex-1 flex-col items-center justify-center gap-0.5 px-1 font-medium transition-colors duration-150",
               isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
             )}
           >
@@ -136,7 +147,7 @@ export function MobileTabBar({ isAdmin = false, workspaceType }: MobileNavProps)
             type="button"
             onClick={() => feedback.select()}
             className={cn(
-              "text-2xs flex flex-1 cursor-pointer flex-col items-center gap-0.5 px-1 py-2 font-medium transition-colors",
+              "text-2xs flex h-14 flex-1 cursor-pointer flex-col items-center justify-center gap-0.5 px-1 font-medium transition-colors",
               onTabRoute ? "text-muted-foreground hover:text-foreground" : "text-primary"
             )}
           >

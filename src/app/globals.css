@@ -134,11 +134,11 @@
   --elevation-2xl: 0 32px 64px -12px oklch(0.145 0.02 255 / 0.18);
 
   /*
-   * The mobile tab bar is fixed to the bottom edge, so everything else that
-   * floats there — the page's own bottom padding, the help FAB, the install
-   * prompt — has to know how tall it is. One value, read by all of them,
-   * rather than four hand-tuned `bottom-*` offsets that drift apart the first
-   * time the bar changes height.
+   * Clearance for the fixed mobile tab bar (h-14 tap row + home-indicator
+   * padding). Used by page padding, the help FAB, and the install prompt —
+   * never as the bar's own height. The bar sizes itself intrinsically; this
+   * variable is only "how much room to leave", and is zeroed when the bar is
+   * hidden at `lg`.
    */
   --tab-bar-height: calc(3.5rem + env(safe-area-inset-bottom, 0px));
 }

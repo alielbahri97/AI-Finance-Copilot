@@ -20,7 +20,7 @@ import {
 } from "@/lib/billing/plans";
 import { EDITIONS, editionBranding } from "@/lib/branding";
 import { computeForecast } from "@/lib/finance/forecast";
-import { navItemsFor } from "@/components/dashboard/nav-items";
+import { navItemsFor, tabBarItemsFor } from "@/components/dashboard/nav-items";
 import {
   ALL_EDITION_FEATURES,
   applyEditionPermissions,
@@ -229,6 +229,19 @@ describe("edition navigation", () => {
   it("adds the admin item only for admins", () => {
     expect(navItemsFor("PERSONAL", true).map((item) => item.href)).toContain("/admin");
     expect(navItemsFor("PERSONAL", false).map((item) => item.href)).not.toContain("/admin");
+  });
+
+  it("keeps three mobile tab destinations in both editions", () => {
+    expect(tabBarItemsFor("BUSINESS").map((item) => item.href)).toEqual([
+      "/dashboard",
+      "/transactions",
+      "/copilot",
+    ]);
+    expect(tabBarItemsFor("PERSONAL").map((item) => item.href)).toEqual([
+      "/dashboard",
+      "/transactions",
+      "/budgets",
+    ]);
   });
 });
 
