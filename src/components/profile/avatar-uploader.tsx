@@ -7,6 +7,7 @@ import { toast } from "@/lib/toast";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { AvatarCropDialog } from "@/components/profile/avatar-crop-dialog";
 import { getInitials } from "@/lib/utils";
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -20,13 +21,15 @@ interface AvatarUploaderProps {
 }
 
 /**
- * Profile avatar picker: preview, upload/replace, and remove. Uploads go to
- * POST /api/profile/avatar; remove clears storage + profiles.avatar_url.
+ * Profile avatar picker: pick a photo → crop to a circle → upload. Remove
+ * clears storage + profiles.avatar_url.
  */
 export function AvatarUploader({ email, fullName, avatarUrl }: AvatarUploaderProps) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [cropOpen, setCropOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
 
@@ -34,7 +37,12 @@ export function AvatarUploader({ email, fullName, avatarUrl }: AvatarUploaderPro
   const busy = isUploading || isRemoving;
   const hasPhoto = Boolean(displayUrl);
 
-  async function handleFile(file: File | undefined) {
+  function revokeCropSrc() {
+    if (cropSrc) URL.revokeObjectURL(cropSrc);
+    setCropSrc(null);
+  }
+
+  function handleFilePick(file: File | undefined) {
     if (!file || busy) return;
     if (!ACCEPTED_TYPES.includes(file.type)) {
       const isHeic = /hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name);
@@ -52,6 +60,14 @@ export function AvatarUploader({ email, fullName, avatarUrl }: AvatarUploaderPro
       return;
     }
 
+    revokeCropSrc();
+    const objectUrl = URL.createObjectURL(file);
+    setCropSrc(objectUrl);
+    setCropOpen(true);
+    if (inputRef.current) inputRef.current.value = "";
+  }
+
+  async function uploadCroppedFile(file: File) {
     const localPreview = URL.createObjectURL(file);
     setPreviewUrl(localPreview);
     setIsUploading(true);
@@ -73,8 +89,8 @@ export function AvatarUploader({ email, fullName, avatarUrl }: AvatarUploaderPro
       setPreviewUrl(null);
     } finally {
       setIsUploading(false);
-      if (inputRef.current) inputRef.current.value = "";
       URL.revokeObjectURL(localPreview);
+      revokeCropSrc();
     }
   }
 
@@ -99,46 +115,58 @@ export function AvatarUploader({ email, fullName, avatarUrl }: AvatarUploaderPro
   }
 
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-      <Avatar className="size-14">
-        {displayUrl ? <AvatarImage src={displayUrl} alt={fullName ?? email} /> : null}
-        <AvatarFallback className="text-base">{getInitials(fullName, email)}</AvatarFallback>
-      </Avatar>
-      <div className="flex flex-col gap-1.5">
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            ref={inputRef}
-            type="file"
-            accept={ACCEPT_ATTR}
-            className="sr-only"
-            disabled={busy}
-            onChange={(event) => void handleFile(event.target.files?.[0])}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={busy}
-            onClick={() => inputRef.current?.click()}
-          >
-            {isUploading ? <Loader2Icon className="animate-spin" /> : <UploadIcon />}
-            {hasPhoto ? "Replace photo" : "Upload photo"}
-          </Button>
-          {hasPhoto ? (
+    <>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <Avatar className="size-14">
+          {displayUrl ? <AvatarImage src={displayUrl} alt={fullName ?? email} /> : null}
+          <AvatarFallback className="text-base">{getInitials(fullName, email)}</AvatarFallback>
+        </Avatar>
+        <div className="flex flex-col gap-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              ref={inputRef}
+              type="file"
+              accept={ACCEPT_ATTR}
+              className="sr-only"
+              disabled={busy}
+              onChange={(event) => handleFilePick(event.target.files?.[0])}
+            />
             <Button
               type="button"
-              variant="ghost"
+              variant="outline"
               size="sm"
               disabled={busy}
-              onClick={() => void handleRemove()}
+              onClick={() => inputRef.current?.click()}
             >
-              {isRemoving ? <Loader2Icon className="animate-spin" /> : <Trash2Icon />}
-              Remove
+              {isUploading ? <Loader2Icon className="animate-spin" /> : <UploadIcon />}
+              {hasPhoto ? "Replace photo" : "Upload photo"}
             </Button>
-          ) : null}
+            {hasPhoto ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                onClick={() => void handleRemove()}
+              >
+                {isRemoving ? <Loader2Icon className="animate-spin" /> : <Trash2Icon />}
+                Remove
+              </Button>
+            ) : null}
+          </div>
+          <p className="text-muted-foreground text-xs">JPG, PNG or WebP · max 5 MB · crop before save</p>
         </div>
-        <p className="text-muted-foreground text-xs">JPG, PNG or WebP · max 5 MB</p>
       </div>
-    </div>
+
+      <AvatarCropDialog
+        imageSrc={cropSrc}
+        open={cropOpen}
+        onOpenChange={(open) => {
+          setCropOpen(open);
+          if (!open) revokeCropSrc();
+        }}
+        onCropped={uploadCroppedFile}
+      />
+    </>
   );
 }
