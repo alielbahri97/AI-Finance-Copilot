@@ -6,9 +6,9 @@
  */
 
 // Bumping the version evicts the previous cache on activate — including any
-// error page a broken deploy left behind as the offline shell. v3 also drops
-// every FinPilot-era asset (old icons, old shell HTML) after the rebrand.
-const CACHE_NAME = "ballast-shell-v3";
+// error page a broken deploy left behind as the offline shell. v4 refreshes
+// the balance-mark app icons after the keel mark was replaced.
+const CACHE_NAME = "ballast-shell-v4";
 const PRECACHE_URLS = ["/", "/dashboard", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {
