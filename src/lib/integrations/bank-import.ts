@@ -3,10 +3,15 @@ import "server-only";
 import { logger, serializeError } from "@/lib/logger";
 
 import { autoCategorizeImportBatch } from "@/lib/ai/categorize";
-import { loadRuleMatchers, matchCategory } from "@/lib/categories";
+import {
+  getTransferCategoryIds,
+  loadRuleMatchers,
+  matchCategoryOrTransfer,
+} from "@/lib/categories";
 import { evaluateLargeTransactions } from "@/lib/notifications/alerts";
 import { prisma } from "@/lib/prisma";
 
+import { loadOwnAccountRefs } from "./bank-accounts";
 import { bankTransactionFingerprint } from "./fingerprint";
 
 /**
@@ -65,7 +70,11 @@ export async function importBankTransactions(
     return { imported: 0, duplicates, batchId: null, aiCategorized: 0 };
   }
 
-  const matchers = await loadRuleMatchers(workspaceId);
+  const [matchers, accounts, transferIds] = await Promise.all([
+    loadRuleMatchers(workspaceId),
+    loadOwnAccountRefs(workspaceId),
+    getTransferCategoryIds(workspaceId, userId),
+  ]);
   const batch = await prisma.$transaction(async (tx) => {
     const created = await tx.importBatch.create({
       data: { workspaceId, userId, fileName: label.slice(0, 200) },
@@ -76,7 +85,14 @@ export async function importBankTransactions(
         userId,
         type: row.type,
         amount: Math.round(row.amount * 100) / 100,
-        categoryId: matchCategory(matchers, row.description, row.counterparty),
+        categoryId: matchCategoryOrTransfer(
+          matchers,
+          row.description,
+          row.counterparty,
+          row.type,
+          accounts,
+          transferIds
+        ),
         description: row.description.slice(0, 500),
         counterparty: row.counterparty?.slice(0, 300) ?? null,
         date: new Date(`${row.date}T00:00:00.000Z`),

@@ -11,11 +11,47 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
+/** Durable dismiss flag — refresh must not bring the prompt back. */
 const DISMISS_KEY = `${BRAND_SLUG}-pwa-install-dismissed`;
+
+/** Keep dismissal for at least 90 days (effectively permanent for most users). */
+const DISMISS_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+
+function readDismissed(): boolean {
+  try {
+    const raw = localStorage.getItem(DISMISS_KEY);
+    if (!raw) return false;
+    // Legacy boolean flag from earlier builds.
+    if (raw === "1" || raw === "true") return true;
+    const dismissedAt = Date.parse(raw);
+    if (Number.isNaN(dismissedAt)) return true;
+    return Date.now() - dismissedAt < DISMISS_TTL_MS;
+  } catch {
+    return false;
+  }
+}
+
+function writeDismissed(): void {
+  try {
+    localStorage.setItem(DISMISS_KEY, new Date().toISOString());
+  } catch {
+    // Private mode / blocked storage — still hide for this page load via state.
+  }
+}
+
+function isStandaloneDisplay(): boolean {
+  if (typeof window === "undefined") return false;
+  if (window.matchMedia("(display-mode: standalone)").matches) return true;
+  // iOS Safari when launched from the home screen.
+  const nav = window.navigator as Navigator & { standalone?: boolean };
+  return nav.standalone === true;
+}
 
 /**
  * Lightweight Install App prompt for Chromium (Android / desktop Windows/Edge).
  * iOS users use Share → Add to Home Screen (no beforeinstallprompt).
+ *
+ * Mount only in the authenticated dashboard shell — not on marketing/login.
  */
 export function PwaInstallPrompt() {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
@@ -23,11 +59,13 @@ export function PwaInstallPrompt() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (window.matchMedia("(display-mode: standalone)").matches) return;
-    if (localStorage.getItem(DISMISS_KEY) === "1") return;
+    if (isStandaloneDisplay()) return;
+    if (readDismissed()) return;
 
     const onPrompt = (event: Event) => {
       event.preventDefault();
+      // Re-check in case dismiss landed between listener attach and event.
+      if (readDismissed() || isStandaloneDisplay()) return;
       setDeferred(event as BeforeInstallPromptEvent);
       setVisible(true);
     };
@@ -41,16 +79,16 @@ export function PwaInstallPrompt() {
   async function install() {
     if (!deferred) return;
     await deferred.prompt();
-    const choice = await deferred.userChoice;
+    await deferred.userChoice;
     setDeferred(null);
     setVisible(false);
-    if (choice.outcome === "dismissed") {
-      localStorage.setItem(DISMISS_KEY, "1");
-    }
+    // Persist either outcome so refresh does not re-prompt after they engaged.
+    writeDismissed();
   }
 
   function dismiss() {
-    localStorage.setItem(DISMISS_KEY, "1");
+    writeDismissed();
+    setDeferred(null);
     setVisible(false);
   }
 

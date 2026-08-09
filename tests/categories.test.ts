@@ -24,9 +24,11 @@ import {
   ensureDefaultCategories,
   extractCategoryPattern,
   matchCategory,
+  matchCategoryOrTransfer,
   normalizeCategoryPattern,
   type RuleMatcher,
 } from "@/lib/categories";
+import type { OwnAccountRef } from "@/lib/transfers";
 
 describe("normalizeCategoryPattern", () => {
   it("lowercases and strips digits and punctuation", () => {
@@ -98,6 +100,59 @@ describe("matchCategory", () => {
   });
 });
 
+describe("matchCategoryOrTransfer", () => {
+  const matchers: RuleMatcher[] = [
+    { pattern: "netflix", categoryId: "subs" },
+  ];
+  const accounts: OwnAccountRef[] = [
+    { name: "Checking", mask: "…1111" },
+    { name: "Savings Nest", mask: "…2222" },
+  ];
+  const transferIds = { expenseId: "xfer-out", incomeId: "xfer-in" };
+
+  it("lets a rule win over transfer detection", () => {
+    expect(
+      matchCategoryOrTransfer(
+        matchers,
+        "NETFLIX to savings",
+        null,
+        "EXPENSE",
+        accounts,
+        transferIds
+      )
+    ).toBe("subs");
+  });
+
+  it("tags own-account movements as Transfer / Transfer in", () => {
+    expect(
+      matchCategoryOrTransfer(
+        matchers,
+        "To Savings Nest",
+        null,
+        "EXPENSE",
+        accounts,
+        transferIds
+      )
+    ).toBe("xfer-out");
+    expect(
+      matchCategoryOrTransfer(
+        matchers,
+        "From my savings",
+        null,
+        "INCOME",
+        accounts,
+        transferIds
+      )
+    ).toBe("xfer-in");
+  });
+
+  it("returns null when neither rules nor transfers match", () => {
+    expect(
+      matchCategoryOrTransfer(matchers, "Coffee", "Cafe", "EXPENSE", accounts, transferIds)
+    ).toBeNull();
+  });
+});
+
 describe("ensureDefaultCategories rule backfill", () => {
   beforeEach(() => {
     categoryCount.mockReset();
@@ -111,6 +166,7 @@ describe("ensureDefaultCategories rule backfill", () => {
     const workspaceId = "ws-user-partial";
     const userId = "user-partial";
     categoryCount.mockResolvedValue(16);
+    categoryCreateMany.mockResolvedValue({ count: 2 });
     categoryFindMany.mockResolvedValue([
       { id: "cat-subs", name: "Subscriptions" },
       { id: "cat-groceries", name: "Groceries" },
@@ -124,7 +180,14 @@ describe("ensureDefaultCategories rule backfill", () => {
 
     await ensureDefaultCategories(workspaceId, userId);
 
-    expect(categoryCreateMany).not.toHaveBeenCalled();
+    // Existing workspaces get Transfer / Transfer in backfilled, not a full reseed.
+    expect(categoryCreateMany).toHaveBeenCalledOnce();
+    const seedArg = categoryCreateMany.mock.calls[0][0] as {
+      data: { name: string; type: string }[];
+      skipDuplicates: boolean;
+    };
+    expect(seedArg.skipDuplicates).toBe(true);
+    expect(seedArg.data.map((row) => row.name).sort()).toEqual(["Transfer", "Transfer in"]);
     expect(categoryRuleCreateMany).toHaveBeenCalledOnce();
     const { data, skipDuplicates } = categoryRuleCreateMany.mock.calls[0][0] as {
       data: { workspaceId: string; userId: string; pattern: string; categoryId: string }[];

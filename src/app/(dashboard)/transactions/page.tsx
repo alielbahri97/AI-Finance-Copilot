@@ -2,9 +2,10 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { TagsIcon, UploadIcon } from "lucide-react";
+import { SparklesIcon, UploadIcon } from "lucide-react";
 
 import { TableCardSkeleton } from "@/components/dashboard/section-skeletons";
+import { TeachAiBanner } from "@/components/transactions/teach-ai-banner";
 import { TransactionDialog } from "@/components/transactions/transaction-dialog";
 import { TransactionsTable } from "@/components/transactions/transactions-table";
 import { TransactionsToolbar } from "@/components/transactions/transactions-toolbar";
@@ -15,6 +16,7 @@ import {
   DEFAULT_SORT_DIRECTION,
   PAGE_SIZE_OPTIONS,
   SORT_DEFAULT_DIRECTION,
+  TEACH_SESSION_SIZE,
   type BatchOption,
   type CategoryOption,
   type SortDirection,
@@ -101,25 +103,31 @@ export default async function TransactionsPage({
   const canExport = ctx.permissions.has("export_data");
 
   const params = await searchParams;
-  const categories = await prisma.category.findMany({
-    where: { workspaceId: ctx.workspace.id },
-    orderBy: [{ type: "asc" }, { name: "asc" }],
-    select: { id: true, name: true, type: true, color: true },
-  });
+  const [categories, uncategorizedCount] = await Promise.all([
+    prisma.category.findMany({
+      where: { workspaceId: ctx.workspace.id },
+      orderBy: [{ type: "asc" }, { name: "asc" }],
+      select: { id: true, name: true, type: true, color: true },
+    }),
+    prisma.transaction.count({
+      where: { workspaceId: ctx.workspace.id, categoryId: null },
+    }),
+  ]);
   const categoryOptions: CategoryOption[] = categories;
+  const sessionPreview = Math.min(TEACH_SESSION_SIZE, uncategorizedCount);
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Transactions"
-        description="Search and sort everything — or categorize the biggest ones first."
+        description="Tap a row to label it — or spend five minutes teaching Ballast the biggest ones."
         actions={
           <>
-            {canEdit && (
+            {canEdit && uncategorizedCount > 0 && (
               <Button asChild>
                 <Link href="/transactions/categorize">
-                  <TagsIcon />
-                  Categorize
+                  <SparklesIcon />
+                  Teach · {sessionPreview} biggest
                 </Link>
               </Button>
             )}
@@ -136,6 +144,8 @@ export default async function TransactionsPage({
           </>
         }
       />
+
+      <TeachAiBanner uncategorizedCount={uncategorizedCount} canEdit={canEdit} />
 
       <Suspense fallback={<TableCardSkeleton />}>
         <TransactionsContent ctx={ctx} params={params} categories={categoryOptions} />

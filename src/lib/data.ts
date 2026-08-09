@@ -11,6 +11,7 @@ import { currencyFromRequestHeaders } from "@/lib/currency/location";
 import { anchorBalanceHistory, type CashPosition } from "@/lib/finance/cash";
 import { loadCashPosition } from "@/lib/finance/cash-data";
 import { prisma } from "@/lib/prisma";
+import { isTransferCategoryName } from "@/lib/transfers";
 import {
   defaultWorkspaceName,
   EDITION_METADATA_KEY,
@@ -236,22 +237,29 @@ export const getDashboardData = cache(async (workspaceId: string): Promise<Dashb
     const signed = tx.type === "INCOME" ? amount : -amount;
     const key = monthKey(tx.date);
     const point = monthly.get(key);
+    const isTransfer = isTransferCategoryName(tx.category?.name);
 
+    // Cash/net still includes transfers (they cancel across accounts). Income
+    // and expense charts exclude them so moving money to savings is not spend.
     if (point) {
-      if (tx.type === "INCOME") point.income += amount;
-      else point.expenses += amount;
+      if (!isTransfer) {
+        if (tx.type === "INCOME") point.income += amount;
+        else point.expenses += amount;
+      }
       point.net += signed;
     }
 
-    if (key === currentKey) {
-      if (tx.type === "INCOME") monthIncome += amount;
-      else monthExpenses += amount;
-    } else if (key === previousKey) {
-      if (tx.type === "INCOME") prevMonthIncome += amount;
-      else prevMonthExpenses += amount;
+    if (!isTransfer) {
+      if (key === currentKey) {
+        if (tx.type === "INCOME") monthIncome += amount;
+        else monthExpenses += amount;
+      } else if (key === previousKey) {
+        if (tx.type === "INCOME") prevMonthIncome += amount;
+        else prevMonthExpenses += amount;
+      }
     }
 
-    if (tx.type === "EXPENSE") {
+    if (tx.type === "EXPENSE" && !isTransfer) {
       const name = tx.category?.name ?? "Uncategorized";
       const entry = categories.get(name) ?? {
         category: name,

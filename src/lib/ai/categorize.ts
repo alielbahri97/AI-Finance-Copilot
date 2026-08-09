@@ -1,32 +1,42 @@
 import "server-only";
 
 import { getEntitlements, incrementUsage } from "@/lib/billing/entitlements";
+import { getTransferCategoryIds } from "@/lib/categories";
+import { loadOwnAccountRefs } from "@/lib/integrations/bank-accounts";
 import { logger, serializeError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import { isInternalTransfer, isTransferCategoryName } from "@/lib/transfers";
 
 import { getAiClient, providerFromProfile, type AiClient } from ".";
 import {
   buildCategorizationPrompt,
+  buildMerchantCategoryIndex,
   categorizationBudget,
   CATEGORIZATION_SYSTEM_PROMPT,
+  matchMerchantHistory,
   MAX_PROMPT_CATEGORIES,
+  MAX_PROMPT_EXAMPLES,
   MAX_TRANSACTIONS_PER_BATCH,
+  merchantKeyFromTransaction,
   parseCategorizationOutput,
   selectConfidentAssignments,
   selectPromptCategories,
   type CategorizableTransaction,
+  type CategorizationExample,
   type PromptCategory,
 } from "./categorize-core";
 
 /**
- * AI categorization of transactions that no CategoryRule matched.
+ * Categorization of rows that no CategoryRule matched on import.
  *
- * Two hard promises hold this whole feature together:
- *   1. A rule always wins. The AI is only ever shown rows that came out of
- *      rule matching uncategorized, so a rule the user taught us can never be
- *      overridden by a model's opinion.
- *   2. An AI failure never fails an import. Every path here returns a count
- *      and a reason; nothing throws out of `autoCategorizeImportBatch`.
+ * Layered pipeline (rules already applied at insert time):
+ *   1. Own-account transfer detection → Transfer / Transfer in
+ *   2. Merchant / payee history (last-used category for that counterparty)
+ *   3. LLM only on what remains — skip if uncertain, never invent categories
+ *
+ * Hard promises:
+ *   - A rule always wins (those rows never reach this pass).
+ *   - An AI failure never fails an import.
  */
 
 /**
@@ -61,11 +71,15 @@ export async function categorizeTransactionBatch(
   ai: AiClient,
   transactions: CategorizableTransaction[],
   categories: PromptCategory[],
-  options: { signal?: AbortSignal } = {}
+  options: { signal?: AbortSignal; examples?: CategorizationExample[] } = {}
 ): Promise<CategorizationBatchOutcome> {
   if (transactions.length === 0 || categories.length === 0) return EMPTY_BATCH;
 
-  const prompt = buildCategorizationPrompt(transactions, categories);
+  const prompt = buildCategorizationPrompt(
+    transactions,
+    categories,
+    options.examples ?? []
+  );
   const chatOptions = {
     temperature: 0,
     maxTokens: 2000,
@@ -102,10 +116,15 @@ export async function categorizeTransactionBatch(
     return { assignments: new Map(), failureReason: parsed.error };
   }
 
+  const categoryNames = new Map(
+    categories.map((category) => [category.name.trim().toLowerCase(), category.id])
+  );
+
   return {
     assignments: selectConfidentAssignments(parsed.suggestions, {
       transactions,
       categories: new Map(categories.map((category) => [category.id, category.type])),
+      categoryNames,
     }),
     failureReason: null,
   };
@@ -168,6 +187,124 @@ async function loadPromptCategories(workspaceId: string): Promise<PromptCategory
   );
 }
 
+/**
+ * Recent categorized payees for deterministic history matching and few-shot
+ * examples. Newest first so last-used category wins per merchant.
+ */
+async function loadMerchantHistory(
+  workspaceId: string
+): Promise<{ examples: CategorizationExample[]; index: Map<string, string> }> {
+  const rows = await prisma.transaction.findMany({
+    where: {
+      workspaceId,
+      categoryId: { not: null },
+      OR: [{ counterparty: { not: null } }, { description: { not: "" } }],
+    },
+    orderBy: { date: "desc" },
+    take: 400,
+    select: {
+      description: true,
+      counterparty: true,
+      type: true,
+      category: { select: { id: true, name: true, type: true } },
+    },
+  });
+
+  const history: {
+    merchant: string;
+    categoryId: string;
+    categoryName: string;
+    type: (typeof rows)[number]["type"];
+  }[] = [];
+
+  for (const row of rows) {
+    if (!row.category) continue;
+    // Do not teach the model (or history index) to copy transfer categories
+    // onto ordinary spend — those are handled by the transfer layer.
+    if (isTransferCategoryName(row.category.name)) continue;
+    const merchant =
+      merchantKeyFromTransaction(row.description, row.counterparty) ??
+      (row.counterparty?.trim() || row.description.trim());
+    if (!merchant) continue;
+    history.push({
+      merchant,
+      categoryId: row.category.id,
+      categoryName: row.category.name,
+      type: row.type,
+    });
+  }
+
+  const examples: CategorizationExample[] = history
+    .slice(0, MAX_PROMPT_EXAMPLES * 3)
+    .map((row) => ({
+      merchant: row.merchant,
+      categoryId: row.categoryId,
+      categoryName: row.categoryName,
+      type: row.type,
+    }));
+
+  return {
+    examples,
+    index: buildMerchantCategoryIndex(history),
+  };
+}
+
+type PendingRow = {
+  id: string;
+  date: Date;
+  description: string;
+  counterparty: string | null;
+  amount: unknown;
+  type: "INCOME" | "EXPENSE";
+  userId: string;
+};
+
+/** Deterministic layers that run before (and without) the LLM. */
+async function applyDeterministicLayers(
+  workspaceId: string,
+  userId: string,
+  pending: PendingRow[]
+): Promise<{
+  remaining: PendingRow[];
+  categorized: number;
+  examples: CategorizationExample[];
+}> {
+  if (pending.length === 0) {
+    return { remaining: pending, categorized: 0, examples: [] };
+  }
+
+  const [accounts, transferIds, history] = await Promise.all([
+    loadOwnAccountRefs(workspaceId),
+    getTransferCategoryIds(workspaceId, userId),
+    loadMerchantHistory(workspaceId),
+  ]);
+
+  const assignments: { transactionId: string; categoryId: string }[] = [];
+  const remaining: PendingRow[] = [];
+
+  for (const row of pending) {
+    let categoryId: string | null = null;
+
+    if (transferIds && isInternalTransfer(row.description, row.counterparty, accounts)) {
+      categoryId = row.type === "INCOME" ? transferIds.incomeId : transferIds.expenseId;
+    } else {
+      categoryId = matchMerchantHistory(
+        row.description,
+        row.counterparty,
+        row.type,
+        history.index
+      );
+    }
+
+    if (categoryId) assignments.push({ transactionId: row.id, categoryId });
+    else remaining.push(row);
+  }
+
+  const categorized =
+    assignments.length > 0 ? await applyAssignments(workspaceId, assignments) : 0;
+  return { remaining, categorized, examples: history.examples };
+}
+
 /** Writes the assignments back, one statement per distinct category. */
 async function applyAssignments(
   workspaceId: string,
@@ -202,10 +339,9 @@ function chunk<T>(items: T[], size: number): T[][] {
 /**
  * Categorizes the still-uncategorized rows of a just-created ImportBatch.
  *
- * Reading the rows back from the batch rather than taking them as an argument
- * is what makes this correct on re-import and safe to call twice: rule-matched
- * rows already have a category and are never selected, and neither are rows a
- * previous pass already handled.
+ * Order: transfer detection → merchant history → AI (if enabled). Reading the
+ * rows back from the batch makes this safe to call twice: already-categorized
+ * rows are never selected.
  *
  * Never throws.
  */
@@ -225,19 +361,13 @@ export async function autoCategorizeImportBatch(
   );
 
   try {
-    const workspace = await prisma.workspace.findUnique({
-      where: { id: scope.workspaceId },
-      select: { aiCategorizationEnabled: true },
-    });
-    if (!workspace) return NOTHING_TO_DO;
-    if (!workspace.aiCategorizationEnabled) return result({ skipped: "disabled" });
-
     const pending = await prisma.transaction.findMany({
       where: { workspaceId: scope.workspaceId, importBatchId: scope.batchId, categoryId: null },
       orderBy: { date: "asc" },
       take: MAX_AI_ROWS_PER_IMPORT,
       select: {
         id: true,
+        userId: true,
         date: true,
         description: true,
         counterparty: true,
@@ -247,32 +377,61 @@ export async function autoCategorizeImportBatch(
     });
     if (pending.length === 0) return NOTHING_TO_DO;
 
+    const userId = pending[0]?.userId;
+    if (!userId) return NOTHING_TO_DO;
+
+    const deterministic = await applyDeterministicLayers(scope.workspaceId, userId, pending);
+    let categorized = deterministic.categorized;
+    const forAi = deterministic.remaining;
+    const examples = deterministic.examples;
+
+    const workspace = await prisma.workspace.findUnique({
+      where: { id: scope.workspaceId },
+      select: { aiCategorizationEnabled: true },
+    });
+    if (!workspace) {
+      return { categorized, considered: 0, skipped: null, note: null };
+    }
+    if (!workspace.aiCategorizationEnabled) {
+      return {
+        categorized,
+        considered: 0,
+        skipped: forAi.length > 0 ? "disabled" : null,
+        note: null,
+      };
+    }
+    if (forAi.length === 0) {
+      return { categorized, considered: 0, skipped: null, note: null };
+    }
+
     const entitlements = await getEntitlements(scope.workspaceId);
     const limit = entitlements.plan.limits.aiCategorizationPerMonth;
     const budget = categorizationBudget(
       limit,
       entitlements.usage.aiCategorizations,
-      pending.length
+      forAi.length
     );
     if (budget.allowed === 0) {
       return result({
+        categorized,
         skipped: "quota",
         note: `AI categorization is paused for the rest of the month on the ${entitlements.plan.name} plan. Upgrade on the Billing page for unlimited automatic categorization.`,
       });
     }
 
     const categories = await loadPromptCategories(scope.workspaceId);
-    if (categories.length === 0) return result({ skipped: "no_categories" });
+    if (categories.length === 0) {
+      return result({ categorized, skipped: "no_categories" });
+    }
 
     let ai: AiClient;
     try {
       ai = getAiClient(providerFromProfile(scope.aiProvider));
     } catch {
-      // No key configured is a deployment fact, not an import problem.
-      return result({ skipped: "no_provider" });
+      return result({ categorized, skipped: "no_provider" });
     }
 
-    const considered = pending.slice(0, budget.allowed);
+    const considered = forAi.slice(0, budget.allowed);
     const assignments: { transactionId: string; categoryId: string }[] = [];
     let failureReason: string | null = null;
 
@@ -289,6 +448,7 @@ export async function autoCategorizeImportBatch(
       try {
         const outcome = await categorizeTransactionBatch(ai, rows, categories, {
           signal: controller.signal,
+          examples,
         });
         failureReason ??= outcome.failureReason;
         for (const [index, categoryId] of outcome.assignments) {
@@ -306,11 +466,11 @@ export async function autoCategorizeImportBatch(
       }
     }
 
-    const categorized =
-      assignments.length > 0 ? await applyAssignments(scope.workspaceId, assignments) : 0;
+    if (assignments.length > 0) {
+      categorized += await applyAssignments(scope.workspaceId, assignments);
+    }
 
-    // The quota buys AI attention, not successful guesses: charge for the rows
-    // that were actually sent, whatever came back.
+    // Quota buys AI attention, not successful guesses: charge for rows sent.
     await incrementUsage(scope.workspaceId, "aiCategorizations", considered.length);
 
     if (categorized === 0 && failureReason) {
@@ -322,7 +482,7 @@ export async function autoCategorizeImportBatch(
       considered: considered.length,
       skipped: budget.limitReached ? "quota" : null,
       note: budget.limitReached
-        ? `${pending.length - considered.length} rows were left for you because this month's AI categorization allowance on the ${entitlements.plan.name} plan ran out. Upgrade on the Billing page for unlimited automatic categorization.`
+        ? `${forAi.length - considered.length} rows were left for you because this month's AI categorization allowance on the ${entitlements.plan.name} plan ran out. Upgrade on the Billing page for unlimited automatic categorization.`
         : null,
     };
   } catch (error) {

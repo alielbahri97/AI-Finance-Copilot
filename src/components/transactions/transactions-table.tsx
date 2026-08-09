@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { TransactionCategorizeSheet } from "@/components/transactions/transaction-categorize-sheet";
 import { TransactionDialog } from "@/components/transactions/transaction-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -168,6 +169,7 @@ export function TransactionsTable({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busyId, setBusyId] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [activeTx, setActiveTx] = useState<TransactionRow | null>(null);
 
   const pageIds = useMemo(() => transactions.map((tx) => tx.id), [transactions]);
   const allSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
@@ -486,24 +488,44 @@ export function TransactionsTable({
         {transactions.map((tx) => (
           <div
             key={tx.id}
+            role="button"
+            tabIndex={0}
             data-state={selected.has(tx.id) ? "selected" : undefined}
-            className="data-[state=selected]:bg-muted flex flex-col gap-2.5 rounded-xl border border-border/60 p-3.5 shadow-xs"
+            className={cn(
+              "data-[state=selected]:bg-muted flex cursor-pointer flex-col gap-2.5 rounded-xl border border-border/60 p-3.5 text-left shadow-xs transition-colors",
+              !tx.categoryId && "border-primary/35 bg-primary/5",
+              "hover:border-primary/40"
+            )}
+            onClick={() => setActiveTx(tx)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                setActiveTx(tx);
+              }
+            }}
           >
             <div className="flex items-start gap-2.5">
               <Checkbox
                 checked={selected.has(tx.id)}
                 onCheckedChange={() => toggleOne(tx.id)}
+                onClick={(event) => event.stopPropagation()}
                 aria-label={`Select ${tx.description}`}
                 className="mt-1"
               />
               <div className="min-w-0 flex-1">
                 <p className="flex items-center gap-1.5 text-sm font-medium">
                   <span className="truncate">{tx.description}</span>
+                  {!tx.categoryId && (
+                    <span className="bg-primary/15 text-primary shrink-0 rounded-full px-2 py-0.5 text-2xs font-semibold tracking-wide uppercase">
+                      Teach AI
+                    </span>
+                  )}
                   {tx.invoiceId && (
                     <Link
                       href={`/invoices/${tx.invoiceId}`}
                       className="text-muted-foreground hover:text-foreground shrink-0"
                       aria-label={`Open linked invoice${tx.invoiceVendor ? ` from ${tx.invoiceVendor}` : ""}`}
+                      onClick={(event) => event.stopPropagation()}
                     >
                       <ReceiptTextIcon className="size-3.5" />
                     </Link>
@@ -512,11 +534,12 @@ export function TransactionsTable({
                 <p className="text-muted-foreground truncate text-xs">
                   {formatDate(tx.date, locale)}
                   {tx.counterparty ? ` · ${tx.counterparty}` : ""}
+                  {tx.categoryName ? ` · ${tx.categoryName}` : " · Uncategorized"}
                 </p>
               </div>
               {amountNode(tx, "md")}
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
               <div className="min-w-0 flex-1">
                 <CategorySelect
                   value={tx.categoryId ?? UNCATEGORIZED}
@@ -583,8 +606,16 @@ export function TransactionsTable({
           </TableHeader>
           <TableBody>
             {transactions.map((tx) => (
-              <TableRow key={tx.id} data-state={selected.has(tx.id) ? "selected" : undefined}>
-                <TableCell>
+              <TableRow
+                key={tx.id}
+                data-state={selected.has(tx.id) ? "selected" : undefined}
+                className={cn(
+                  "cursor-pointer",
+                  !tx.categoryId && "bg-primary/5 hover:bg-primary/10"
+                )}
+                onClick={() => setActiveTx(tx)}
+              >
+                <TableCell onClick={(event) => event.stopPropagation()}>
                   <Checkbox
                     checked={selected.has(tx.id)}
                     onCheckedChange={() => toggleOne(tx.id)}
@@ -599,12 +630,18 @@ export function TransactionsTable({
                     <span className="truncate" title={tx.description}>
                       {tx.description}
                     </span>
+                    {!tx.categoryId && (
+                      <span className="bg-primary/15 text-primary shrink-0 rounded-full px-2 py-0.5 text-2xs font-semibold tracking-wide uppercase">
+                        Teach AI
+                      </span>
+                    )}
                     {tx.invoiceId && (
                       <Link
                         href={`/invoices/${tx.invoiceId}`}
                         className="text-muted-foreground hover:text-foreground shrink-0"
                         title={`Linked invoice${tx.invoiceVendor ? `: ${tx.invoiceVendor}` : ""}`}
                         aria-label={`Open linked invoice${tx.invoiceVendor ? ` from ${tx.invoiceVendor}` : ""}`}
+                        onClick={(event) => event.stopPropagation()}
                       >
                         <ReceiptTextIcon className="size-3.5" />
                       </Link>
@@ -617,7 +654,7 @@ export function TransactionsTable({
                 >
                   {tx.counterparty ?? "—"}
                 </TableCell>
-                <TableCell className="min-w-40">
+                <TableCell className="min-w-40" onClick={(event) => event.stopPropagation()}>
                   <CategorySelect
                     value={tx.categoryId ?? UNCATEGORIZED}
                     categories={categories}
@@ -628,7 +665,7 @@ export function TransactionsTable({
                   />
                 </TableCell>
                 <TableCell className="text-right">{amountNode(tx, "md")}</TableCell>
-                <TableCell>{deleteDialog(tx)}</TableCell>
+                <TableCell onClick={(event) => event.stopPropagation()}>{deleteDialog(tx)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -649,6 +686,17 @@ export function TransactionsTable({
             {totalCount.toLocaleString(locale)} matching
           </span>
         }
+      />
+
+      <TransactionCategorizeSheet
+        transaction={activeTx}
+        open={activeTx !== null}
+        onOpenChange={(open) => {
+          if (!open) setActiveTx(null);
+        }}
+        categories={categories}
+        currency={currency}
+        canEdit={canEdit}
       />
     </div>
   );

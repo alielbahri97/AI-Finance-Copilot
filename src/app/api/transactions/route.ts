@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 
-import { loadRuleMatchers, matchCategory } from "@/lib/categories";
+import {
+  getTransferCategoryIds,
+  loadRuleMatchers,
+  matchCategoryOrTransfer,
+} from "@/lib/categories";
+import { loadOwnAccountRefs } from "@/lib/integrations/bank-accounts";
 import { evaluateLargeTransactions } from "@/lib/notifications/alerts";
 import { prisma } from "@/lib/prisma";
 import { transactionSchema } from "@/lib/validations/transaction";
@@ -32,11 +37,18 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Unknown category" }, { status: 400 });
       }
     } else {
-      const matchers = await loadRuleMatchers(workspace.id);
-      categoryId = matchCategory(
+      const [matchers, accounts, transferIds] = await Promise.all([
+        loadRuleMatchers(workspace.id),
+        loadOwnAccountRefs(workspace.id),
+        getTransferCategoryIds(workspace.id, user.id),
+      ]);
+      categoryId = matchCategoryOrTransfer(
         matchers,
         parsed.data.description,
-        parsed.data.counterparty ?? null
+        parsed.data.counterparty ?? null,
+        parsed.data.type,
+        accounts,
+        transferIds
       );
     }
 

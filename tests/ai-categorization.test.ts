@@ -253,6 +253,18 @@ describe("selectConfidentAssignments", () => {
     expect(assignments.size).toBe(0);
   });
 
+  it("recovers when the model returns a known category name instead of an id", () => {
+    const assignments = selectConfidentAssignments(
+      [{ transactionIndex: 0, categoryId: "Groceries", confidence: 0.95 }],
+      {
+        ...context(),
+        categoryNames: new Map([["groceries", "cat-groceries"]]),
+      }
+    );
+
+    expect(assignments.get(0)).toBe("cat-groceries");
+  });
+
   it("drops indexes that were never sent", () => {
     const assignments = selectConfidentAssignments(
       [{ transactionIndex: 99, categoryId: "cat-groceries", confidence: 1 }],
@@ -337,13 +349,23 @@ describe("categorizeTransactionBatch", () => {
 
   it("ignores a hallucinated id even when the model is certain", async () => {
     const ai = stubClient([
-      reply([{ transactionIndex: 0, categoryId: "Groceries", confidence: 1 }]),
+      reply([{ transactionIndex: 0, categoryId: "InventedCategory", confidence: 1 }]),
     ]);
 
     const outcome = await categorizeTransactionBatch(ai, TRANSACTIONS, CATEGORIES);
 
     expect(outcome.assignments.size).toBe(0);
     expect(outcome.failureReason).toBeNull();
+  });
+
+  it("accepts a category name that matches the prompt list", async () => {
+    const ai = stubClient([
+      reply([{ transactionIndex: 0, categoryId: "Groceries", confidence: 0.95 }]),
+    ]);
+
+    const outcome = await categorizeTransactionBatch(ai, TRANSACTIONS, CATEGORIES);
+
+    expect(outcome.assignments.get(0)).toBe("cat-groceries");
   });
 });
 

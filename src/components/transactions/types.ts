@@ -1,6 +1,12 @@
 export const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
 export const DEFAULT_PAGE_SIZE = 50;
 
+/**
+ * How many largest uncategorized transactions a teach / categorize visit loads.
+ * Kept small so a session feels like ~5 minutes, not an endless backlog.
+ */
+export const TEACH_SESSION_SIZE = 8;
+
 export type TransactionSortKey = "date" | "description" | "category" | "amount";
 export type SortDirection = "asc" | "desc";
 

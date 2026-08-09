@@ -1,12 +1,20 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import type { TransactionType } from "@/generated/prisma/client";
+import {
+  isInternalTransfer,
+  TRANSFER_CATEGORY_EXPENSE,
+  TRANSFER_CATEGORY_INCOME,
+  TRANSFER_CATEGORY_NAMES,
+  type OwnAccountRef,
+} from "@/lib/transfers";
 
 export const DEFAULT_CATEGORIES: { name: string; type: TransactionType; color: string }[] = [
   { name: "Salary", type: "INCOME", color: "#10b981" },
   { name: "Freelance", type: "INCOME", color: "#14b8a6" },
   { name: "Investments", type: "INCOME", color: "#06b6d4" },
   { name: "Other income", type: "INCOME", color: "#64748b" },
+  { name: TRANSFER_CATEGORY_INCOME, type: "INCOME", color: "#64748b" },
   { name: "Housing", type: "EXPENSE", color: "#6366f1" },
   { name: "Groceries", type: "EXPENSE", color: "#f59e0b" },
   { name: "Transport", type: "EXPENSE", color: "#3b82f6" },
@@ -18,7 +26,14 @@ export const DEFAULT_CATEGORIES: { name: string; type: TransactionType; color: s
   { name: "Travel", type: "EXPENSE", color: "#f97316" },
   { name: "Subscriptions", type: "EXPENSE", color: "#8b5cf6" },
   { name: "Education", type: "EXPENSE", color: "#84cc16" },
+  { name: TRANSFER_CATEGORY_EXPENSE, type: "EXPENSE", color: "#94a3b8" },
   { name: "Other", type: "EXPENSE", color: "#64748b" },
+];
+
+/** Seeded for existing workspaces that predate Transfer categories. */
+const TRANSFER_CATEGORY_SEED: { name: string; type: TransactionType; color: string }[] = [
+  { name: TRANSFER_CATEGORY_INCOME, type: "INCOME", color: "#64748b" },
+  { name: TRANSFER_CATEGORY_EXPENSE, type: "EXPENSE", color: "#94a3b8" },
 ];
 
 /** Common merchant patterns seeded for new users (matched case-insensitively). */
@@ -131,11 +146,11 @@ const STOPWORDS = new Set([
 ]);
 
 /**
- * Seeds the default category set for empty workspaces, then ensures every
- * DEFAULT_CATEGORY_RULES pattern exists. Partially seeded workspaces get
- * missing patterns (e.g. uber) on the next call; existing patterns are left
- * alone via skipDuplicates on @@unique([workspaceId, pattern]).
- * `userId` records who the seed ran for (the workspace creator).
+ * Seeds the default category set for empty workspaces, backfills Transfer
+ * categories on older workspaces, then ensures every DEFAULT_CATEGORY_RULES
+ * pattern exists. Partially seeded workspaces get missing patterns (e.g. uber)
+ * on the next call; existing patterns are left alone via skipDuplicates on
+ * @@unique([workspaceId, pattern]). `userId` records who the seed ran for.
  */
 export async function ensureDefaultCategories(workspaceId: string, userId: string) {
   const count = await prisma.category.count({ where: { workspaceId } });
@@ -149,8 +164,62 @@ export async function ensureDefaultCategories(workspaceId: string, userId: strin
       })),
       skipDuplicates: true,
     });
+  } else {
+    await ensureTransferCategories(workspaceId, userId);
   }
   await ensureDefaultCategoryRules(workspaceId, userId);
+}
+
+/**
+ * Creates Transfer / Transfer in when missing (idempotent). Needed so imports
+ * and AI passes can tag own-account movements without inventing categories.
+ */
+export async function ensureTransferCategories(workspaceId: string, userId: string) {
+  await prisma.category.createMany({
+    data: TRANSFER_CATEGORY_SEED.map((category) => ({
+      ...category,
+      workspaceId,
+      userId,
+      isDefault: true,
+    })),
+    skipDuplicates: true,
+  });
+}
+
+/** Resolves Transfer category ids, seeding them first if needed. */
+export async function getTransferCategoryIds(
+  workspaceId: string,
+  userId: string
+): Promise<{ expenseId: string; incomeId: string } | null> {
+  await ensureTransferCategories(workspaceId, userId);
+  const rows = await prisma.category.findMany({
+    where: { workspaceId, name: { in: [...TRANSFER_CATEGORY_NAMES] } },
+    select: { id: true, name: true },
+  });
+  const byName = new Map(rows.map((row) => [row.name, row.id]));
+  const expenseId = byName.get(TRANSFER_CATEGORY_EXPENSE);
+  const incomeId = byName.get(TRANSFER_CATEGORY_INCOME);
+  if (!expenseId || !incomeId) return null;
+  return { expenseId, incomeId };
+}
+
+/**
+ * Rules first, then own-account transfer heuristic. Returns null when neither
+ * matches — caller may hand the row to AI or leave it uncategorized.
+ */
+export function matchCategoryOrTransfer(
+  matchers: RuleMatcher[],
+  description: string,
+  counterparty: string | null,
+  type: TransactionType,
+  accounts: OwnAccountRef[],
+  transferIds: { expenseId: string; incomeId: string } | null
+): string | null {
+  const fromRule = matchCategory(matchers, description, counterparty);
+  if (fromRule) return fromRule;
+  if (!transferIds) return null;
+  if (!isInternalTransfer(description, counterparty, accounts)) return null;
+  return type === "INCOME" ? transferIds.incomeId : transferIds.expenseId;
 }
 
 /** Creates any missing default rules; never overwrites existing pattern rows. */

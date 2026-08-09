@@ -8,19 +8,23 @@ import {
   CheckCircle2Icon,
   Loader2Icon,
   SkipForwardIcon,
+  SparklesIcon,
   TagsIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
-import type { CategoryOption, TransactionRow } from "@/components/transactions/types";
+import {
+  TEACH_SESSION_SIZE,
+  type CategoryOption,
+  type TransactionRow,
+} from "@/components/transactions/types";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn, formatCurrency, formatDate, localeForCurrency } from "@/lib/utils";
 
-const QUEUE_PAGE_HINT = 40;
-
 interface CategorizeQueueProps {
   initialTransactions: TransactionRow[];
+  /** Total uncategorized in the workspace — only for quiet secondary copy. */
   totalUncategorized: number;
   categories: CategoryOption[];
   currency: string;
@@ -28,8 +32,8 @@ interface CategorizeQueueProps {
 }
 
 /**
- * Focused review of uncategorized transactions, always largest first.
- * One big card at a time so amount, merchant and category choice dominate.
+ * Short teach session: the largest ~8 uncategorized transactions, one big card
+ * at a time. Progress is session-scoped so a huge backlog never floods the UI.
  */
 export function CategorizeQueue({
   initialTransactions,
@@ -40,6 +44,7 @@ export function CategorizeQueue({
 }: CategorizeQueueProps) {
   const router = useRouter();
   const locale = localeForCurrency(currency);
+  const sessionSize = initialTransactions.length;
   const [queue, setQueue] = useState(initialTransactions);
   const [skippedIds, setSkippedIds] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -51,10 +56,12 @@ export function CategorizeQueue({
   );
   const current = remaining[0] ?? null;
   const upcoming = remaining.slice(1, 4);
-  const leftInWorkspace = Math.max(
-    0,
-    totalUncategorized - categorizedThisSession - skippedIds.size
+  const sessionIndex = Math.min(
+    sessionSize,
+    categorizedThisSession + skippedIds.size + (current ? 1 : 0)
   );
+  const leftInSession = remaining.length;
+  const moreAfterSession = Math.max(0, totalUncategorized - sessionSize);
 
   const matchingCategories = useMemo(() => {
     if (!current) return [];
@@ -68,7 +75,6 @@ export function CategorizeQueue({
     const tx = current;
     const category = categories.find((entry) => entry.id === categoryId);
     setBusy(true);
-    // Advance immediately so the next largest card is ready while the request runs.
     setQueue((prev) => prev.filter((row) => row.id !== tx.id));
     setCategorizedThisSession((count) => count + 1);
 
@@ -92,8 +98,8 @@ export function CategorizeQueue({
       if (learned?.categoryName) {
         toast.success(
           learned.pattern
-            ? `Always categorizing "${learned.pattern}" as ${learned.categoryName}`
-            : `We'll categorize similar transactions as ${learned.categoryName} going forward`
+            ? `Taught Ballast: "${learned.pattern}" → ${learned.categoryName}`
+            : `Taught Ballast to use ${learned.categoryName} next time`
         );
       } else if (category) {
         toast.success(`Saved as ${category.name}`);
@@ -129,18 +135,22 @@ export function CategorizeQueue({
   }
 
   if (!current) {
-    const allCaughtUp = totalUncategorized === 0 || remaining.length === 0;
+    const nothingToStart = sessionSize === 0;
     return (
       <EmptyState
         icon={CheckCircle2Icon}
-        title={allCaughtUp && categorizedThisSession === 0 && skippedIds.size === 0
-          ? "Nothing left to categorize"
-          : "You're done with this batch"}
+        title={
+          nothingToStart
+            ? "Nothing left to categorize"
+            : "Nice — this session is done"
+        }
         description={
           skippedIds.size > 0
-            ? `You categorized ${categorizedThisSession} and skipped ${skippedIds.size}. Skipped ones stay uncategorized until you come back.`
+            ? `You labeled ${categorizedThisSession} and skipped ${skippedIds.size} in this session. Skipped ones stay for next time.`
             : categorizedThisSession > 0
-              ? `Nice — ${categorizedThisSession} transaction${categorizedThisSession === 1 ? "" : "s"} labeled. Largest ones first means the biggest impact is already handled.`
+              ? moreAfterSession > 0
+                ? `You taught Ballast on ${categorizedThisSession} of the biggest ones. Come back anytime for another short session.`
+                : `You labeled ${categorizedThisSession} transaction${categorizedThisSession === 1 ? "" : "s"}. Ballast will reuse what it learned.`
               : "Every transaction already has a category."
         }
         action={
@@ -150,10 +160,19 @@ export function CategorizeQueue({
                 variant="outline"
                 onClick={() => {
                   setSkippedIds(new Set());
-                  router.refresh();
                 }}
               >
                 Review skipped
+              </Button>
+            )}
+            {moreAfterSession > 0 && categorizedThisSession > 0 && skippedIds.size === 0 && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  router.refresh();
+                }}
+              >
+                Another {Math.min(TEACH_SESSION_SIZE, moreAfterSession)} biggest
               </Button>
             )}
             <Button asChild>
@@ -180,15 +199,21 @@ export function CategorizeQueue({
             Transactions
           </Link>
         </Button>
-        <p className="text-muted-foreground text-sm tabular-nums">
-          {leftInWorkspace} left
-          {categorizedThisSession > 0 ? ` · ${categorizedThisSession} done` : ""}
-        </p>
+        <div className="text-right">
+          <p className="text-sm font-medium tabular-nums">
+            {sessionIndex} of {sessionSize} in this session
+          </p>
+          <p className="text-muted-foreground text-xs tabular-nums">
+            {leftInSession === 1 ? "1 left in this session" : `${leftInSession} left in this session`}
+            {moreAfterSession > 0 ? " · more waiting after" : ""}
+          </p>
+        </div>
       </div>
 
       <div className="border-border/60 bg-card rounded-2xl border p-6 shadow-xs sm:p-8">
-        <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-          Largest uncategorized first
+        <p className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium tracking-wide uppercase">
+          <SparklesIcon className="size-3.5" />
+          5‑min teach · largest first
         </p>
         <p
           className={cn(
@@ -208,7 +233,7 @@ export function CategorizeQueue({
         </div>
 
         <div className="mt-8 space-y-3">
-          <p className="text-sm font-medium">Pick a category</p>
+          <p className="text-sm font-medium">Pick a category — Ballast remembers similar merchants</p>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {matchingCategories.map((category) => {
               const isPreferred = category.type === current.type;
@@ -256,7 +281,7 @@ export function CategorizeQueue({
       {upcoming.length > 0 && (
         <div className="space-y-2">
           <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-            Up next (largest remaining)
+            Up next in this session
           </p>
           <ul className="flex flex-col gap-2">
             {upcoming.map((tx) => {
@@ -283,19 +308,12 @@ export function CategorizeQueue({
               );
             })}
           </ul>
-          {totalUncategorized > QUEUE_PAGE_HINT && (
-            <p className="text-muted-foreground text-xs">
-              Showing the largest {QUEUE_PAGE_HINT} uncategorized. Finish these and refresh to load
-              more.
-            </p>
-          )}
         </div>
       )}
     </div>
   );
 }
 
-/** Keep the queue sorted by amount descending after a failed categorize rolls back. */
 function insertByAmountDesc(list: TransactionRow[], tx: TransactionRow): TransactionRow[] {
   if (list.some((row) => row.id === tx.id)) return list;
   const next = [...list, tx];

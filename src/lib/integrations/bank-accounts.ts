@@ -1,6 +1,9 @@
 import "server-only";
 
+import { isSchemaOutOfDate } from "@/lib/db-errors";
+import { logger, serializeError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import type { OwnAccountRef } from "@/lib/transfers";
 
 /**
  * Per-account rows inside a bank connection. Bank syncs used to keep account
@@ -71,6 +74,28 @@ export async function setAccountIncluded(
     where: { id: accountId },
     data: { includeInTotals },
   });
+}
+
+/**
+ * Linked accounts for internal-transfer detection (name + mask only).
+ * Empty when the workspace has no bank connections or migration 0016 is pending.
+ */
+export async function loadOwnAccountRefs(workspaceId: string): Promise<OwnAccountRef[]> {
+  try {
+    const rows = await prisma.bankAccount.findMany({
+      where: { connection: { workspaceId } },
+      select: { name: true, mask: true },
+    });
+    return rows.map((row) => ({ name: row.name, mask: row.mask }));
+  } catch (error) {
+    if (isSchemaOutOfDate(error)) {
+      logger.warn("[transfers] bank_accounts not available yet; skipping own-account match", {
+        error: serializeError(error),
+      });
+      return [];
+    }
+    throw error;
+  }
 }
 
 /**

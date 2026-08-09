@@ -3,6 +3,7 @@ import "server-only";
 import { resolveReportCash } from "@/lib/finance/cash";
 import { loadCashPosition } from "@/lib/finance/cash-data";
 import { prisma } from "@/lib/prisma";
+import { isTransferCategoryName } from "@/lib/transfers";
 
 import { previousPeriod, type ResolvedPeriod } from "./period";
 
@@ -117,7 +118,7 @@ export async function buildReport(
 ): Promise<ReportData> {
   const previous = previousPeriod(period);
 
-  const [rows, previousAggregates, priorRows, allRows, unpaidInvoices] = await Promise.all([
+  const [rows, previousRows, priorRows, allRows, unpaidInvoices] = await Promise.all([
     prisma.transaction.findMany({
       where: { workspaceId, date: { gte: period.from, lte: period.to } },
       select: {
@@ -128,10 +129,13 @@ export async function buildReport(
         category: { select: { name: true, color: true } },
       },
     }),
-    prisma.transaction.groupBy({
-      by: ["type"],
+    prisma.transaction.findMany({
       where: { workspaceId, date: { gte: previous.from, lte: previous.to } },
-      _sum: { amount: true },
+      select: {
+        type: true,
+        amount: true,
+        category: { select: { name: true } },
+      },
     }),
     prisma.transaction.groupBy({
       by: ["type"],
@@ -140,7 +144,12 @@ export async function buildReport(
     }),
     prisma.transaction.findMany({
       where: { workspaceId },
-      select: { type: true, amount: true, date: true },
+      select: {
+        type: true,
+        amount: true,
+        date: true,
+        category: { select: { name: true } },
+      },
     }),
     prisma.invoice.findMany({
       where: { workspaceId, status: "UNPAID" },
@@ -148,21 +157,23 @@ export async function buildReport(
     }),
   ]);
 
-  /* ---- KPIs ---- */
+  /* ---- KPIs (transfers are movement, not income/spend — YNAB-style) ---- */
   let revenue = 0;
   let expenses = 0;
   for (const row of rows) {
+    if (isTransferCategoryName(row.category?.name)) continue;
     if (row.type === "INCOME") revenue += Number(row.amount);
     else expenses += Number(row.amount);
   }
   const profit = revenue - expenses;
 
-  const prevRevenue = Number(
-    previousAggregates.find((entry) => entry.type === "INCOME")?._sum.amount ?? 0
-  );
-  const prevExpenses = Number(
-    previousAggregates.find((entry) => entry.type === "EXPENSE")?._sum.amount ?? 0
-  );
+  let prevRevenue = 0;
+  let prevExpenses = 0;
+  for (const row of previousRows) {
+    if (isTransferCategoryName(row.category?.name)) continue;
+    if (row.type === "INCOME") prevRevenue += Number(row.amount);
+    else prevExpenses += Number(row.amount);
+  }
   const prevProfit = prevRevenue - prevExpenses;
 
   const priorNet = priorRows.reduce(
@@ -235,6 +246,8 @@ export async function buildReport(
   const customerTotals = new Map<string, PartyTotal>();
 
   for (const row of rows) {
+    if (isTransferCategoryName(row.category?.name)) continue;
+
     const amount = Number(row.amount);
     const monthEntry = monthIndex.get(monthKeyOf(row.date));
     if (monthEntry) {
@@ -264,9 +277,10 @@ export async function buildReport(
     }
   }
 
-  /* ---- Yearly trend (all history) ---- */
+  /* ---- Yearly trend (all history; transfers excluded from P&L) ---- */
   const yearTotals = new Map<number, YearTrend>();
   for (const row of allRows) {
+    if (isTransferCategoryName(row.category?.name)) continue;
     const yearOf = row.date.getUTCFullYear();
     const entry = yearTotals.get(yearOf) ?? { year: yearOf, revenue: 0, expenses: 0, profit: 0 };
     if (row.type === "INCOME") entry.revenue += Number(row.amount);

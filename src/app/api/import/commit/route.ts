@@ -10,7 +10,12 @@ import {
   incrementUsage,
   limitError,
 } from "@/lib/billing/entitlements";
-import { loadRuleMatchers, matchCategory } from "@/lib/categories";
+import {
+  getTransferCategoryIds,
+  loadRuleMatchers,
+  matchCategoryOrTransfer,
+} from "@/lib/categories";
+import { loadOwnAccountRefs } from "@/lib/integrations/bank-accounts";
 import { detectStatementCurrency } from "@/lib/csv/detect";
 import { fingerprintRows } from "@/lib/csv/fingerprint";
 import { normalizeRows } from "@/lib/csv/normalize";
@@ -181,7 +186,11 @@ export async function POST(request: Request) {
       });
     }
 
-    const matchers = await loadRuleMatchers(workspace.id);
+    const [matchers, accounts, transferIds] = await Promise.all([
+      loadRuleMatchers(workspace.id),
+      loadOwnAccountRefs(workspace.id),
+      getTransferCategoryIds(workspace.id, user.id),
+    ]);
 
     const batch = await prisma.$transaction(async (tx) => {
       const created = await tx.importBatch.create({
@@ -193,7 +202,14 @@ export async function POST(request: Request) {
           userId: user.id,
           type: row.type,
           amount: row.amount,
-          categoryId: matchCategory(matchers, row.description, row.counterparty),
+          categoryId: matchCategoryOrTransfer(
+            matchers,
+            row.description,
+            row.counterparty,
+            row.type,
+            accounts,
+            transferIds
+          ),
           description: row.description,
           counterparty: row.counterparty,
           date: new Date(`${row.date}T00:00:00.000Z`),

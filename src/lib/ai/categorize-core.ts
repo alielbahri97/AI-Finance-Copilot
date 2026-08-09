@@ -23,6 +23,9 @@ export const MAX_PROMPT_CATEGORIES = 60;
 /** Transactions per request. Larger batches start losing index alignment. */
 export const MAX_TRANSACTIONS_PER_BATCH = 50;
 
+/** Past merchant→category examples included in a prompt (cheap few-shot). */
+export const MAX_PROMPT_EXAMPLES = 20;
+
 export interface CategorizableTransaction {
   /** ISO date (YYYY-MM-DD). */
   date: string;
@@ -41,26 +44,116 @@ export interface PromptCategory {
   usage?: number;
 }
 
+/**
+ * A workspace-specific example the model can mirror: "this merchant was
+ * previously filed under that category". Kept short so many fit cheaply.
+ */
+export interface CategorizationExample {
+  merchant: string;
+  categoryId: string;
+  categoryName: string;
+  type: TransactionType;
+}
+
+/**
+ * A past merchant→category observation used for deterministic payee memory
+ * (YNAB/Lunch Money style) before the LLM is asked.
+ */
+export interface MerchantHistoryRow {
+  merchant: string;
+  categoryId: string;
+  type: TransactionType;
+}
+
+/* ------------------------------------------------------------------ */
+/* Merchant / payee memory                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Normalizes a merchant or description fragment for history lookup.
+ * Digits and punctuation drop out so "AH #1234" and "AH" can still align.
+ */
+export function normalizeMerchantKey(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\d+/g, " ")
+    .replace(/[^\p{L}\s.-]/gu, " ")
+    .replace(/[.-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 100);
+}
+
+/**
+ * Prefers counterparty (payee) over description — same bias as rule learning.
+ */
+export function merchantKeyFromTransaction(
+  description: string,
+  counterparty: string | null | undefined
+): string | null {
+  const fromCounterparty = normalizeMerchantKey(counterparty ?? "");
+  if (fromCounterparty.length >= 2) return fromCounterparty;
+  const fromDescription = normalizeMerchantKey(description);
+  if (fromDescription.length >= 2) return fromDescription;
+  return null;
+}
+
+/**
+ * Builds a type|merchant → categoryId index. `history` should be newest-first;
+ * the first write for a key wins (last-used payee category, YNAB-style).
+ */
+export function buildMerchantCategoryIndex(
+  history: MerchantHistoryRow[]
+): Map<string, string> {
+  const index = new Map<string, string>();
+  for (const row of history) {
+    const merchant = normalizeMerchantKey(row.merchant);
+    if (merchant.length < 2) continue;
+    const key = `${row.type}|${merchant}`;
+    if (!index.has(key)) index.set(key, row.categoryId);
+  }
+  return index;
+}
+
+/** Looks up the last-used category for this payee/direction, if any. */
+export function matchMerchantHistory(
+  description: string,
+  counterparty: string | null | undefined,
+  type: TransactionType,
+  index: Map<string, string>
+): string | null {
+  const merchant = merchantKeyFromTransaction(description, counterparty);
+  if (!merchant) return null;
+  return index.get(`${type}|${merchant}`) ?? null;
+}
+
 /* ------------------------------------------------------------------ */
 /* Prompt                                                              */
 /* ------------------------------------------------------------------ */
 
-export const CATEGORIZATION_SYSTEM_PROMPT = `You categorize bank transactions into a fixed set of categories.
+export const CATEGORIZATION_SYSTEM_PROMPT = `You categorize bank transactions into a FIXED list of existing categories for a personal/business finance app.
 
 Reply with ONLY a JSON object (no markdown fences, no commentary) shaped exactly like this:
 {
   "suggestions": [
-    { "transactionIndex": 0, "categoryId": "<one of the given category ids>", "confidence": 0.0 }
+    { "transactionIndex": 0, "categoryId": "<exact id from the category list>", "confidence": 0.0 }
   ]
 }
 
-Rules:
-- "transactionIndex" is the index shown next to the transaction. Never invent indexes.
-- "categoryId" MUST be copied verbatim from the category list. Never invent an id and never use a category name.
-- Match the transaction's direction: use an income category for INCOME rows and an expense category for EXPENSE rows.
-- "confidence" is 0.0-1.0 and must reflect real certainty. A recognisable merchant is high; a vague reference number is low.
-- Omit any transaction you cannot place with confidence. A missing suggestion is correct behaviour, a guess is not.
-- Transfers between the person's own accounts, ATM withdrawals and other movements that are not spending should be omitted unless a category clearly covers them.`;
+Hard rules:
+- Use ONLY category ids from the provided list. Copy each id verbatim. Never invent ids, never invent categories, never rename categories.
+- Prefer an exact semantic match to an existing category name (e.g. "Groceries", "Dining", "Transport"). If none fits well, OMIT the transaction — do not stretch a weak match.
+- "transactionIndex" must be one of the indexes shown. Never invent indexes.
+- Match direction strictly: INCOME rows → income categories only; EXPENSE rows → expense categories only.
+- "confidence" is 0.0–1.0 and must reflect real certainty:
+  - ≥0.9: well-known merchant or clear salary/payroll wording that maps cleanly to one category
+  - 0.8–0.9: strong but not obvious (e.g. local shop that fits one category)
+  - <0.8: omit — a missing suggestion is correct; a guess is not
+- When "Past categorizations" examples are provided, treat them as the user's established mapping for that merchant and reuse the same categoryId when the new row is clearly the same counterparty/merchant.
+- Transfers between own accounts, ATM cash, and non-spending movements: omit unless a listed category clearly covers them.
+- Do not use category names as categoryId. If unsure which id belongs to a name, omit rather than guess.`;
 
 /**
  * The categories to offer the model, most-used first and capped. Ordering by
@@ -88,10 +181,34 @@ function describeTransaction(transaction: CategorizableTransaction, index: numbe
   return `${index}. ${fields.join(" | ")}`;
 }
 
-/** The user message: the category menu, then the numbered transactions. */
+function describeExample(example: CategorizationExample): string {
+  return `- "${example.merchant.slice(0, 80)}" → ${example.categoryId} (${example.categoryName}, ${example.type})`;
+}
+
+/** Dedupes examples by merchant+category, capped for the prompt. */
+export function selectPromptExamples(
+  examples: CategorizationExample[],
+  limit = MAX_PROMPT_EXAMPLES
+): CategorizationExample[] {
+  const seen = new Set<string>();
+  const selected: CategorizationExample[] = [];
+  for (const example of examples) {
+    const merchant = example.merchant.trim();
+    if (!merchant) continue;
+    const key = `${merchant.toLowerCase()}|${example.categoryId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    selected.push({ ...example, merchant });
+    if (selected.length >= limit) break;
+  }
+  return selected;
+}
+
+/** The user message: the category menu, optional merchant hints, then transactions. */
 export function buildCategorizationPrompt(
   transactions: CategorizableTransaction[],
-  categories: PromptCategory[]
+  categories: PromptCategory[],
+  examples: CategorizationExample[] = []
 ): string {
   const categoryLines = categories
     .map((category) => `- ${category.id} — ${category.name} (${category.type})`)
@@ -99,14 +216,19 @@ export function buildCategorizationPrompt(
   const transactionLines = transactions
     .map((transaction, index) => describeTransaction(transaction, index))
     .join("\n");
+  const selectedExamples = selectPromptExamples(examples);
+  const exampleBlock =
+    selectedExamples.length > 0
+      ? `\nPast categorizations for similar merchants in this workspace (reuse the same categoryId when the merchant clearly matches):\n${selectedExamples.map(describeExample).join("\n")}\n`
+      : "";
 
-  return `Categories (id — name (direction)):
+  return `Categories (id — name (direction)). Use ONLY these ids; prefer the listed names as-is — do not invent new categories:
 ${categoryLines}
-
+${exampleBlock}
 Transactions (index. date | direction | amount | description | counterparty):
 ${transactionLines}
 
-Return the JSON object described in the system message.`;
+Return the JSON object described in the system message. Omit any transaction you cannot place with confidence ≥ 0.8.`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -115,7 +237,7 @@ Return the JSON object described in the system message.`;
 
 const suggestionSchema = z.object({
   transactionIndex: z.coerce.number().int().min(0),
-  categoryId: z.coerce.string().trim().min(1).max(64),
+  categoryId: z.coerce.string().trim().min(1).max(120),
   confidence: z.coerce.number().min(0).max(1),
 });
 
@@ -165,16 +287,32 @@ export function extractFirstJsonBlock(raw: string): string | null {
   return null;
 }
 
-/** Accepts the documented shape, a bare array, and the usual key synonyms. */
+/**
+ * Accepts the documented shape, a bare array, usual key synonyms, and the
+ * common mistake of putting the category name in `category` / `categoryName`
+ * instead of (or as well as) `categoryId`.
+ */
 function normalizeResponseShape(parsed: unknown): unknown {
-  if (Array.isArray(parsed)) return { suggestions: parsed };
+  if (Array.isArray(parsed)) return { suggestions: normalizeSuggestionRows(parsed) };
   if (parsed && typeof parsed === "object") {
     const record = parsed as Record<string, unknown>;
     for (const key of ["suggestions", "results", "categorizations", "transactions"]) {
-      if (Array.isArray(record[key])) return { suggestions: record[key] };
+      if (Array.isArray(record[key])) {
+        return { suggestions: normalizeSuggestionRows(record[key]) };
+      }
     }
   }
   return parsed;
+}
+
+function normalizeSuggestionRows(rows: unknown[]): unknown[] {
+  return rows.map((row) => {
+    if (!row || typeof row !== "object") return row;
+    const record = row as Record<string, unknown>;
+    const categoryId =
+      record.categoryId ?? record.category_id ?? record.category ?? record.categoryName;
+    return categoryId === undefined ? record : { ...record, categoryId };
+  });
 }
 
 /**
@@ -222,7 +360,28 @@ export interface SuggestionContext {
   transactions: Pick<CategorizableTransaction, "type">[];
   /** The categories offered in the prompt, by id. */
   categories: Map<string, TransactionType>;
+  /**
+   * Lowercased exact category name → id. Recovers the common case where the
+   * model returns a category name instead of its id.
+   */
+  categoryNames?: Map<string, string>;
   threshold?: number;
+}
+
+/**
+ * Resolves a model-supplied category token to a known id. Prefers a verbatim
+ * id match; falls back to an exact (case-insensitive) name match so a reply
+ * of `"Groceries"` still maps when that name exists — never invents one.
+ */
+export function resolveCategoryId(
+  token: string,
+  categories: Map<string, TransactionType>,
+  categoryNames?: Map<string, string>
+): string | null {
+  if (categories.has(token)) return token;
+  const byName = categoryNames?.get(token.trim().toLowerCase());
+  if (byName && categories.has(byName)) return byName;
+  return null;
 }
 
 /**
@@ -246,11 +405,18 @@ export function selectConfidentAssignments(
     if (assignments.has(suggestion.transactionIndex)) continue;
     if (suggestion.confidence < threshold) continue;
 
-    const categoryType = context.categories.get(suggestion.categoryId);
+    const categoryId = resolveCategoryId(
+      suggestion.categoryId,
+      context.categories,
+      context.categoryNames
+    );
+    if (!categoryId) continue;
+
+    const categoryType = context.categories.get(categoryId);
     if (!categoryType) continue;
     if (categoryType !== transaction.type) continue;
 
-    assignments.set(suggestion.transactionIndex, suggestion.categoryId);
+    assignments.set(suggestion.transactionIndex, categoryId);
   }
 
   return assignments;

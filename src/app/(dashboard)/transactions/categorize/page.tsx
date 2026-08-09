@@ -1,24 +1,25 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { TagsIcon } from "lucide-react";
+import { SparklesIcon, TagsIcon } from "lucide-react";
 
 import { CategorizeQueue } from "@/components/transactions/categorize-queue";
-import type { CategoryOption, TransactionRow } from "@/components/transactions/types";
+import {
+  TEACH_SESSION_SIZE,
+  type CategoryOption,
+  type TransactionRow,
+} from "@/components/transactions/types";
 import { Button } from "@/components/ui/button";
 import { PageHeading } from "@/components/ui/page-heading";
 import { prisma } from "@/lib/prisma";
 import { getWorkspaceContext } from "@/lib/workspace/context";
 
-export const metadata: Metadata = { title: "Categorize" };
+export const metadata: Metadata = { title: "Teach categories" };
 export const dynamic = "force-dynamic";
 
-/** How many largest uncategorized rows to load into the focused review queue. */
-const QUEUE_SIZE = 40;
-
 /**
- * Manual categorization focused on impact: uncategorized transactions ordered
- * by amount descending so the biggest numbers are labeled first.
+ * Short teach session: only the largest ~8 uncategorized transactions so a
+ * visit feels like five minutes, not an endless backlog.
  */
 export default async function CategorizeTransactionsPage() {
   const ctx = await getWorkspaceContext();
@@ -39,9 +40,8 @@ export default async function CategorizeTransactionsPage() {
     }),
     prisma.transaction.findMany({
       where: { workspaceId, categoryId: null },
-      // Amounts are stored positive with a type; desc = largest magnitude first.
       orderBy: [{ amount: "desc" }, { date: "desc" }, { createdAt: "desc" }],
-      take: QUEUE_SIZE,
+      take: TEACH_SESSION_SIZE,
       include: {
         category: { select: { name: true, color: true } },
         invoice: { select: { id: true, vendor: true } },
@@ -65,23 +65,36 @@ export default async function CategorizeTransactionsPage() {
     invoiceVendor: tx.invoice?.vendor ?? null,
   }));
 
+  const sessionCount = rows.length;
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 space-y-1">
-          <PageHeading>Categorize</PageHeading>
+          <PageHeading>5‑min teach session</PageHeading>
           <p className="text-muted-foreground text-sm">
-            Label the biggest uncategorized transactions first — skip any you want to leave for
-            later.
+            {sessionCount === 0
+              ? "Nothing unlabeled right now."
+              : `Label up to ${sessionCount} of the biggest uncategorized transactions — each pick teaches Ballast.`}
           </p>
         </div>
         <Button variant="outline" asChild>
           <Link href="/transactions?category=uncategorized&sort=amount&dir=desc">
             <TagsIcon />
-            All uncategorized
+            Browse all unlabeled
           </Link>
         </Button>
       </div>
+
+      {sessionCount > 0 && (
+        <p className="text-muted-foreground flex items-center gap-2 text-sm">
+          <SparklesIcon className="text-primary size-4 shrink-0" />
+          Session of {sessionCount}
+          {totalUncategorized > sessionCount
+            ? ` · more waiting after if you want another round`
+            : null}
+        </p>
+      )}
 
       <CategorizeQueue
         initialTransactions={rows}
