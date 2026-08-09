@@ -5,6 +5,7 @@ import { DatabaseUnavailable } from "@/components/dashboard/database-unavailable
 import { Header } from "@/components/dashboard/header";
 import { MobileTabBar } from "@/components/dashboard/mobile-nav";
 import { Sidebar } from "@/components/dashboard/sidebar";
+import { SessionLockProvider } from "@/components/auth/session-lock-provider";
 import { HelpLauncher } from "@/components/help/help-launcher";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 import { FirstRunPrompts } from "@/components/tour/first-run-prompts";
@@ -68,39 +69,41 @@ export default async function DashboardLayout({ children }: { children: React.Re
     }
 
     return (
-      <div className="flex min-h-svh">
-        <Sidebar isAdmin={profile.isAdmin} workspaceType={ctx.workspace.type} />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <Header
-            email={profile.email}
-            fullName={profile.fullName}
-            avatarUrl={profile.avatarUrl}
-            isAdmin={profile.isAdmin}
-            workspaces={workspaces}
-            currentWorkspaceId={ctx.workspace.id}
-            currentWorkspaceType={ctx.workspace.type}
-            locale={localeForCurrency(ctx.workspace.currency)}
+      <SessionLockProvider email={profile.email} userId={user.id}>
+        <div className="flex min-h-svh">
+          <Sidebar isAdmin={profile.isAdmin} workspaceType={ctx.workspace.type} />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <Header
+              email={profile.email}
+              fullName={profile.fullName}
+              avatarUrl={profile.avatarUrl}
+              isAdmin={profile.isAdmin}
+              workspaces={workspaces}
+              currentWorkspaceId={ctx.workspace.id}
+              currentWorkspaceType={ctx.workspace.type}
+              locale={localeForCurrency(ctx.workspace.currency)}
+            />
+            <main
+              id="main-content"
+              tabIndex={-1}
+              className="flex flex-1 flex-col p-4 pb-[calc(var(--tab-bar-height)+1.5rem)] outline-none sm:px-6 sm:pt-6"
+            >
+              {children}
+            </main>
+          </div>
+          <MobileTabBar isAdmin={profile.isAdmin} workspaceType={ctx.workspace.type} />
+          <HelpLauncher edition={editionForWorkspaceType(ctx.workspace.type)} />
+          <FirstRunPrompts
+            tourCompleted={isProductTourDone(profile)}
+            showCelebration={!profile.celebrationSeenAt}
+            celebrationVariant={
+              isCompedEnterpriseEmail(profile.email) ? "enterprise" : "welcome"
+            }
+            edition={editionForWorkspaceType(ctx.workspace.type)}
           />
-          <main
-            id="main-content"
-            tabIndex={-1}
-            className="flex flex-1 flex-col p-4 pb-[calc(var(--tab-bar-height)+1.5rem)] outline-none sm:px-6 sm:pt-6"
-          >
-            {children}
-          </main>
+          <PwaInstallPrompt />
         </div>
-        <MobileTabBar isAdmin={profile.isAdmin} workspaceType={ctx.workspace.type} />
-        <HelpLauncher edition={editionForWorkspaceType(ctx.workspace.type)} />
-        <FirstRunPrompts
-          tourCompleted={isProductTourDone(profile)}
-          showCelebration={!profile.celebrationSeenAt}
-          celebrationVariant={
-            isCompedEnterpriseEmail(profile.email) ? "enterprise" : "welcome"
-          }
-          edition={editionForWorkspaceType(ctx.workspace.type)}
-        />
-        <PwaInstallPrompt />
-      </div>
+      </SessionLockProvider>
     );
   } catch (error) {
     unstable_rethrow(error);

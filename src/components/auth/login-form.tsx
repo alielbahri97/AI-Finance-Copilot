@@ -29,6 +29,7 @@ import {
   passkeySignInLabel,
   type PasskeyUiMode,
 } from "@/lib/auth/passkeys";
+import { clearSessionLock } from "@/lib/auth/session-lock";
 import { createClient } from "@/lib/supabase/client";
 import { loginSchema, type LoginValues } from "@/lib/validations/auth";
 
@@ -132,6 +133,7 @@ export function LoginForm() {
 
       // Only persist email (never password) after a successful sign-in.
       persistLoginEmail(rememberEmail, values.email);
+      clearSessionLock();
 
       toast.success("Welcome back!");
       router.push(searchParams.get("next") ?? "/dashboard");
@@ -161,6 +163,7 @@ export function LoginForm() {
 
       const email = data.user?.email;
       if (email) persistLoginEmail(rememberEmail, email);
+      clearSessionLock();
 
       toast.success("Welcome back!");
       router.push(searchParams.get("next") ?? "/dashboard");

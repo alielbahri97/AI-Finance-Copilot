@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { BallastLogo } from "@/components/brand/ballast-mark";
+import { SessionLockProvider } from "@/components/auth/session-lock-provider";
 import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard";
 import { PersonalOnboardingWizard } from "@/components/onboarding/personal-onboarding-wizard";
 import { ReportIssueButton } from "@/components/report-issue/report-issue-button";
@@ -54,7 +55,7 @@ export default async function OnboardingPage({
     }
 
     return (
-      <OnboardingShell>
+      <OnboardingShell email={profile.email} userId={user.id}>
         <PersonalOnboardingWizard
           currency={ctx.workspace.currency || profile.currency}
           allowSkip={!editing}
@@ -92,7 +93,7 @@ export default async function OnboardingPage({
   }
 
   return (
-    <OnboardingShell>
+    <OnboardingShell email={profile.email} userId={user.id}>
       <OnboardingWizard
         currency={profile.currency}
         allowSkip={!editing}
@@ -120,19 +121,29 @@ export default async function OnboardingPage({
   );
 }
 
-function OnboardingShell({ children }: { children: React.ReactNode }) {
+function OnboardingShell({
+  email,
+  userId,
+  children,
+}: {
+  email: string;
+  userId: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="relative flex min-h-svh flex-col items-center px-4 py-10">
-      <div className="absolute top-4 right-4">
-        <ThemeToggle />
+    <SessionLockProvider email={email} userId={userId}>
+      <div className="relative flex min-h-svh flex-col items-center px-4 py-10">
+        <div className="absolute top-4 right-4">
+          <ThemeToggle />
+        </div>
+        <Link href="/" className="mb-8">
+          <BallastLogo />
+        </Link>
+        <main id="main-content" tabIndex={-1} className="w-full outline-none">
+          {children}
+        </main>
+        <ReportIssueButton />
       </div>
-      <Link href="/" className="mb-8">
-        <BallastLogo />
-      </Link>
-      <main id="main-content" tabIndex={-1} className="w-full outline-none">
-        {children}
-      </main>
-      <ReportIssueButton />
-    </div>
+    </SessionLockProvider>
   );
 }

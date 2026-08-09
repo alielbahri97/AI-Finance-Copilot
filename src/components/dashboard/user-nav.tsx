@@ -19,6 +19,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { clearSessionLock } from "@/lib/auth/session-lock";
 import { createClient } from "@/lib/supabase/client";
 import { getInitials } from "@/lib/utils";
 
@@ -39,6 +40,7 @@ export function UserNav({ email, fullName, avatarUrl }: UserNavProps) {
       toast.error("Sign out failed", { description: error.message });
       return;
     }
+    clearSessionLock();
     toast.success("Signed out");
     router.push("/login");
     router.refresh();
