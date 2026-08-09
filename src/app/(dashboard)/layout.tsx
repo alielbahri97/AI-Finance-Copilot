@@ -6,7 +6,10 @@ import { Header } from "@/components/dashboard/header";
 import { MobileTabBar } from "@/components/dashboard/mobile-nav";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { HelpLauncher } from "@/components/help/help-launcher";
+import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 import { FirstRunPrompts } from "@/components/tour/first-run-prompts";
+import { getEntitlements } from "@/lib/billing/entitlements";
+import { isCompedEnterpriseEmail } from "@/lib/billing/plan-overrides";
 import { getOrCreateProfile } from "@/lib/data";
 import { classifyDatabaseFailure, describeDatabaseError } from "@/lib/db-errors";
 import { logger } from "@/lib/logger";
@@ -58,6 +61,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
       redirect("/onboarding");
     }
 
+    // Complimentary Enterprise: resolve entitlements on first dashboard hit so
+    // the plan is persisted before Billing or gates run.
+    if (isCompedEnterpriseEmail(profile.email)) {
+      await getEntitlements(ctx.workspace.id);
+    }
+
     return (
       <div className="flex min-h-svh">
         <Sidebar isAdmin={profile.isAdmin} workspaceType={ctx.workspace.type} />
@@ -84,8 +93,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
         <HelpLauncher edition={editionForWorkspaceType(ctx.workspace.type)} />
         <FirstRunPrompts
           tourCompleted={isProductTourDone(profile)}
+          showEnterprisePromo={
+            isCompedEnterpriseEmail(profile.email) && !profile.enterprisePromoSeenAt
+          }
           edition={editionForWorkspaceType(ctx.workspace.type)}
         />
+        <PwaInstallPrompt />
       </div>
     );
   } catch (error) {

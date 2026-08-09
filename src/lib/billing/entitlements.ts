@@ -13,6 +13,7 @@ import {
   type WorkspaceType,
 } from "@/lib/workspace/editions";
 
+import { overriddenPlanForEmail } from "./plan-overrides";
 import { getPlan, TRIAL_DAYS, trialPlan, type Plan, type PlanId } from "./plans";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -98,17 +99,48 @@ export function resolvePlanId(
  * request share a single subscription + usage lookup. API routes that
  * increment usage read entitlements once before incrementing, so the
  * request-scoped memo never serves stale quota decisions.
+ *
+ * Complimentary email overrides (see plan-overrides) win over Stripe/trial
+ * for workspaces owned by allowlisted addresses, and are persisted so the
+ * billing UI stays consistent.
  */
 export const getEntitlements = cache(async (workspaceId: string): Promise<Entitlements> => {
-  const [subscription, usage, workspace] = await Promise.all([
+  const [subscription, usage, workspace, owner] = await Promise.all([
     getOrCreateSubscription(workspaceId),
     getOrCreateUsage(workspaceId, currentPeriod()),
     prisma.workspace.findUnique({ where: { id: workspaceId }, select: { type: true } }),
+    prisma.workspaceMember.findFirst({
+      where: { workspaceId, role: "OWNER" },
+      select: { profile: { select: { email: true } } },
+    }),
   ]);
   const period = currentPeriod();
   const workspaceType = workspace?.type ?? DEFAULT_WORKSPACE_TYPE;
   const edition = editionForWorkspaceType(workspaceType);
-  const { planId, isTrial } = resolvePlanId(subscription, edition);
+  const overridePlanId = overriddenPlanForEmail(owner?.profile.email, edition);
+  const resolved = overridePlanId
+    ? { planId: overridePlanId, isTrial: false }
+    : resolvePlanId(subscription, edition);
+  const { planId, isTrial } = resolved;
+
+  if (
+    overridePlanId &&
+    (subscription.plan !== overridePlanId || subscription.status !== "ACTIVE")
+  ) {
+    // Persist so Billing and admin MRR reflect the grant; ignore races.
+    void prisma.subscription
+      .update({
+        where: { workspaceId },
+        data: { plan: overridePlanId, status: "ACTIVE" },
+      })
+      .catch((error) => {
+        logger.error("[billing] failed to persist complimentary plan", {
+          workspaceId,
+          planId: overridePlanId,
+          error: serializeError(error),
+        });
+      });
+  }
 
   return {
     plan: getPlan(planId, edition),
@@ -117,7 +149,7 @@ export const getEntitlements = cache(async (workspaceId: string): Promise<Entitl
     edition,
     isTrial,
     trialEndsAt: subscription.trialEndsAt?.toISOString() ?? null,
-    subscriptionStatus: subscription.status,
+    subscriptionStatus: overridePlanId ? "ACTIVE" : subscription.status,
     cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
     currentPeriodEnd: subscription.currentPeriodEnd?.toISOString() ?? null,
     hasStripeCustomer: Boolean(subscription.stripeCustomerId),
