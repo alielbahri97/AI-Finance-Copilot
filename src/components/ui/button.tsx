@@ -43,7 +43,7 @@ function Button({
   variant,
   size,
   asChild = false,
-  onPointerDown,
+  onClick,
   disabled,
   ...props
 }: React.ComponentProps<"button"> &
@@ -58,13 +58,13 @@ function Button({
       className={cn(buttonVariants({ variant, size, className }))}
       disabled={disabled}
       {...props}
-      onPointerDown={(event) => {
-        // Soft tick on press — skip links and disabled controls so the cue
-        // stays tied to real actions, like Revolut's button haptics.
+      onClick={(event) => {
+        // Soft tick on intentional activation — use click (not pointerdown) so
+        // scroll gestures that start on a control do not fire a cue.
         if (!disabled && variant !== "link" && event.button === 0) {
           feedback.tap();
         }
-        onPointerDown?.(event);
+        onClick?.(event);
       }}
     />
   );

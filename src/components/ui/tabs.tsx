@@ -31,7 +31,7 @@ function TabsList({ className, ...props }: React.ComponentProps<typeof TabsPrimi
 
 function TabsTrigger({
   className,
-  onPointerDown,
+  onClick,
   ...props
 }: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
   return (
@@ -42,9 +42,10 @@ function TabsTrigger({
         className
       )}
       {...props}
-      onPointerDown={(event) => {
+      onClick={(event) => {
+        // Click (not pointerdown) so finger-down-then-scroll does not select-cue.
         if (!props.disabled && event.button === 0) feedback.select();
-        onPointerDown?.(event);
+        onClick?.(event);
       }}
     />
   );
