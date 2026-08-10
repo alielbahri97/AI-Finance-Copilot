@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -109,15 +110,44 @@ fun ConnectionCard(
                 if (consent is ConsentState.ValidUntil) {
                     InfoLine(consentValidUntilText(consent.date, workspaceFormatter))
                 }
-                if (rateLimit != null) InfoLine(rateLimit)
+            }
+
+            // Both of these are information. A consent that lapses in a
+            // fortnight and a bank that has hit its own daily quota are facts
+            // about how open banking works, not faults in the connection, so
+            // neither is allowed the destructive treatment that `lastError`
+            // below gets — and the rate-limit notice never carries a warning
+            // wash at all, because there is nothing for anyone to do about it.
+            if (rateLimit != null) {
+                BallastAlert(
+                    title = RATE_LIMIT_TITLE,
+                    description = rateLimit,
+                    variant = AlertVariant.DEFAULT,
+                    icon = Icons.Filled.Info,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
 
             if (consent is ConsentState.Expiring) {
                 BallastAlert(
-                    title = consentWarningText(consent.daysLeft),
-                    variant = AlertVariant.WARNING,
-                    icon = Icons.Filled.Warning,
+                    title = consentWarningTitle(consent.daysLeft),
+                    description = consentWarningDetail(consent.daysLeft),
+                    variant = if (consent.urgent) {
+                        AlertVariant.WARNING
+                    } else {
+                        AlertVariant.DEFAULT
+                    },
+                    icon = if (consent.urgent) Icons.Filled.Warning else Icons.Filled.Info,
                     modifier = Modifier.fillMaxWidth(),
+                    action = {
+                        BallastButton(
+                            text = "Reconnect",
+                            onClick = onReconnect,
+                            variant = ButtonVariant.OUTLINE,
+                            size = ButtonSize.SMALL,
+                            enabled = enabled,
+                        )
+                    },
                 )
             }
             if (error != null) {

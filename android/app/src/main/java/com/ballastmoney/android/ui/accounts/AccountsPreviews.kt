@@ -11,8 +11,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.ballastmoney.android.core.common.MoneyFormatter
 import com.ballastmoney.android.core.model.LockedReason
+import com.ballastmoney.android.data.bank.BankWaitReason
+import com.ballastmoney.android.data.bank.PendingBankConnection
 import com.ballastmoney.android.designsystem.theme.BallastSpacing
 import com.ballastmoney.android.designsystem.theme.BallastTheme
+import com.ballastmoney.android.ui.bank.BankConnectUiState
+import com.ballastmoney.android.ui.bank.BankNotice
+import com.ballastmoney.android.ui.bank.BankNoticeTone
 
 /**
  * The states worth looking at without a device: everything healthy, everything
@@ -157,8 +162,40 @@ private fun ProviderHowToConnectPreview() {
     }
 }
 
+/**
+ * A bank approval the user walked away from, sitting above everything else.
+ *
+ * Worth a preview of its own because it is the state the screen is most often
+ * rebuilt into: the app was killed behind the browser, and this is the first
+ * thing the user sees when they come back.
+ */
+@Preview(name = "Bank connection pending", showBackground = true, heightDp = 1500)
 @Composable
-private fun PreviewScreen(state: AccountsUiState) {
+private fun AccountsBankPendingPreview() {
+    PreviewScreen(
+        state = AccountsPreviewData.ready(),
+        bankConnect = BankConnectUiState(
+            pending = PendingBankConnection(
+                reference = "ballast-ws1-1786000000000-6f2a1b",
+                institutionId = "ING_INGBNL2A",
+                institutionName = "ING",
+                expiresAt = AccountsPreviewData.now.plusSeconds(BANK_WINDOW_SECONDS),
+            ),
+            waitReason = BankWaitReason.NOT_YET_APPROVED,
+            notice = BankNotice(
+                title = "Waiting for ING",
+                description = "Finish approving access at your bank.",
+                tone = BankNoticeTone.INFO,
+            ),
+        ),
+    )
+}
+
+@Composable
+private fun PreviewScreen(
+    state: AccountsUiState,
+    bankConnect: BankConnectUiState = BankConnectUiState(),
+) {
     BallastTheme {
         // The theme sets colours but paints nothing, so the preview needs a
         // surface of its own or the cards float on the tool's white page.
@@ -169,7 +206,11 @@ private fun PreviewScreen(state: AccountsUiState) {
                 contentPadding = PaddingValues(0.dp),
                 now = AccountsPreviewData.now,
                 today = AccountsPreviewData.today,
+                bankConnect = bankConnect,
             )
         }
     }
 }
+
+/** Twenty minutes of the thirty-minute window left, as a fixture. */
+private const val BANK_WINDOW_SECONDS = 20L * 60L

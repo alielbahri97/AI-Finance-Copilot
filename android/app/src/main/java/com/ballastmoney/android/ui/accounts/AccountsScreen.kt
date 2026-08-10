@@ -28,10 +28,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ballastmoney.android.core.model.IntegrationConnection
 import com.ballastmoney.android.core.model.IntegrationProvider
@@ -49,6 +52,13 @@ import com.ballastmoney.android.designsystem.component.Skeleton
 import com.ballastmoney.android.designsystem.component.SkeletonText
 import com.ballastmoney.android.designsystem.theme.BallastSpacing
 import com.ballastmoney.android.ui.BallastTestTags
+import com.ballastmoney.android.ui.bank.BankConnectActions
+import com.ballastmoney.android.ui.bank.BankConnectCard
+import com.ballastmoney.android.ui.bank.BankConnectUiState
+import com.ballastmoney.android.ui.bank.BankConnectViewModel
+import com.ballastmoney.android.ui.bank.BankPickerSheet
+import com.ballastmoney.android.ui.bank.BankProviders
+import com.ballastmoney.android.ui.bank.dismissBankConsent
 import java.time.Instant
 import java.time.LocalDate
 
@@ -63,6 +73,11 @@ import java.time.LocalDate
  * scrolls edge to edge and applies them to the list's content rather than to
  * the list itself, so a bank card can pass under the navigation bar instead of
  * stopping short of it.
+ *
+ * The GoCardless connect affordance is intercepted here rather than handed to
+ * [onConnectProvider]: connecting a bank needs a bank chosen first, and that
+ * happens in a sheet over this screen because navigation is another package's.
+ * Every other provider goes on to [onConnectProvider] untouched.
  */
 @Composable
 fun AccountsScreen(
@@ -71,9 +86,13 @@ fun AccountsScreen(
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(0.dp),
     viewModel: AccountsViewModel = hiltViewModel(),
+    bankViewModel: BankConnectViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val bankState by bankViewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    var pickingBank by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(viewModel, snackbarHostState) {
         viewModel.messages.collect { message ->
@@ -81,16 +100,53 @@ fun AccountsScreen(
         }
     }
 
-    val actions = remember(viewModel, onNavigateToBilling, onConnectProvider) {
+    // Every return to the foreground is a chance that the bank approval has
+    // landed. The record on disk is what decides whether there is anything to
+    // ask about, so this is correct even after the process was killed behind
+    // the browser and the screen has only just been rebuilt.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        bankViewModel.onResumed()
+    }
+
+    LaunchedEffect(bankViewModel, context) {
+        bankViewModel.tabDismissals.collect { dismissBankConsent(context) }
+    }
+
+    LaunchedEffect(bankViewModel, viewModel) {
+        // A finalized connection exists only in `GET /api/integrations` as far as
+        // this screen is concerned, so the overview has to be re-read before the
+        // new bank can appear in the list.
+        bankViewModel.connections.collect { viewModel.refresh() }
+    }
+
+    val onConnect: (String) -> Unit = remember(onConnectProvider) {
+        { providerId ->
+            if (providerId == BankProviders.GOCARDLESS) {
+                pickingBank = true
+            } else {
+                onConnectProvider(providerId)
+            }
+        }
+    }
+
+    val actions = remember(viewModel, onNavigateToBilling, onConnect) {
         AccountsActions(
             onRefresh = viewModel::refresh,
             onNavigateToBilling = onNavigateToBilling,
-            onConnectProvider = onConnectProvider,
+            onConnectProvider = onConnect,
             onSync = viewModel::sync,
             onDisconnect = viewModel::disconnect,
             onToggleAccount = viewModel::setIncludeInTotals,
             onOpenProvider = viewModel::openProvider,
             onDismissProvider = viewModel::dismissProvider,
+        )
+    }
+
+    val bankActions = remember(bankViewModel) {
+        BankConnectActions(
+            onCheckNow = bankViewModel::checkNow,
+            onStopWaiting = bankViewModel::stopWaiting,
+            onDismissNotice = bankViewModel::dismissNotice,
         )
     }
 
@@ -100,6 +156,8 @@ fun AccountsScreen(
             actions = actions,
             contentPadding = contentPadding,
             modifier = Modifier.fillMaxSize(),
+            bankConnect = bankState,
+            bankActions = bankActions,
         )
         SnackbarHost(
             hostState = snackbarHostState,
@@ -108,12 +166,22 @@ fun AccountsScreen(
                 .padding(contentPadding),
         )
     }
+
+    if (pickingBank) {
+        BankPickerSheet(
+            onDismiss = { pickingBank = false },
+            onTabOpened = bankViewModel::onConsentTabOpened,
+        )
+    }
 }
 
 /**
  * The whole screen as a function of its state. [now] and [today] are parameters
  * so consent countdowns and rate-limit windows are deterministic in previews
  * and tests rather than depending on when the screenshot was taken.
+ *
+ * [bankConnect] defaults to nothing outstanding, which is what every preview and
+ * every state other than [AccountsUiState.Ready] shows.
  */
 @Composable
 fun AccountsContent(
@@ -123,6 +191,8 @@ fun AccountsContent(
     modifier: Modifier = Modifier,
     now: Instant = Instant.now(),
     today: LocalDate = LocalDate.now(),
+    bankConnect: BankConnectUiState = BankConnectUiState(),
+    bankActions: BankConnectActions = BankConnectActions(),
 ) {
     when (state) {
         AccountsUiState.Loading -> AccountsLoading(
@@ -144,6 +214,8 @@ fun AccountsContent(
             modifier = modifier,
             now = now,
             today = today,
+            bankConnect = bankConnect,
+            bankActions = bankActions,
         )
     }
 }
@@ -205,6 +277,8 @@ private fun AccountsReady(
     modifier: Modifier = Modifier,
     now: Instant = Instant.now(),
     today: LocalDate = LocalDate.now(),
+    bankConnect: BankConnectUiState = BankConnectUiState(),
+    bankActions: BankConnectActions = BankConnectActions(),
 ) {
     val layoutDirection = LocalLayoutDirection.current
     val formatters = remember(state.formatter, state.currency) {
@@ -267,6 +341,20 @@ private fun AccountsReady(
                             modifier = Modifier.padding(top = BallastSpacing.xs),
                         )
                     }
+                }
+            }
+
+            // Above the plan and limit banners: an attempt the user made thirty
+            // seconds ago is more urgent than a standing condition of the
+            // workspace, and it is the thing they came back to the app to see.
+            if (bankConnect.visible) {
+                item(key = "bank-connect") {
+                    BankConnectCard(
+                        state = bankConnect,
+                        onCheckNow = bankActions.onCheckNow,
+                        onStopWaiting = bankActions.onStopWaiting,
+                        onDismissNotice = bankActions.onDismissNotice,
+                    )
                 }
             }
 

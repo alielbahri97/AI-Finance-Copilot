@@ -22,6 +22,15 @@ import java.time.temporal.ChronoUnit
 /** Days before consent expiry at which the renew warning appears, as on the web. */
 const val CONSENT_WARNING_DAYS: Long = 14
 
+/**
+ * Days left at which the tone tightens from a note to a warning.
+ *
+ * Two weeks out, an expiring consent is a diary entry: everything works, and
+ * being told in orange that something is wrong would be false. Inside three days
+ * an interruption is imminent, which is worth colour.
+ */
+const val CONSENT_URGENT_DAYS: Long = 3
+
 fun pluralAccounts(count: Int): String = if (count == 1) "1 account" else "$count accounts"
 
 fun pluralDays(count: Long): String = if (count == 1L) "1 day" else "$count days"
@@ -126,7 +135,9 @@ sealed interface ConsentState {
     data class ValidUntil(val date: LocalDate) : ConsentState
 
     /** Inside the warning window; [daysLeft] is zero or negative on the day. */
-    data class Expiring(val daysLeft: Long) : ConsentState
+    data class Expiring(val daysLeft: Long) : ConsentState {
+        val urgent: Boolean get() = daysLeft <= CONSENT_URGENT_DAYS
+    }
 }
 
 /**
@@ -149,13 +160,38 @@ fun consentState(connection: IntegrationConnection, today: LocalDate): ConsentSt
 fun consentValidUntilText(date: LocalDate, formatter: MoneyFormatter): String =
     "Consent valid until ${formatter.formatDate(date)}"
 
-fun consentWarningText(daysLeft: Long): String =
+/**
+ * The headline of the renew notice: what happens and when, and nothing else.
+ *
+ * Split from [consentWarningDetail] because the two halves want different
+ * weights. "Expires in 12 days" is the fact; why that is not a problem yet takes
+ * a sentence, and a sentence in a title reads as an emergency.
+ */
+fun consentWarningTitle(daysLeft: Long): String =
     if (daysLeft <= 0) {
         "Bank consent expires today"
     } else {
-        "Bank consent expires in ${pluralDays(daysLeft)} — renew it to keep syncing " +
-            "without interruption."
+        "Bank consent expires in ${pluralDays(daysLeft)}"
     }
+
+/**
+ * The reassuring half.
+ *
+ * Open banking requires re-approval periodically; that is the rule rather than
+ * anything having gone wrong, and saying so is what stops a routine renewal
+ * reading as a fault.
+ */
+fun consentWarningDetail(daysLeft: Long): String =
+    if (daysLeft <= 0) {
+        "Reconnect to carry on importing transactions. Everything already imported stays " +
+            "where it is."
+    } else {
+        "Your bank asks for approval again from time to time. Syncing carries on until " +
+            "then, so reconnect whenever it suits you."
+    }
+
+/** The rate-limit notice's headline. A bank rationing data is not a fault. */
+const val RATE_LIMIT_TITLE: String = "Your bank is rationing data for now"
 
 /** Null once the window has passed, so a stale timestamp cannot scare anyone. */
 fun rateLimitText(
@@ -165,8 +201,8 @@ fun rateLimitText(
 ): String? {
     val until = connection.rateLimitedUntil ?: return null
     if (!until.isAfter(now)) return null
-    return "Your bank's daily data limit was reached — syncing resumes automatically after " +
-        "${formatter.formatDateTime(until)}."
+    return "Your bank's daily data limit was reached, so syncing resumes on its own after " +
+        "${formatter.formatDateTime(until)}. Balances already imported are unaffected."
 }
 
 /**
