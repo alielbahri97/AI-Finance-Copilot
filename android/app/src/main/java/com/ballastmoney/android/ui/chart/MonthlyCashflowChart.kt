@@ -28,6 +28,7 @@ import com.patrykandpatrick.vico.compose.cartesian.data.lineModel
 import com.patrykandpatrick.vico.compose.cartesian.layer.ColumnCartesianLayer
 import com.patrykandpatrick.vico.compose.cartesian.layer.LineCartesianLayer
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberColumnCartesianLayer
+import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLine
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
 import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
 import com.patrykandpatrick.vico.compose.common.Fill
@@ -102,15 +103,19 @@ fun MonthlyCashflowChart(
     ) {
         CartesianChartHost(
             chart = rememberCartesianChart(
+                // Two column series in one layer, which `rememberColumnCartesianLayer`
+                // groups side by side by default (`MergeMode.Grouped`) rather than
+                // stacking them — income and expenses are alternatives, not parts
+                // of a whole.
                 rememberColumnCartesianLayer(
-                    ColumnCartesianLayer.ColumnProvider.series(
+                    columnProvider = ColumnCartesianLayer.ColumnProvider.series(
                         rememberLineComponent(Fill(incomeColor), COLUMN_THICKNESS),
                         rememberLineComponent(Fill(expenseColor), COLUMN_THICKNESS),
                     ),
                 ),
                 rememberLineCartesianLayer(
-                    LineCartesianLayer.LineProvider.series(
-                        LineCartesianLayer.Line(
+                    lineProvider = LineCartesianLayer.LineProvider.series(
+                        LineCartesianLayer.rememberLine(
                             fill = LineCartesianLayer.LineFill.single(Fill(netColor)),
                         ),
                     ),

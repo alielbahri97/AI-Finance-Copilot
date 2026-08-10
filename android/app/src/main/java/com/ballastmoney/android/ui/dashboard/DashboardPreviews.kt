@@ -12,9 +12,9 @@ import com.ballastmoney.android.designsystem.theme.BallastTheme
  * `heightDp` values are there because a dashboard is a long page and a preview
  * clipped at 800dp hides the half worth checking.
  *
- * `darkTheme` is always passed explicitly rather than relying on a default in
- * the design-system theme, so these compile whatever that default turns out to
- * be.
+ * `darkTheme` is always passed explicitly rather than left to the theme's
+ * `isSystemInDarkTheme()` default, so a preview renders the same regardless of
+ * the IDE's current appearance setting.
  */
 @Preview(name = "Business", showBackground = true, widthDp = 412, heightDp = 2200)
 @Composable
@@ -135,7 +135,7 @@ private fun RefreshingPreview() {
     }
 }
 
-/** One place for the eight no-op callbacks every preview would otherwise repeat. */
+/** One place for the no-op callbacks every preview would otherwise repeat. */
 @Composable
 private fun PreviewDashboard(
     state: DashboardUiState,

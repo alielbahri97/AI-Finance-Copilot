@@ -29,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -47,6 +48,7 @@ import com.ballastmoney.android.designsystem.component.SectionHeading
 import com.ballastmoney.android.designsystem.component.Skeleton
 import com.ballastmoney.android.designsystem.component.SkeletonText
 import com.ballastmoney.android.designsystem.theme.BallastSpacing
+import com.ballastmoney.android.ui.BallastTestTags
 import java.time.Instant
 import java.time.LocalDate
 
@@ -251,7 +253,8 @@ private fun AccountsReady(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxHeight()
-                .widthIn(max = ReadableWidth),
+                .widthIn(max = ReadableWidth)
+                .testTag(BallastTestTags.ACCOUNTS_LIST),
             contentPadding = listPadding,
             verticalArrangement = Arrangement.spacedBy(BallastSpacing.lg),
         ) {

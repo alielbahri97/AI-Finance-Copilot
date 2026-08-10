@@ -18,6 +18,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import com.ballastmoney.android.core.common.MoneyFormatter
 import com.ballastmoney.android.core.model.ConnectedAccount
@@ -294,6 +296,11 @@ private fun ConnectedAccountRow(
         BallastSwitch(
             checked = account.includeInTotals,
             onCheckedChange = onToggle,
+            // "In totals" beside it is enough to read but not to hear: a card with
+            // three of these announces three identical switches otherwise.
+            modifier = Modifier.semantics {
+                contentDescription = "Count ${accountLabel(account)} in totals"
+            },
             enabled = enabled && !pending,
         )
     }

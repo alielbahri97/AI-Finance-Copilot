@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -62,6 +63,7 @@ import com.ballastmoney.android.designsystem.component.LoadingState
 import com.ballastmoney.android.designsystem.theme.BallastSpacing
 import com.ballastmoney.android.designsystem.theme.BallastTextStyles
 import com.ballastmoney.android.designsystem.theme.ballastColors
+import com.ballastmoney.android.ui.BallastTestTags
 
 /**
  * The transactions screen.
@@ -187,7 +189,9 @@ internal fun TransactionsContent(
             } else {
                 LazyColumn(
                     state = listState,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .testTag(BallastTestTags.TRANSACTIONS_LIST),
                     contentPadding = PaddingValues(
                         start = BallastSpacing.md,
                         end = BallastSpacing.md,

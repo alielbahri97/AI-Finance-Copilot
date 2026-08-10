@@ -147,7 +147,7 @@ private fun ProportionBar(
     }
 }
 
-internal fun proportionOf(amount: BigDecimal, largest: BigDecimal): Float {
+private fun proportionOf(amount: BigDecimal, largest: BigDecimal): Float {
     if (largest.signum() <= 0) return 0f
     val ratio = amount.toDouble() / largest.toDouble()
     return ratio.toFloat()

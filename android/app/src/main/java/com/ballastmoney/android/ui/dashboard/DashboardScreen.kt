@@ -17,6 +17,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -28,6 +29,7 @@ import com.ballastmoney.android.designsystem.component.ListRowSkeleton
 import com.ballastmoney.android.designsystem.component.SkeletonText
 import com.ballastmoney.android.designsystem.component.StatCardSkeleton
 import com.ballastmoney.android.designsystem.theme.BallastSpacing
+import com.ballastmoney.android.ui.BallastTestTags
 
 /**
  * The dashboard.
@@ -101,7 +103,9 @@ fun DashboardContent(
     )
 
     LazyColumn(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .testTag(BallastTestTags.DASHBOARD_LIST),
         contentPadding = listPadding,
         verticalArrangement = Arrangement.spacedBy(BallastSpacing.md),
     ) {
@@ -115,7 +119,10 @@ fun DashboardContent(
                 item(key = "error") {
                     ErrorState(
                         title = DashboardCopy.ERROR_TITLE,
-                        description = message,
+                        // The failure reason on its own is often a bare network
+                        // string, so the actionable half is appended rather than
+                        // left for the user to infer.
+                        description = "$message ${DashboardCopy.ERROR_RETRY_HINT}",
                         onRetry = onRefresh,
                     )
                 }
@@ -127,7 +134,7 @@ fun DashboardContent(
                     DashboardHeader(
                         greeting = ready.greeting,
                         subtitle = ready.subtitle,
-                        canAddTransaction = ready.can(Permission.EDIT_TRANSACTIONS),
+                        canEditTransactions = ready.can(Permission.EDIT_TRANSACTIONS),
                         isRefreshing = ready.isRefreshing,
                         onAddTransaction = onAddTransaction,
                         onImport = onImport,

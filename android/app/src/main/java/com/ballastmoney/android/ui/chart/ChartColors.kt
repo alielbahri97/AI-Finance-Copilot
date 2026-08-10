@@ -3,12 +3,15 @@ package com.ballastmoney.android.ui.chart
 import androidx.compose.ui.graphics.Color
 
 /**
- * Slate 400, the colour the web app paints uncategorised spending in. Anything
- * that cannot be parsed lands here too, so a bad hex in the database shows up as
- * "uncategorised grey" rather than as a crash or an invisible slice.
+ * Slate 400 (`#94A3B8`), the colour the web app paints uncategorised spending
+ * in. Anything that cannot be parsed lands here too, so a bad hex in the
+ * database shows up as "uncategorised grey" rather than as a crash or an
+ * invisible slice.
+ *
+ * The design system hard-codes the same value privately for `CategoryDot`, so a
+ * slice and its legend swatch agree without either package depending on the
+ * other's constant. Change one and change both.
  */
-const val UNCATEGORIZED_COLOR_HEX: String = "#94A3B8"
-
 val UncategorizedColor: Color = Color(0xFF94A3B8)
 
 /**

@@ -37,7 +37,7 @@ import com.ballastmoney.android.designsystem.theme.ballastColors
 fun DashboardHeader(
     greeting: String,
     subtitle: String,
-    canAddTransaction: Boolean,
+    canEditTransactions: Boolean,
     isRefreshing: Boolean,
     onAddTransaction: () -> Unit,
     onImport: () -> Unit,
@@ -51,7 +51,7 @@ fun DashboardHeader(
                 HeaderTitles(greeting = greeting, subtitle = subtitle)
                 Spacer(modifier = Modifier.height(BallastSpacing.md))
                 HeaderActions(
-                    canAddTransaction = canAddTransaction,
+                    canEditTransactions = canEditTransactions,
                     isRefreshing = isRefreshing,
                     onAddTransaction = onAddTransaction,
                     onImport = onImport,
@@ -69,7 +69,7 @@ fun DashboardHeader(
                     modifier = Modifier.weight(1f),
                 )
                 HeaderActions(
-                    canAddTransaction = canAddTransaction,
+                    canEditTransactions = canEditTransactions,
                     isRefreshing = isRefreshing,
                     onAddTransaction = onAddTransaction,
                     onImport = onImport,
@@ -98,7 +98,7 @@ private fun HeaderTitles(
 
 @Composable
 private fun HeaderActions(
-    canAddTransaction: Boolean,
+    canEditTransactions: Boolean,
     isRefreshing: Boolean,
     onAddTransaction: () -> Unit,
     onImport: () -> Unit,
@@ -111,21 +111,22 @@ private fun HeaderActions(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Gated, not disabled: a VIEWER should not be told about an action they
-        // can never take.
-        if (canAddTransaction) {
+        // can never take. Import is gated on the same permission as adding, since
+        // an import is a bulk write and the server refuses both alike.
+        if (canEditTransactions) {
             BallastButton(
                 text = DashboardCopy.ADD_TRANSACTION,
                 onClick = onAddTransaction,
                 variant = ButtonVariant.PRIMARY,
                 size = ButtonSize.SMALL,
             )
+            BallastButton(
+                text = DashboardCopy.IMPORT,
+                onClick = onImport,
+                variant = ButtonVariant.OUTLINE,
+                size = ButtonSize.SMALL,
+            )
         }
-        BallastButton(
-            text = DashboardCopy.IMPORT,
-            onClick = onImport,
-            variant = ButtonVariant.OUTLINE,
-            size = ButtonSize.SMALL,
-        )
         BallastIconButton(
             icon = Icons.Filled.Refresh,
             contentDescription = DashboardCopy.REFRESH,

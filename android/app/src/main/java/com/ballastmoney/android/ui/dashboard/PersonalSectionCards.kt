@@ -374,7 +374,7 @@ private fun DetailRow(
  * budget of nothing is either fully spent or meaningless, and dividing by it
  * would throw.
  */
-internal fun fractionOf(part: BigDecimal, whole: BigDecimal): Float {
+private fun fractionOf(part: BigDecimal, whole: BigDecimal): Float {
     if (whole.signum() <= 0) return if (part.signum() > 0) 1f else 0f
     return (part.toDouble() / whole.toDouble()).toFloat()
 }
