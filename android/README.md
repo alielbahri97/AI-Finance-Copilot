@@ -163,6 +163,20 @@ Both default to an empty string, so a checkout with no credentials still
 error naming this file rather than letting Supabase fail with something
 cryptic.
 
+The Supabase project also needs both deep-link URLs allow-listed under
+Authentication → URL Configuration → Redirect URLs, **exactly** as the app
+sends them:
+
+```
+ballast://auth/reset-password
+ballast://auth/confirmed
+```
+
+Supabase matches redirect URLs exactly (or by explicit wildcard), so listing
+only `ballast://auth` is not enough — it would silently rewrite the redirect to
+the site URL and the reset and confirmation emails would open the website
+instead of the app.
+
 ### Stopgap checks
 
 Two PowerShell scripts in `tools/` stand in for the compiler that still cannot
