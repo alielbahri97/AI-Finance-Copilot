@@ -44,8 +44,8 @@ vi.mock("@/lib/prisma", () => ({
 const profile = vi.hoisted(() => ({ getOrCreateProfile: vi.fn() }));
 vi.mock("@/lib/data", () => ({ getOrCreateProfile: profile.getOrCreateProfile }));
 
-const cookieAuth = vi.hoisted(() => ({ getUser: vi.fn() }));
-vi.mock("@/lib/supabase/server", () => ({ getUser: cookieAuth.getUser }));
+const cookieAuth = vi.hoisted(() => ({ getCookieUser: vi.fn() }));
+vi.mock("@/lib/supabase/server", () => ({ getCookieUser: cookieAuth.getCookieUser }));
 
 import {
   BearerAuthError,
@@ -139,7 +139,7 @@ beforeEach(async () => {
 
   db.findMemberUnique.mockResolvedValue(null);
   db.findMemberFirst.mockResolvedValue(null);
-  cookieAuth.getUser.mockResolvedValue(null);
+  cookieAuth.getCookieUser.mockResolvedValue(null);
 });
 
 /* ------------------------------------------------------------------ */
@@ -331,32 +331,32 @@ describe("the split between asymmetric and legacy signing", () => {
 
 describe("resolving who is calling", () => {
   it("uses the cookie session when no token is presented", async () => {
-    cookieAuth.getUser.mockResolvedValue({ id: "cookie-user" });
+    cookieAuth.getCookieUser.mockResolvedValue({ id: "cookie-user" });
 
     const user = await resolveRequestUser(new Request("http://localhost/api/dashboard"));
 
     expect(user).toEqual({ id: "cookie-user" });
-    expect(cookieAuth.getUser).toHaveBeenCalledTimes(1);
+    expect(cookieAuth.getCookieUser).toHaveBeenCalledTimes(1);
   });
 
   it("uses the token when one is presented, and never touches the cookie session", async () => {
-    cookieAuth.getUser.mockResolvedValue({ id: "cookie-user" });
+    cookieAuth.getCookieUser.mockResolvedValue({ id: "cookie-user" });
 
     const user = await resolveRequestUser(bearerRequest(await mintToken()));
 
     expect(user?.id).toBe(USER_ID);
-    expect(cookieAuth.getUser).not.toHaveBeenCalled();
+    expect(cookieAuth.getCookieUser).not.toHaveBeenCalled();
   });
 
   it("refuses a bad token instead of falling back to whoever the cookie says", async () => {
     // Falling back here would mean a stale token silently resolves to the
     // browser's session, which hides client bugs and surprises everyone.
-    cookieAuth.getUser.mockResolvedValue({ id: "cookie-user" });
+    cookieAuth.getCookieUser.mockResolvedValue({ id: "cookie-user" });
 
     const user = await resolveRequestUser(bearerRequest(await mintToken({ expiresIn: -3600 })));
 
     expect(user).toBeNull();
-    expect(cookieAuth.getUser).not.toHaveBeenCalled();
+    expect(cookieAuth.getCookieUser).not.toHaveBeenCalled();
   });
 });
 
@@ -508,12 +508,12 @@ describe("the route guards over a Bearer request", () => {
   it("still works when called the old way, with no request at all", async () => {
     // Every existing call site passes permissions only. Those must keep
     // resolving through the cookie session exactly as before.
-    cookieAuth.getUser.mockResolvedValue({ id: "cookie-user" });
+    cookieAuth.getCookieUser.mockResolvedValue({ id: "cookie-user" });
     db.findMemberFirst.mockResolvedValue(MEMBERSHIP);
 
     const auth = await requireWorkspace("view_transactions");
 
     expect(auth.ok).toBe(true);
-    expect(cookieAuth.getUser).toHaveBeenCalledTimes(1);
+    expect(cookieAuth.getCookieUser).toHaveBeenCalledTimes(1);
   });
 });

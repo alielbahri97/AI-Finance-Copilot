@@ -4,7 +4,7 @@ import type { User } from "@supabase/supabase-js";
 import { headers } from "next/headers";
 
 import { logger } from "@/lib/logger";
-import { getUser } from "@/lib/supabase/server";
+import { getCookieUser } from "@/lib/supabase/server";
 
 import { BearerAuthError, userFromAccessToken } from "./bearer";
 import { extractBearerToken, WORKSPACE_HEADER } from "./token";
@@ -69,7 +69,7 @@ export async function authMode(request?: HeaderCarrier): Promise<AuthMode> {
 export async function resolveRequestUser(request?: HeaderCarrier): Promise<User | null> {
   const token = extractBearerToken(await requestHeader("authorization", request));
   if (!token) {
-    return getUser();
+    return getCookieUser();
   }
 
   try {
