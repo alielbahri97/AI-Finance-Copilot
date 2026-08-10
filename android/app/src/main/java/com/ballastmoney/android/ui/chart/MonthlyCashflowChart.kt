@@ -160,9 +160,9 @@ private val MonthLabelsKey = ExtraStore.Key<List<String>>()
 private val COLUMN_THICKNESS: Dp = 10.dp
 private val CHART_HEIGHT: Dp = 220.dp
 
-// `darkTheme` is passed explicitly in every preview in this package: the
-// design-system theme takes it as a parameter and relying on a default that may
-// or may not exist is not worth the risk of every preview failing to compile.
+// `darkTheme` is passed explicitly in every preview in this package rather than
+// left to the theme's `isSystemInDarkTheme()` default, so a preview renders the
+// same regardless of the IDE's current appearance setting.
 @Preview(showBackground = true, widthDp = 420)
 @Composable
 private fun MonthlyCashflowChartBusinessPreview() {

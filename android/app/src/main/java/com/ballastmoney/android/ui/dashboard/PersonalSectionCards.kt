@@ -9,10 +9,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.Savings
-import androidx.compose.material.icons.outlined.Wallet
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,6 +30,7 @@ import com.ballastmoney.android.designsystem.component.BallastButton
 import com.ballastmoney.android.designsystem.component.BallastCard
 import com.ballastmoney.android.designsystem.component.BallastCardHeader
 import com.ballastmoney.android.designsystem.component.BallastProgress
+import com.ballastmoney.android.designsystem.component.ButtonSize
 import com.ballastmoney.android.designsystem.component.ButtonVariant
 import com.ballastmoney.android.designsystem.component.CategoryDot
 import com.ballastmoney.android.designsystem.component.EmptyState
@@ -82,15 +83,16 @@ fun BudgetsCard(
     SectionCard(title = DashboardCopy.BUDGETS, modifier = modifier) {
         if (budgets.isEmpty()) {
             EmptyState(
-                icon = Icons.Outlined.Wallet,
+                icon = Icons.Outlined.AccountBalanceWallet,
                 title = DashboardCopy.BUDGETS_EMPTY_TITLE,
                 description = DashboardCopy.BUDGETS_EMPTY_BODY,
-            )
-            Spacer(modifier = Modifier.height(BallastSpacing.md))
-            BallastButton(
-                text = DashboardCopy.BUDGETS_EMPTY_ACTION,
-                onClick = onSetBudget,
-                variant = ButtonVariant.OUTLINE,
+                primaryAction = {
+                    BallastButton(
+                        text = DashboardCopy.BUDGETS_EMPTY_ACTION,
+                        onClick = onSetBudget,
+                        size = ButtonSize.SMALL,
+                    )
+                },
             )
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(BallastSpacing.md)) {
@@ -317,7 +319,13 @@ fun NetWorthCard(
     }
 }
 
-/** Title over subtitle on the left, an amount on the right. */
+/**
+ * A bill or a subscription: swatch, name over detail, amount.
+ *
+ * Deliberately not `BallastListRow`, which pads itself horizontally by `md` for
+ * use in a full-bleed list. Inside a card that already pads by `lg` that would
+ * indent every row 12dp past the card's own title.
+ */
 @Composable
 private fun DetailRow(
     title: String,

@@ -72,12 +72,17 @@ fun LazyListScope.businessDashboardSections(
     }
 
     if (state.canSeeCharts) {
-        item(key = "monthly-cashflow") {
-            MonthlyCashflowChart(
-                points = snapshot.monthly,
-                formatter = state.formatter,
-                edition = WorkspaceType.BUSINESS,
-            )
+        // Guarded here rather than inside the chart: an item that composes to
+        // nothing still takes a slot in the list's `spacedBy` arrangement, which
+        // would leave a double gap where the card should have been.
+        if (snapshot.monthly.isNotEmpty()) {
+            item(key = "monthly-cashflow") {
+                MonthlyCashflowChart(
+                    points = snapshot.monthly,
+                    formatter = state.formatter,
+                    edition = WorkspaceType.BUSINESS,
+                )
+            }
         }
         item(key = "balance-history") {
             BalanceHistoryChart(

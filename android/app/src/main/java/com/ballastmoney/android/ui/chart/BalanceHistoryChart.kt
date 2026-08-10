@@ -88,13 +88,7 @@ fun BalanceHistoryChart(
         }
 
         if (accounts.isNotEmpty()) {
-            val palette = listOf(
-                colors.chart1,
-                colors.chart2,
-                colors.chart3,
-                colors.chart4,
-                colors.chart5,
-            )
+            val palette = colors.chartSeries
             Spacer(modifier = Modifier.height(BallastSpacing.md))
             ChartLegend(
                 entries = accounts.mapIndexed { index, account ->

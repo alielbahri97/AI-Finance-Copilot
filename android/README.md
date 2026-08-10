@@ -105,6 +105,30 @@ in `libs.versions.toml` fails to resolve, that is the most likely first failure 
 every version was pinned from release notes rather than verified against a real
 resolver.
 
+### Stopgap checks
+
+Two PowerShell scripts in `tools/` stand in for the compiler that could not be run
+here. Both exit non-zero on a finding and both are text searches, not type
+checkers — delete them once `:app:compileDebugKotlin` passes.
+
+```powershell
+powershell -File tools\check-imports.ps1   # imports of Ballast symbols nothing declares
+powershell -File tools\check-args.ps1      # named arguments the callee does not declare
+```
+
+The second one is the useful one: it caught three real call-site mismatches
+between files written against slightly different ideas of the same component's
+API. It knows nothing about types, arity or overloads, so a clean run is a weak
+signal, not a green build.
+
+### Fonts
+
+Inter and JetBrains Mono are **not** bundled — no font binaries were invented.
+Typography falls back to the platform sans and monospace faces, which is the one
+visible difference from the website. `designsystem/theme/Type.kt` documents the
+two-line change that adopts the real faces once the files are dropped into
+`app/src/main/res/font/`.
+
 ## Data, today and later
 
 Every screen reads from `data/fake`. The dataset is generated from a fixed seed, so

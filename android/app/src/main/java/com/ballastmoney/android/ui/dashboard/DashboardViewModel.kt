@@ -48,6 +48,14 @@ class DashboardViewModel @Inject constructor(
     private val loadFailure = MutableStateFlow<String?>(null)
 
     /**
+     * One [MoneyFormatter] per currency, not one per emission. Each instance
+     * builds a `NumberFormat` and three `DateTimeFormatter`s, and [buildState]
+     * runs on every cache write. Declared before [uiState] so it cannot be read
+     * before initialisation.
+     */
+    private var cachedFormatter: Pair<String, MoneyFormatter>? = null
+
+    /**
      * The session, mirrored into hot state.
      *
      * Two reasons, both practical. [refresh] needs the current workspace id
@@ -160,13 +168,6 @@ class DashboardViewModel @Inject constructor(
             isRefreshing = refreshing,
         )
     }
-
-    /**
-     * One [MoneyFormatter] per currency, not one per emission. Each instance
-     * builds a `NumberFormat` and three `DateTimeFormatter`s, and this transform
-     * runs on every cache write.
-     */
-    private var cachedFormatter: Pair<String, MoneyFormatter>? = null
 
     private fun formatterFor(currency: String): MoneyFormatter {
         cachedFormatter?.let { (code, cached) -> if (code == currency) return cached }

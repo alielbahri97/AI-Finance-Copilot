@@ -120,7 +120,13 @@ fun MoneyStatCard(
     trend: TrendChange? = null,
     footer: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
-    StatCardShell(label = label, modifier = modifier, hint = hint, trend = trend) {
+    StatCardShell(
+        label = label,
+        modifier = modifier,
+        hint = hint,
+        trend = trend,
+        footer = footer,
+    ) {
         MoneyText(
             amount = amount,
             formatter = formatter,
@@ -128,7 +134,6 @@ fun MoneyStatCard(
             direction = MoneyDirection.NONE,
             tone = tone,
         )
-        footer?.invoke(this)
     }
 }
 
@@ -146,12 +151,20 @@ fun TextStatCard(
     }
 }
 
+/**
+ * Label and trend badge, the value, the hint, then anything extra.
+ *
+ * The order matters: the hint explains the value, so it sits directly under it
+ * and above [footer]. Rendering the footer first would put "4 accounts at 2
+ * banks" underneath an expanded list of those four accounts.
+ */
 @Composable
 private fun StatCardShell(
     label: String,
     modifier: Modifier = Modifier,
     hint: String? = null,
     trend: TrendChange? = null,
+    footer: (@Composable ColumnScope.() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     BallastCard(modifier = modifier) {
@@ -180,6 +193,7 @@ private fun StatCardShell(
                 color = MaterialTheme.ballastColors.mutedForeground,
             )
         }
+        footer?.invoke(this)
     }
 }
 
