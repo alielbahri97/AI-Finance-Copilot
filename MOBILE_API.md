@@ -167,6 +167,14 @@ carry a machine-readable `code`.
 Treat `403` and `404 WRONG_EDITION` as "hide this surface", not as failures to
 retry.
 
+`WRONG_EDITION` is documented because other routes in this codebase return it,
+but **none of the endpoints in section 5 can**. None of them is
+edition-exclusive: they all exist in both editions and differ only in content.
+The edition shows up instead as `sections.invoices: false` and `members: null`
+in a Personal workspace, as the absence of accounting providers, and as a
+Personal-only plan line-up — because `view_invoices` and `manage_members` are
+stripped from the permission set before any route sees them.
+
 ---
 
 ## 5. Endpoints
@@ -182,7 +190,7 @@ you have access to.
 
 ```json
 {
-  "profile":     { "id": "...", "email": "...", "fullName": "...", "avatarUrl": null, "currency": "EUR", "aiProvider": "openai", "isAdmin": false, "tourCompletedAt": null, "celebrationSeenAt": null },
+  "profile":     { "id": "...", "email": "...", "fullName": "...", "avatarUrl": null, "currency": "EUR", "aiProvider": "GROQ", "isAdmin": false, "tourCompletedAt": null, "celebrationSeenAt": null },
   "workspaces":  [ { "id": "...", "name": "...", "type": "BUSINESS", "role": "OWNER" } ],
   "workspace":   { "id": "...", "name": "...", "type": "BUSINESS", "edition": "business", "currency": "EUR", "aiCategorizationEnabled": true, "autoDunningEnabled": false },
   "membership":  { "role": "OWNER", "memberId": "...", "permissions": ["edit_transactions", "..."] },
@@ -208,7 +216,7 @@ instead of asking three times and being refused.
     "incomeChangePct": 12.4, "expensesChangePct": null,
     "totalBalance": "24180.10", "savingsRate": 0.369, "transactionCount": 412,
     "cash": { "source": "bank", "total": "24180.10", "currency": "EUR", "banks": [], "accounts": [], "countedAccounts": 3, "excludedAccounts": 1, "hasOtherCurrency": false, "asOf": "2026-08-10T04:11:00.000Z", "transactionBalance": "23110.00" },
-    "monthlySeries":      [ { "month": "2026-08", "income": "8420.00", "expenses": "5310.55", "net": "3109.45" } ],
+    "monthlySeries":      [ { "month": "Aug", "income": "8420.00", "expenses": "5310.55", "net": "3109.45" } ],
     "categoryBreakdown":  [ { "category": "Groceries", "color": "#5B8DEF", "amount": "612.40" } ],
     "largestExpenses":    [ { "id": "...", "type": "EXPENSE", "amount": "1200.00", "category": "Rent", "categoryColor": "#000", "description": "...", "date": "2026-08-01T00:00:00.000Z" } ],
     "balanceHistory":     [ { "date": "2026-08-01T00:00:00.000Z", "balance": "21000.00" } ],
@@ -223,6 +231,14 @@ instead of asking three times and being refused.
 `incomeChangePct` and `expensesChangePct` are percentages as numbers, not money,
 and are `null` when there is no prior month to compare with. `savingsRate` is a
 fraction between 0 and 1.
+
+Two fields look like dates and are not. `monthlySeries[].month` is a short
+English chart-axis label — `"Aug"`, not `"2026-08"` — carrying no year, so a
+client that needs a real month must derive it from the series position rather
+than parse this. `cash.reason` on an account is an enum, one of `"counted"`,
+`"excluded"`, `"no-balance"` or `"other-currency"`. By contrast
+`balanceHistory[].date`, which is a calendar day internally, *is* widened to a
+full UTC-midnight timestamp so it obeys the contract in section 3.
 
 ### `GET /api/transactions`
 
@@ -239,7 +255,7 @@ Requires `view_transactions`.
 | `sort` | `date`, `description`, `category`, `amount` | `date`, or `amount` when `category=uncategorized` |
 | `dir` | `asc`, `desc` | the column's natural direction: `desc` for date and amount, `asc` for text |
 | `page` | integer from 1; clamped down to the last real page | 1 |
-| `size` | `25`, `50`, `100` | 25 |
+| `size` | `25`, `50`, `100` | 50 |
 
 ```json
 {
@@ -251,7 +267,7 @@ Requires `view_transactions`.
     "importBatchId": null
   } ],
   "currency": "EUR",
-  "page": 1, "pageSize": 25, "pageCount": 17, "totalCount": 412,
+  "page": 1, "pageSize": 50, "pageCount": 9, "totalCount": 412,
   "sort": "date", "dir": "desc",
   "totals":  { "income": "8420.00", "expenses": "5310.55", "net": "3109.45" },
   "batches": [ { "id": "...", "fileName": "jan.csv", "createdAt": "...", "transactionCount": 88 } ]
@@ -295,7 +311,7 @@ Session only, no permission — a person's own name is not a permission.
 
 ```json
 {
-  "profile": { "id": "...", "email": "...", "fullName": "...", "avatarUrl": null, "currency": "EUR", "aiProvider": "openai", "isAdmin": false, "tourCompletedAt": null, "celebrationSeenAt": null },
+  "profile": { "id": "...", "email": "...", "fullName": "...", "avatarUrl": null, "currency": "EUR", "aiProvider": "GROQ", "isAdmin": false, "tourCompletedAt": null, "celebrationSeenAt": null },
   "edition": "business",
   "workspace": { "id": "...", "name": "...", "type": "BUSINESS", "edition": "business" },
   "locationHint": "NL",
@@ -306,7 +322,10 @@ Session only, no permission — a person's own name is not a permission.
 ```
 
 Exactly one of `personal` and `business` is non-null, following the current
-workspace's edition.
+workspace's edition. `aiProvider` is an uppercase enum — `GROQ`, `OPENAI` or
+`ANTHROPIC` — not a lowercase string. `currency` is the stored preference
+verbatim, so a client rendering a picker should fall back to `USD` when it is
+not in `supportedCurrencies`, which is what the web page does.
 
 ### `GET /api/workspace`
 
@@ -322,8 +341,19 @@ Session only, no permission.
 
 `members` is `null`, not `[]`, in the Personal edition: there is nobody to list,
 and null says "this workspace has no team" where `[]` would read as "the team is
-empty". `seats.limit` null means unlimited. `seats.used` counts pending
-invitations, because the plan does.
+empty". The gate on the roster is the edition, not a permission — the web
+settings page shows the member list to anyone in the workspace, including a
+VIEWER, and gates only pending invitations and the audit log on
+`manage_members` — so this endpoint does the same. Each member carries both its
+effective sorted `permissions` and the raw `overrides` map a permissions editor
+needs.
+
+`seats.limit` null means unlimited. `seats.used` counts members plus pending
+invitations, because that is what the plan counts. Note this can legitimately
+disagree with the figure the web app shows a non-manager: the settings page adds
+the invitations it fetched, and it only fetches them for someone with
+`manage_members`, so a plain member sees an under-count there. The API figure is
+the correct one.
 
 ### `GET /api/billing/summary`
 
