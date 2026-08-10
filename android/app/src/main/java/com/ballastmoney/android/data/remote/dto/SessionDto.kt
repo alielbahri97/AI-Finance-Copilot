@@ -53,6 +53,8 @@ data class WorkspaceSummaryDto(
     val name: String,
     /** `BUSINESS` or `PERSONAL`. */
     val type: String,
+    /** Lowercase `business` or `personal`, derived from [type] by the server. */
+    val edition: String? = null,
     /** `OWNER`, `ADMIN`, `MEMBER` or `VIEWER`. */
     val role: String? = null,
 )

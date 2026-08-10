@@ -1,7 +1,6 @@
 package com.ballastmoney.android.data.remote
 
 import com.ballastmoney.android.core.model.Permission
-import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpRequestTimeoutException
 import io.ktor.client.plugins.ResponseException
 import io.ktor.client.statement.HttpResponse
@@ -9,6 +8,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.SerializationException
+import kotlinx.serialization.decodeFromString
 import java.io.IOException
 
 /**
@@ -125,20 +125,32 @@ internal suspend fun HttpResponse.toBallastApiError(): BallastApiError {
     }
 }
 
-private suspend fun HttpResponse.readErrorBody(): ApiErrorBody? =
-    runCatching { body<ApiErrorBody>() }.getOrElse {
-        // Not the documented envelope. Fall back to the raw text, but only if
-        // it is short enough to plausibly be a message rather than an HTML
-        // error page, which would be nonsense in a snackbar.
-        runCatching {
-            val text = bodyAsText().trim()
-            if (text.isNotEmpty() && text.length <= MAX_PLAIN_ERROR_LENGTH && !text.startsWith("<")) {
-                ApiErrorBody(error = text)
-            } else {
-                null
-            }
-        }.getOrNull()
+/**
+ * Reads the error envelope, taking the body as text **once**.
+ *
+ * Deliberately not `body<ApiErrorBody>()` followed by `bodyAsText()` on a
+ * failure: a response body is a stream that can only be consumed once, so the
+ * fallback would have found it empty exactly when it was needed. Decoding from a
+ * string held in hand has neither problem, and the same string is what the
+ * fallback uses.
+ */
+private suspend fun HttpResponse.readErrorBody(): ApiErrorBody? {
+    val text = runCatching { bodyAsText() }.getOrNull()?.trim().orEmpty()
+    if (text.isEmpty()) return null
+
+    runCatching { BallastJson.decodeFromString<ApiErrorBody>(text) }
+        .getOrNull()
+        ?.let { return it }
+
+    // Not the documented envelope — a proxy or a crashed route can answer with
+    // HTML. Use the raw text only when it is short enough to plausibly be a
+    // message; an error page in a snackbar is worse than a generic sentence.
+    return if (text.length <= MAX_PLAIN_ERROR_LENGTH && !text.startsWith("<")) {
+        ApiErrorBody(error = text)
+    } else {
+        null
     }
+}
 
 /**
  * A permission the server names but this build does not know is not an error:
