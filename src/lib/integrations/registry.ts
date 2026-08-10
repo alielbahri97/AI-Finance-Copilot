@@ -113,7 +113,11 @@ export function getProviders(): IntegrationProvider[] {
       capabilities: ["transactions"],
       flow: "redirect",
       envVars: ["GOCARDLESS_SECRET_ID", "GOCARDLESS_SECRET_KEY"],
-      syncIntervalHours: 6,
+      // Banks cap account data at four successful calls per access scope per
+      // 24h, and every sync spends one on /transactions/ and one on
+      // /balances/. Three scheduled passes keep the fourth in reserve for
+      // "Sync now" and for a retry after a transient bank error.
+      syncIntervalHours: 8,
       // One requisition per institution: connect ING and Rabobank side by side.
       multiInstance: true,
     },

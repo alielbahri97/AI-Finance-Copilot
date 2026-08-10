@@ -293,6 +293,19 @@ export function rateLimitRetryAt(
   return new Date(now.getTime() + 24 * 60 * 60 * 1000);
 }
 
+/**
+ * Successful account-scoped responses carry the budget left in the current
+ * window in x-ratelimit-account-success-remaining. Null when the header is
+ * absent — it only accompanies successful account resource requests.
+ */
+export function accountBudgetRemaining(
+  getHeader: (name: string) => string | null
+): number | null {
+  const raw = getHeader("x-ratelimit-account-success-remaining");
+  const remaining = raw === null ? NaN : Number(raw);
+  return Number.isFinite(remaining) ? remaining : null;
+}
+
 /** Per-account skip decision from the stored `rateLimitedUntil` metadata map. */
 export function isAccountRateLimited(
   rateLimitedUntil: Record<string, string> | undefined,
@@ -303,6 +316,20 @@ export function isAccountRateLimited(
   if (!until) return false;
   const parsed = Date.parse(until);
   return Number.isFinite(parsed) && parsed > now.getTime();
+}
+
+/**
+ * A pass that skipped every account spent its daily budget before it started.
+ * That is the bank's cap rather than a failure, so a manual "Sync now" gets
+ * an explanation instead of an error. Null for any other outcome, and for
+ * providers that report no per-account counters.
+ */
+export function dailyCapNotice(stats: {
+  accountsSynced?: number;
+  accountsSkipped?: number;
+}): string | null {
+  if ((stats.accountsSynced ?? 0) > 0 || (stats.accountsSkipped ?? 0) === 0) return null;
+  return "This bank limits refreshes to a few per day. The next automatic sync will pick up new transactions.";
 }
 
 // ------------------------------------------------------------ sync date math
