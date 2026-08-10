@@ -77,10 +77,12 @@ class EncryptedSessionStorage @Inject constructor(
     override suspend fun saveSession(session: UserSession) {
         mutex.withLock {
             cached = session
-            val preferences = preferences() ?: return@withLock
-            runCatching {
-                val encoded = json.encodeToString(UserSession.serializer(), session)
-                preferences.edit().putString(SESSION_KEY, encoded).apply()
+            val preferences = preferences()
+            if (preferences != null) {
+                runCatching {
+                    val encoded = json.encodeToString(UserSession.serializer(), session)
+                    preferences.edit().putString(SESSION_KEY, encoded).apply()
+                }
             }
         }
     }
@@ -88,28 +90,32 @@ class EncryptedSessionStorage @Inject constructor(
     override suspend fun loadSession(): UserSession =
         loadSessionOrNull() ?: throw NoSessionFoundException()
 
-    override suspend fun loadSessionOrNull(): UserSession? = mutex.withLock {
-        cached?.let { return@withLock it }
-        val preferences = preferences() ?: return@withLock null
+    override suspend fun loadSessionOrNull(): UserSession? = mutex.withLock { readSession() }
+
+    private fun readSession(): UserSession? {
+        cached?.let { return it }
+        val preferences = preferences() ?: return null
         val stored = runCatching { preferences.getString(SESSION_KEY, null) }.getOrNull()
-            ?: return@withLock null
+            ?: return null
         val decoded = runCatching { json.decodeFromString(UserSession.serializer(), stored) }
             .getOrNull()
         if (decoded == null) {
             // Written by an older shape of UserSession, or truncated. Same
             // reasoning as a keystore mismatch: unusable, so drop it.
             runCatching { preferences.edit().remove(SESSION_KEY).apply() }
-            return@withLock null
+            return null
         }
         cached = decoded
-        decoded
+        return decoded
     }
 
     override suspend fun deleteSession() {
         mutex.withLock {
             cached = null
-            val preferences = preferences() ?: return@withLock
-            runCatching { preferences.edit().remove(SESSION_KEY).apply() }
+            val preferences = preferences()
+            if (preferences != null) {
+                runCatching { preferences.edit().remove(SESSION_KEY).apply() }
+            }
         }
     }
 

@@ -123,7 +123,7 @@ fun BallastApp(
 /**
  * Sign in, sign up and password reset, in their own navigation graph.
  *
- * The [NavHostController] is created here rather than hoisted, so the whole
+ * The nav controller is created here rather than hoisted, so the whole
  * signed-out back stack is discarded the moment a session appears — there is no
  * way to gesture back into a half-filled sign-up form from inside the app.
  *
