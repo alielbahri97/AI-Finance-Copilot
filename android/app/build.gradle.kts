@@ -124,6 +124,8 @@ dependencies {
     implementation(libs.androidx.paging.compose)
 
     implementation(libs.androidx.biometric)
+    // BiometricPrompt requires a FragmentActivity, so MainActivity extends one.
+    implementation(libs.androidx.fragment.ktx)
     implementation(libs.androidx.browser)
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services)
@@ -156,6 +158,7 @@ dependencies {
     testImplementation(libs.turbine)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.androidx.paging.common)
+    testImplementation(libs.androidx.paging.testing)
     testImplementation(libs.ktor.client.mock)
 
     androidTestImplementation(libs.junit4)

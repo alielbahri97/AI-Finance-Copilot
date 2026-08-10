@@ -1,0 +1,78 @@
+# Poor man's type checker.
+#
+# There is no JDK on this machine, so nothing here has been compiled. This script
+# catches the one class of error that costs the most to find by eye across a
+# codebase written by several hands at once: an import of a Ballast symbol that
+# nothing declares, or that lives in a different package than the import claims.
+#
+# It is a text search, not a compiler. It says nothing about types, arities or
+# overloads. Delete it once `gradlew compileDebugKotlin` runs.
+
+$ErrorActionPreference = 'Stop'
+$root = Join-Path $PSScriptRoot '..'
+$sources = Get-ChildItem -Path $root -Recurse -Filter *.kt -File
+
+# package -> set of declared top-level names
+$declared = @{}
+foreach ($file in $sources) {
+    $lines = Get-Content -LiteralPath $file.FullName
+    $package = ($lines | Where-Object { $_ -match '^package\s+([\w\.]+)' } | Select-Object -First 1)
+    if (-not $package) { continue }
+    $packageName = [regex]::Match($package, '^package\s+([\w\.]+)').Groups[1].Value
+    if (-not $declared.ContainsKey($packageName)) { $declared[$packageName] = New-Object 'System.Collections.Generic.HashSet[string]' }
+
+    foreach ($line in $lines) {
+        $match = [regex]::Match(
+            $line,
+            '^(?:@\w+\s+)*(?:public |internal |private )?(?:expect |actual )?(?:annotation |data |value |enum |sealed |abstract |open |inline |fun\s+)?(?:class|interface|object|fun|val|var|typealias)\s+(?:<[^>]+>\s+)?([A-Za-z_]\w*)'
+        )
+        if ($match.Success) {
+            [void]$declared[$packageName].Add($match.Groups[1].Value)
+        }
+        # Extension and generic functions: `fun <T> Foo.bar(` and `fun Foo.bar(`
+        $ext = [regex]::Match($line, '^(?:public |internal |private )?fun\s+(?:<[^>]+>\s+)?[\w\.]+\.([A-Za-z_]\w*)\s*\(')
+        if ($ext.Success) { [void]$declared[$packageName].Add($ext.Groups[1].Value) }
+        # Extension properties: `val Foo.bar: Baz`
+        $extProp = [regex]::Match($line, '^(?:public |internal |private )?val\s+[\w\.]+\.([A-Za-z_]\w*)\s*:')
+        if ($extProp.Success) { [void]$declared[$packageName].Add($extProp.Groups[1].Value) }
+    }
+}
+
+$problems = @()
+foreach ($file in $sources) {
+    foreach ($line in (Get-Content -LiteralPath $file.FullName)) {
+        $match = [regex]::Match($line, '^import\s+(com\.ballastmoney\.android[\w\.]*)\.([A-Za-z_]\w*)$')
+        if (-not $match.Success) { continue }
+        $package = $match.Groups[1].Value
+        $symbol = $match.Groups[2].Value
+
+        # Nested references, e.g. `import a.b.Outer.Companion.member`: walk up.
+        $found = $false
+        $candidatePackage = $package
+        $candidateSymbol = $symbol
+        while (-not $found -and $candidatePackage -match '\.') {
+            if ($declared.ContainsKey($candidatePackage) -and $declared[$candidatePackage].Contains($candidateSymbol)) {
+                $found = $true
+                break
+            }
+            $lastDot = $candidatePackage.LastIndexOf('.')
+            $candidateSymbol = $candidatePackage.Substring($lastDot + 1)
+            $candidatePackage = $candidatePackage.Substring(0, $lastDot)
+        }
+
+        if (-not $found) {
+            $problems += [pscustomobject]@{
+                File = $file.FullName.Replace("$root\", '')
+                Import = "$package.$symbol"
+            }
+        }
+    }
+}
+
+if ($problems.Count -eq 0) {
+    Write-Output 'OK: every imported Ballast symbol is declared in the package it is imported from.'
+} else {
+    Write-Output "$($problems.Count) unresolved import(s):"
+    $problems | Sort-Object Import | Format-Table -AutoSize | Out-String -Width 200 | Write-Output
+    exit 1
+}
