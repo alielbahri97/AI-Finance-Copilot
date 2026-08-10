@@ -11,16 +11,26 @@ import com.ballastmoney.android.core.domain.PreferencesRepository
 import com.ballastmoney.android.core.domain.SessionLockStore
 import com.ballastmoney.android.core.domain.ThemePreference
 import com.ballastmoney.android.core.domain.UserPreferences
+import com.ballastmoney.android.core.domain.WorkspaceSelection
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Also serves [WorkspaceSelection], which the HTTP layer reads to fill in the
+ * `X-Ballast-Workspace` header. It belongs here rather than in its own store
+ * because the selected workspace was already one of these preferences, and
+ * splitting it out would mean two files racing to write the same setting.
+ *
+ * The id is not a secret and does not belong in encrypted storage: it grants
+ * nothing on its own, and the server re-verifies membership on every request.
+ */
 @Singleton
 class DataStorePreferencesRepository @Inject constructor(
     private val dataStore: DataStore<Preferences>,
-) : PreferencesRepository, SessionLockStore {
+) : PreferencesRepository, SessionLockStore, WorkspaceSelection {
 
     override val preferences: Flow<UserPreferences> = dataStore.data.map { prefs ->
         UserPreferences(
@@ -52,6 +62,18 @@ class DataStorePreferencesRepository @Inject constructor(
             else prefs[Keys.SELECTED_WORKSPACE] = workspaceId
         }
     }
+
+    // --- WorkspaceSelection -------------------------------------------------
+
+    override val selectedWorkspaceId: Flow<String?> =
+        dataStore.data.map { it[Keys.SELECTED_WORKSPACE] }
+
+    override suspend fun currentWorkspaceId(): String? =
+        dataStore.data.first()[Keys.SELECTED_WORKSPACE]
+
+    override suspend fun select(workspaceId: String?) = setSelectedWorkspaceId(workspaceId)
+
+    // --- SessionLockStore ---------------------------------------------------
 
     override val isLocked: Flow<Boolean> =
         dataStore.data.map { it[Keys.LOCKED] ?: false }
