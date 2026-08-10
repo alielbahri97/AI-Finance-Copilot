@@ -1,0 +1,23 @@
+# Gradle / Android build output
+.gradle/
+build/
+local.properties
+captures/
+.cxx/
+
+# The Gradle wrapper JAR is a binary and is not checked in here; run
+# `gradle wrapper --gradle-version 8.14.3` once, or let Android Studio
+# generate it on first sync. gradle-wrapper.properties pins the version.
+gradle/wrapper/gradle-wrapper.jar
+gradlew
+gradlew.bat
+
+# IDE
+.idea/
+*.iml
+*.hprof
+
+# Keystores must never be committed
+*.jks
+*.keystore
+keystore.properties

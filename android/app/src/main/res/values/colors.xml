@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Only the handful of colours the platform needs before Compose takes over:
+  the launcher icon background and the window background that shows during
+  cold start. Everything else lives in the Compose colour scheme.
+
+  Values are the web app's tokens converted from oklch() to sRGB:
+  #005ADB is `--primary` / the web manifest theme_color, and #E9F3FF is the
+  web manifest background_color.
+-->
+<resources>
+    <color name="ballast_brand">#FF005ADB</color>
+    <color name="ballast_icon_background">#FFE9F3FF</color>
+    <color name="ballast_window_background_light">#FFF8FAFD</color>
+    <color name="ballast_window_background_dark">#FF030507</color>
+</resources>
