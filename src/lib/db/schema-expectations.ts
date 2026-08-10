@@ -79,6 +79,14 @@ export const SCHEMA_CHECKS: SchemaCheck[] = [
   },
   { table: "pending_bank_connections", columns: [], migration: "0026_mobile_api" },
   { table: "account_deletion_requests", columns: [], migration: "0026_mobile_api" },
+  // Every entitlements lookup reads plan_source, and the Play endpoints cannot
+  // work at all without the table.
+  { table: "play_purchases", columns: [], migration: "0027_play_billing" },
+  {
+    table: "subscriptions",
+    columns: ["plan_source", "stripe_plan", "stripe_status"],
+    migration: "0027_play_billing",
+  },
 ];
 
 export interface SchemaDrift {

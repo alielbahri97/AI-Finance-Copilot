@@ -119,6 +119,25 @@ enum SubscriptionStatus {
   INCOMPLETE
 }
 
+/// Which of the possible payers the workspace's resolved plan came from.
+///
+/// The Subscription row is a cache of a decision taken over several sources
+/// (a complimentary grant, Stripe, Google Play, the local trial), so it has to
+/// record which one won or the billing screen cannot tell a customer where to
+/// go to change their plan.
+enum PlanSource {
+  /// Nobody is paying: Free, and no trial running.
+  FREE
+  /// The local 14-day card-free trial.
+  TRIAL
+  /// A complimentary grant from the email allowlist.
+  COMPLIMENTARY
+  /// A Stripe subscription bought on the web.
+  STRIPE
+  /// A Google Play subscription bought inside the Android app.
+  GOOGLE_PLAY
+}
+
 enum ReferralStatus {
   /// The referred user signed up but has not upgraded to a paid plan yet.
   PENDING
@@ -254,6 +273,7 @@ model Workspace {
   assets                 Asset[]
   integrationConnections IntegrationConnection[]
   pendingBankConnections PendingBankConnection[]
+  playPurchases          PlayPurchase[]
 
   @@index([type])
   @@map("workspaces")
@@ -358,6 +378,8 @@ model Profile {
   pushSubscriptions      PushSubscription[]
   /// Workspace subscriptions this user set up (informational back-relation).
   subscriptionsManaged   Subscription[]
+  /// Google Play purchases this user made (informational back-relation).
+  playPurchases          PlayPurchase[]
   usageRecords           UsageRecord[]
   referralsMade          Referral[]              @relation("Referrer")
   referralReceived       Referral?               @relation("Referred")
@@ -627,8 +649,16 @@ model AccountDeletionRequest {
   @@map("account_deletion_requests")
 }
 
-/// The workspace's billing state. Free/trial workspaces have a row with no
-/// Stripe ids; paid workspaces are kept in sync by the Stripe webhook.
+/// The workspace's billing state, and the *resolved* one: `plan`, `status`,
+/// `planSource`, `currentPeriodEnd` and `cancelAtPeriodEnd` are a cache of a
+/// decision taken over several payers, not a record of any one of them.
+///
+/// The sources of truth sit beside the cache and are never overwritten by it:
+/// `stripePlan` / `stripeStatus` for the web subscription, and the
+/// `play_purchases` rows for Google Play. That separation is what lets a
+/// complimentary grant write ENTERPRISE over the top without erasing the fact
+/// that the customer also pays €19 a month through Stripe underneath — which
+/// used to happen, and made the grant impossible to undo correctly.
 model Subscription {
   id                   String             @id @default(cuid())
   workspaceId          String             @unique @map("workspace_id")
@@ -636,9 +666,15 @@ model Subscription {
   userId               String?            @map("user_id") @db.Uuid
   plan                 PlanId             @default(FREE)
   status               SubscriptionStatus @default(ACTIVE)
+  /// Which payer the cached `plan` came from.
+  planSource           PlanSource         @default(FREE) @map("plan_source")
   stripeCustomerId     String?            @unique @map("stripe_customer_id")
   stripeSubscriptionId String?            @unique @map("stripe_subscription_id")
   stripePriceId        String?            @map("stripe_price_id")
+  /// Stripe's own tier and status, independent of what won resolution. Null on
+  /// a workspace that has never had a Stripe subscription.
+  stripePlan           PlanId?            @map("stripe_plan")
+  stripeStatus         SubscriptionStatus? @map("stripe_status")
   currentPeriodEnd     DateTime?          @map("current_period_end")
   cancelAtPeriodEnd    Boolean            @default(false) @map("cancel_at_period_end")
   /// Local card-free trial of the edition's middle tier: 14 days on signup,
@@ -651,6 +687,80 @@ model Subscription {
   profile   Profile?  @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@map("subscriptions")
+}
+
+/// One Google Play subscription purchase, as last read back from
+/// `purchases.subscriptionsv2.get`.
+///
+/// The purchase token is the identity: Play issues a new one on every upgrade,
+/// downgrade and resubscribe, pointing at the one it replaces through
+/// `linkedPurchaseToken`. Rows are kept rather than deleted when that happens
+/// (`retiredAt` is stamped instead), because a refund can arrive against a
+/// token that is no longer the current one and there has to be something to
+/// apply it to.
+///
+/// `state` holds Play's own string — SUBSCRIPTION_STATE_ACTIVE and friends —
+/// rather than a local enum. Google's list is longer than the five-value
+/// SubscriptionStatus this app resolves onto (there is no PAUSED or ON_HOLD
+/// there), and truncating it here would throw away the distinction between a
+/// customer who paused deliberately and one whose card was declined.
+model PlayPurchase {
+  id                  String    @id @default(cuid())
+  /// Play's purchase token. Unique, which is what makes re-verification a
+  /// no-op: the client calls verify on every app resume.
+  purchaseToken       String    @unique @map("purchase_token")
+  workspaceId         String    @map("workspace_id")
+  /// The buyer. Nullable so that deleting the payer's account leaves the
+  /// purchase attached to a workspace that other members keep.
+  userId              String?   @map("user_id") @db.Uuid
+  /// Play subscription product id, e.g. "business_pro".
+  productId           String    @map("product_id")
+  /// The base plan inside that product, e.g. "business-pro-monthly".
+  basePlanId          String?   @map("base_plan_id")
+  /// The tier this product grants, resolved from the product id at write time.
+  plan                PlanId
+  /// Play's `subscriptionState` verbatim.
+  state               String
+  /// Play's `latestOrderId`, for reconciling against a Play Console report.
+  latestOrderId       String?   @map("latest_order_id")
+  startTime           DateTime? @map("start_time")
+  /// End of the paid period. Access outlives cancellation until this instant.
+  expiryTime          DateTime? @map("expiry_time")
+  autoRenewing        Boolean   @default(false) @map("auto_renewing")
+  /// The token this purchase replaces, on an upgrade/downgrade/resubscribe.
+  linkedPurchaseToken String?   @map("linked_purchase_token")
+  /// Set when this row was superseded by a linked token, or when the purchase
+  /// left every entitling state for good. A retired row grants nothing.
+  retiredAt           DateTime? @map("retired_at")
+  /// A refund or chargeback. Cuts access immediately, unlike a cancellation.
+  revokedAt           DateTime? @map("revoked_at")
+  /// Google refunds and revokes a purchase that is not acknowledged within
+  /// three days, so this is a deadline, not a formality.
+  acknowledged        Boolean   @default(false)
+  acknowledgedAt      DateTime? @map("acknowledged_at")
+  /// Failed acknowledgement attempts, so a retry sweep can find them.
+  ackAttempts         Int       @default(0) @map("ack_attempts")
+  ackError            String?   @map("ack_error")
+  /// The obfuscated ids Play echoes back, checked against the caller.
+  obfuscatedAccountId String?   @map("obfuscated_account_id")
+  obfuscatedProfileId String?   @map("obfuscated_profile_id")
+  /// The last RTDN notification type seen for this token (4 = purchased,
+  /// 2 = renewed, ...), for support questions about ordering.
+  lastNotificationType Int?     @map("last_notification_type")
+  /// The provider payload as received, for answering "what did Google actually
+  /// say" without a second API call.
+  raw                 Json?
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  profile   Profile?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, retiredAt])
+  @@index([linkedPurchaseToken])
+  @@index([obfuscatedProfileId])
+  @@index([expiryTime])
+  @@map("play_purchases")
 }
 
 /// Metered usage per workspace per calendar month (period = "YYYY-MM").
