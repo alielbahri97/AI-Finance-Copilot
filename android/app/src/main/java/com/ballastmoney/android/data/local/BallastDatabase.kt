@@ -68,12 +68,46 @@ interface TransactionDao {
 
     @Query("SELECT * FROM transaction_aggregates WHERE queryKey = :queryKey")
     fun observeAggregates(queryKey: String): Flow<TransactionAggregatesEntity?>
+
+    /**
+     * Throws away every cached result set for one workspace.
+     *
+     * Called after a write. A new, edited or deleted transaction can change which
+     * rows match a filter, where they fall in the ordering and what the totals
+     * come to — for every filter the user has visited, not just the one on
+     * screen — and none of that is computable on the device. So the orderings and
+     * the totals go, the transaction rows stay, and the next load re-reads them
+     * from the server.
+     *
+     * Matched on the query key's prefix, which by construction is the workspace
+     * id followed by a separator. `LIKE` treats `%` and `_` as wildcards; a
+     * workspace id is a cuid, so neither can appear in one.
+     */
+    @RoomTransaction
+    suspend fun clearCachedQueries(workspaceIdPrefix: String) {
+        clearPagesWithPrefix(workspaceIdPrefix)
+        clearRemoteKeysWithPrefix(workspaceIdPrefix)
+        clearAggregatesWithPrefix(workspaceIdPrefix)
+    }
+
+    @Query("DELETE FROM transaction_pages WHERE queryKey LIKE :prefix || '%'")
+    suspend fun clearPagesWithPrefix(prefix: String)
+
+    @Query("DELETE FROM transaction_remote_keys WHERE queryKey LIKE :prefix || '%'")
+    suspend fun clearRemoteKeysWithPrefix(prefix: String)
+
+    @Query("DELETE FROM transaction_aggregates WHERE queryKey LIKE :prefix || '%'")
+    suspend fun clearAggregatesWithPrefix(prefix: String)
 }
 
 @Dao
 interface CategoryDao {
     @Query("SELECT * FROM categories WHERE workspaceId = :workspaceId ORDER BY name ASC")
     fun observeAll(workspaceId: String): Flow<List<CategoryEntity>>
+
+    /** For labelling rows after a recategorise, without waiting for a refetch. */
+    @Query("SELECT * FROM categories WHERE id = :id")
+    suspend fun find(id: String): CategoryEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(categories: List<CategoryEntity>)

@@ -117,6 +117,24 @@ data class IntegrationAccountDto(
     val effectiveBalanceAt: Instant? get() = lastBalanceAt ?: balanceAt
 }
 
+/**
+ * `POST /api/integrations/{provider}/sync`.
+ *
+ * A failed sync is a `502` with an `error`, so reaching this shape at all means
+ * the run finished. [stats] are counts — imported, skipped, updated — and are
+ * plain numbers by contract. [batchId] links the "Sync now" result straight to
+ * the transactions it imported, and is null for providers that do not import.
+ */
+@Serializable
+data class SyncResultDto(
+    val ok: Boolean = true,
+    /** `SUCCESS` or `PARTIAL`. A `FAILED` run never reaches the client as 2xx. */
+    val status: String? = null,
+    val connectionId: String? = null,
+    val stats: Map<String, Int> = emptyMap(),
+    val batchId: String? = null,
+)
+
 // --- GoCardless bank connection -------------------------------------------
 
 /** `GET /api/integrations/gocardless/institutions`. */

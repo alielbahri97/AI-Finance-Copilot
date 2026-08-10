@@ -18,7 +18,13 @@ $root = Resolve-Path (Join-Path $PSScriptRoot '..')
 $sources = Get-ChildItem -Path $root -Recurse -Filter *.kt -File
 
 # name -> list of parameter-name sets, one per declaration found.
-$declarations = @{}
+#
+# A .NET dictionary rather than a PowerShell hashtable, because a hashtable
+# compares keys case-insensitively. Kotlin does not: a `fun workspace(workspaceId)`
+# and a `Workspace(...)` constructor are different symbols, and folding them
+# together made every `Workspace(id = ...)` in the codebase look like a call to the
+# function, with a parameter list it shares nothing with.
+$declarations = New-Object 'System.Collections.Generic.Dictionary[string,object]'
 
 # Comments are stripped before anything else: a KDoc on a parameter sits between
 # the comma and the name, and prose commas and brackets inside one would otherwise
@@ -95,8 +101,8 @@ foreach ($file in $sources) {
     }
 }
 
-$single = @{}
-foreach ($name in $declarations.Keys) {
+$single = New-Object 'System.Collections.Generic.Dictionary[string,object]'
+foreach ($name in @($declarations.Keys)) {
     if ($declarations[$name].Count -eq 1) { $single[$name] = $declarations[$name][0] }
 }
 

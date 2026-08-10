@@ -49,8 +49,14 @@ val BallastAuth = createClientPlugin("BallastAuth", ::BallastAuthConfig) {
         if (token != null) {
             request.headers[HttpHeaders.Authorization] = "Bearer $token"
         }
-        workspace.currentWorkspaceId()?.let { id ->
-            request.headers[ApiRoutes.Headers.WORKSPACE] = id
+        // An explicit per-request workspace wins. Repositories are told which
+        // workspace to read, and a request for workspace A must not silently
+        // become a request for whichever one happens to be selected — that race
+        // is real while a workspace switch is in flight.
+        if (request.headers[ApiRoutes.Headers.WORKSPACE] == null) {
+            workspace.currentWorkspaceId()?.let { id ->
+                request.headers[ApiRoutes.Headers.WORKSPACE] = id
+            }
         }
 
         val call = proceed(request)

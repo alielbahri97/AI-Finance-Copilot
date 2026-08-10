@@ -3,7 +3,10 @@ package com.ballastmoney.android.data.local
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.ballastmoney.android.core.model.Category
+import com.ballastmoney.android.core.model.ImportBatch
 import com.ballastmoney.android.core.model.Transaction
+import com.ballastmoney.android.core.model.TransactionAggregates
 import com.ballastmoney.android.core.model.TransactionType
 import java.math.BigDecimal
 import java.time.Instant
@@ -126,7 +129,18 @@ data class TransactionAggregatesEntity(
     val expensesMinor: Long,
     val netMinor: Long,
     val totalCount: Int,
-)
+) {
+    fun toDomain(): TransactionAggregates = TransactionAggregates(
+        income = BigDecimal.valueOf(incomeMinor, TransactionEntity.MINOR_UNIT_SCALE),
+        expenses = BigDecimal.valueOf(expensesMinor, TransactionEntity.MINOR_UNIT_SCALE),
+        // Read back rather than recomputed. The server sends `net` as its own
+        // figure and it is the one the user compares against the web app; a
+        // client-side subtraction would be right almost always and confusing on
+        // the occasion it was not.
+        net = BigDecimal.valueOf(netMinor, TransactionEntity.MINOR_UNIT_SCALE),
+        totalCount = totalCount,
+    )
+}
 
 @Entity(tableName = "categories")
 data class CategoryEntity(
@@ -135,7 +149,9 @@ data class CategoryEntity(
     val name: String,
     val type: TransactionType,
     val color: String,
-)
+) {
+    fun toDomain(): Category = Category(id = id, name = name, type = type, color = color)
+}
 
 @Entity(tableName = "import_batches")
 data class ImportBatchEntity(
@@ -143,7 +159,13 @@ data class ImportBatchEntity(
     val workspaceId: String,
     val fileName: String,
     val createdAtEpochMillis: Long,
-)
+) {
+    fun toDomain(): ImportBatch = ImportBatch(
+        id = id,
+        fileName = fileName,
+        createdAt = Instant.ofEpochMilli(createdAtEpochMillis),
+    )
+}
 
 /**
  * Queued local mutation, for optimistic writes.

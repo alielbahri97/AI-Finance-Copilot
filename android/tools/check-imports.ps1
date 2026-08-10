@@ -12,6 +12,14 @@ $ErrorActionPreference = 'Stop'
 $root = Join-Path $PSScriptRoot '..'
 $sources = Get-ChildItem -Path $root -Recurse -Filter *.kt -File
 
+# Every modifier that can precede a declaration keyword, in any order. Written
+# as one alternation rather than a hand-ordered sequence because the previous
+# version omitted `suspend` and `const`, and silently reported every
+# `suspend fun` and `internal const val` in the codebase as undeclared — which is
+# the worst failure mode for a checker, since real problems hide in the noise.
+$modifier = '(?:public|internal|private|protected|expect|actual|annotation|data|value|enum|sealed|abstract|open|final|inline|noinline|crossinline|infix|operator|suspend|const|lateinit|override|tailrec|external|companion|fun)'
+$modifiers = "(?:$modifier\s+)*"
+
 # package -> set of declared top-level names
 $declared = @{}
 foreach ($file in $sources) {
@@ -24,16 +32,16 @@ foreach ($file in $sources) {
     foreach ($line in $lines) {
         $match = [regex]::Match(
             $line,
-            '^(?:@\w+\s+)*(?:public |internal |private )?(?:expect |actual )?(?:annotation |data |value |enum |sealed |abstract |open |inline |fun\s+)?(?:class|interface|object|fun|val|var|typealias)\s+(?:<[^>]+>\s+)?([A-Za-z_]\w*)'
+            "^(?:@\w+\s+)*$modifiers(?:class|interface|object|fun|val|var|typealias)\s+(?:<[^>]+>\s+)?([A-Za-z_]\w*)"
         )
         if ($match.Success) {
             [void]$declared[$packageName].Add($match.Groups[1].Value)
         }
         # Extension and generic functions: `fun <T> Foo.bar(` and `fun Foo.bar(`
-        $ext = [regex]::Match($line, '^(?:public |internal |private )?fun\s+(?:<[^>]+>\s+)?[\w\.]+\.([A-Za-z_]\w*)\s*\(')
+        $ext = [regex]::Match($line, "^$modifiers" + 'fun\s+(?:<[^>]+>\s+)?[\w\.]+\.([A-Za-z_]\w*)\s*\(')
         if ($ext.Success) { [void]$declared[$packageName].Add($ext.Groups[1].Value) }
         # Extension properties: `val Foo.bar: Baz`
-        $extProp = [regex]::Match($line, '^(?:public |internal |private )?val\s+[\w\.]+\.([A-Za-z_]\w*)\s*:')
+        $extProp = [regex]::Match($line, "^$modifiers" + 'val\s+(?:<[^>]+>\s+)?[\w\.]+\.([A-Za-z_]\w*)\s*:')
         if ($extProp.Success) { [void]$declared[$packageName].Add($extProp.Groups[1].Value) }
     }
 }
