@@ -5,6 +5,7 @@ import { logger, serializeError } from "@/lib/logger";
 import { recordBankAccounts, type BankAccountSnapshot } from "../bank-accounts";
 import { importBankTransactions, type BankTransaction } from "../bank-import";
 import {
+  accountBudgetRemaining,
   agreementConsentExpiry,
   agreementFor,
   assessRequisition,
@@ -28,8 +29,8 @@ import type { ProviderHooks, SyncContext, SyncStats } from "./types";
  * GoCardless Bank Account Data (ex-Nordigen). No per-user OAuth tokens:
  * API access tokens are minted from the secret id/key, and the user approves
  * a *requisition* (scoped by an end-user agreement) at their bank. We store
- * the requisition + account ids + consent expiry in connection metadata; the
- * API token itself is workspace-independent and cached per server instance.
+ * the requisition + account ids + consent expiry in connection metadata and
+ * share one process-wide API token across every connection.
  *
  * Endpoints per https://bankaccountdata.gocardless.com/api/v2 docs:
  *   POST /token/new/                          mint the JWT pair
@@ -49,12 +50,6 @@ const BASE = "https://bankaccountdata.gocardless.com/api/v2";
 
 export const SANDBOX_INSTITUTION_ID = "SANDBOXFINANCE_SFIN0000";
 
-/** Documented token lifetimes, used when the response omits them. */
-const ACCESS_TTL_SECONDS = 86_400;
-const REFRESH_TTL_SECONDS = 2_592_000;
-/** Renew this long before a token actually expires. */
-const TOKEN_MARGIN_MS = 60 * 1000;
-
 /** Thrown on 429s; carries the reset time from the rate-limit headers. */
 export class GcRateLimitError extends IntegrationError {
   constructor(
@@ -72,36 +67,54 @@ export class GcRateLimitError extends IntegrationError {
  */
 export class GcAccountUnavailableError extends IntegrationError {}
 
-/**
- * The current JWT pair, cached per server instance.
- *
- * /token/new/ returns an access token good for 24h plus a refresh token good
- * for 30 days, and the docs direct clients to exchange the refresh token at
- * /token/refresh/ instead of returning to the user secrets. Minting a fresh
- * pair for every bank list and every sync worked, but spent general
- * rate-limit budget on a token we already held.
- */
-let tokenCache: {
-  secretId: string;
+interface GcToken {
   access: string;
-  accessExpiresAt: number;
-  refresh: string;
-  refreshExpiresAt: number;
-} | null = null;
-
-interface GcTokenPair {
-  access?: string;
   access_expires?: number;
   refresh?: string;
   refresh_expires?: number;
 }
 
-async function tokenRequest(path: string, body: Record<string, string>): Promise<GcTokenPair> {
+/**
+ * The API credentials belong to this server, not to a workspace, so one token
+ * serves every connection. POST /token/new/ is capped at 100 per *hour* for
+ * the whole company — minting one per sync would exhaust it — so the token is
+ * held process-wide and renewed through /token/refresh/ (100/min) until the
+ * refresh token itself lapses.
+ */
+let cachedToken: {
+  access: string;
+  accessExpiresAt: number;
+  refresh: string | null;
+  refreshExpiresAt: number;
+} | null = null;
+
+/** In-flight mint, so parallel syncs on a cold process share one request. */
+let pendingToken: Promise<string> | null = null;
+
+/** Renew this far ahead of expiry so a running sync never uses a dead token. */
+const TOKEN_MARGIN_MS = 60 * 1000;
+
+/** Documented access-token lifetime, for responses that omit it. */
+const ACCESS_TTL_SECONDS = 24 * 60 * 60;
+
+function expiresAt(now: number, seconds: number | undefined, fallbackSeconds: number): number {
+  const valid = typeof seconds === "number" && Number.isFinite(seconds) && seconds > 0;
+  return now + (valid ? seconds : fallbackSeconds) * 1000;
+}
+
+async function tokenRequest(path: string, body: Record<string, string>): Promise<GcToken> {
   const response = await fetch(`${BASE}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(body),
   });
+  if (response.status === 429) {
+    const retryAt = rateLimitRetryAt((name) => response.headers.get(name));
+    throw new GcRateLimitError(
+      `GoCardless rate limit reached on ${path}; retry after ${retryAt.toISOString()}`,
+      retryAt
+    );
+  }
   if (!response.ok) {
     const { summary, detail } = await errorBody(response);
     // Both failure modes here are server setup mistakes rather than anything
@@ -116,7 +129,38 @@ async function tokenRequest(path: string, body: Record<string, string>): Promise
       `GoCardless ${path} failed: HTTP ${response.status}${hint}${describe(summary, detail)}`
     );
   }
-  return (await response.json()) as GcTokenPair;
+  return (await response.json()) as GcToken;
+}
+
+async function mintToken(secretId: string, secretKey: string): Promise<string> {
+  const now = Date.now();
+  if (cachedToken?.refresh && cachedToken.refreshExpiresAt - TOKEN_MARGIN_MS > now) {
+    try {
+      const refreshed = await tokenRequest("/token/refresh/", { refresh: cachedToken.refresh });
+      cachedToken = {
+        ...cachedToken,
+        access: refreshed.access,
+        accessExpiresAt: expiresAt(now, refreshed.access_expires, ACCESS_TTL_SECONDS),
+      };
+      return cachedToken.access;
+    } catch (error) {
+      logger.warn("[integrations] gocardless token refresh failed; minting a new one", {
+        error: serializeError(error),
+      });
+    }
+  }
+  const minted = await tokenRequest("/token/new/", {
+    secret_id: secretId,
+    secret_key: secretKey,
+  });
+  cachedToken = {
+    access: minted.access,
+    accessExpiresAt: expiresAt(now, minted.access_expires, ACCESS_TTL_SECONDS),
+    refresh: minted.refresh ?? null,
+    // No stated refresh window means treat it as unusable and mint next time.
+    refreshExpiresAt: expiresAt(now, minted.refresh_expires, 0),
+  };
+  return cachedToken.access;
 }
 
 async function apiToken(): Promise<string> {
@@ -125,50 +169,13 @@ async function apiToken(): Promise<string> {
   if (!secretId || !secretKey) {
     throw new IntegrationError("GoCardless is not configured");
   }
-
-  const now = Date.now();
-  // Rotating the secrets must not keep serving tokens minted from the old ones.
-  if (tokenCache && tokenCache.secretId !== secretId) tokenCache = null;
-  if (tokenCache && tokenCache.accessExpiresAt - TOKEN_MARGIN_MS > now) {
-    return tokenCache.access;
+  if (cachedToken && cachedToken.accessExpiresAt - TOKEN_MARGIN_MS > Date.now()) {
+    return cachedToken.access;
   }
-
-  if (tokenCache && tokenCache.refresh && tokenCache.refreshExpiresAt - TOKEN_MARGIN_MS > now) {
-    try {
-      const refreshed = await tokenRequest("/token/refresh/", { refresh: tokenCache.refresh });
-      if (refreshed.access) {
-        tokenCache = {
-          ...tokenCache,
-          access: refreshed.access,
-          accessExpiresAt: now + (refreshed.access_expires ?? ACCESS_TTL_SECONDS) * 1000,
-        };
-        return refreshed.access;
-      }
-    } catch (error) {
-      logger.warn("[integrations] gocardless token refresh failed; minting a new pair", {
-        error: serializeError(error),
-      });
-    }
-    tokenCache = null;
-  }
-
-  const minted = await tokenRequest("/token/new/", {
-    secret_id: secretId,
-    secret_key: secretKey,
+  pendingToken ??= mintToken(secretId, secretKey).finally(() => {
+    pendingToken = null;
   });
-  if (!minted.access) {
-    throw new IntegrationError("GoCardless token response contained no access token");
-  }
-  tokenCache = {
-    secretId,
-    access: minted.access,
-    accessExpiresAt: now + (minted.access_expires ?? ACCESS_TTL_SECONDS) * 1000,
-    refresh: minted.refresh ?? "",
-    refreshExpiresAt: minted.refresh
-      ? now + (minted.refresh_expires ?? REFRESH_TTL_SECONDS) * 1000
-      : 0,
-  };
-  return minted.access;
+  return pendingToken;
 }
 
 /** Error body shape documented under "Statuses and Error Code". */
@@ -191,7 +198,17 @@ function isAccountPath(path: string): boolean {
   return path.startsWith("/accounts/");
 }
 
-async function gcFetch<T>(path: string, token: string, init?: RequestInit): Promise<T> {
+/** Response body plus a header reader, for the rate-limit budget headers. */
+interface GcResponse<T> {
+  data: T;
+  getHeader: (name: string) => string | null;
+}
+
+async function gcRequest<T>(
+  path: string,
+  token: string,
+  init?: RequestInit
+): Promise<GcResponse<T>> {
   const response = await fetch(`${BASE}${path}`, {
     ...init,
     headers: {
@@ -202,7 +219,10 @@ async function gcFetch<T>(path: string, token: string, init?: RequestInit): Prom
     },
   });
   if (response.ok) {
-    return (await response.json()) as T;
+    return {
+      data: (await response.json()) as T,
+      getHeader: (name) => response.headers.get(name),
+    };
   }
 
   const { summary, detail } = await errorBody(response);
@@ -222,9 +242,9 @@ async function gcFetch<T>(path: string, token: string, init?: RequestInit): Prom
     );
   }
   if (kind === "auth") {
-    // The cached token may simply have gone stale; drop it so the next call
-    // mints a fresh one instead of repeating a doomed request.
-    tokenCache = null;
+    // The shared token may simply have been revoked early; drop it so the
+    // next call mints a fresh one rather than expiring every connection.
+    cachedToken = null;
     throw new IntegrationAuthError(`GoCardless auth failed on ${path}${describe(summary, detail)}`);
   }
   if (kind === "unavailable") {
@@ -237,6 +257,10 @@ async function gcFetch<T>(path: string, token: string, init?: RequestInit): Prom
   throw new IntegrationError(
     `GoCardless ${path} failed: HTTP ${response.status}${describe(summary, detail)}`
   );
+}
+
+async function gcFetch<T>(path: string, token: string, init?: RequestInit): Promise<T> {
+  return (await gcRequest<T>(path, token, init)).data;
 }
 
 // ------------------------------------------------------------- institutions
@@ -398,10 +422,7 @@ export async function finalizeRequisition(requisitionId: string): Promise<Finali
   );
 
   const accounts = requisition.accounts ?? [];
-  const assessment = assessRequisition(
-    requisitionStatusCode(requisition.status),
-    accounts.length
-  );
+  const assessment = assessRequisition(requisitionStatusCode(requisition.status), accounts.length);
   if (!assessment.ok) {
     throw new IntegrationError(assessment.message);
   }
@@ -523,16 +544,22 @@ async function sync(ctx: SyncContext): Promise<SyncStats> {
       continue;
     }
 
+    // Set when a successful response reports the account's daily budget spent.
+    let exhaustedUntil: Date | null = null;
+
     try {
-      const body = await gcFetch<{ transactions?: { booked?: GcTransaction[] } }>(
+      const { data, getHeader } = await gcRequest<{ transactions?: { booked?: GcTransaction[] } }>(
         `/accounts/${encodeURIComponent(accountId)}/transactions/?date_from=${dateFrom}`,
         token
       );
       delete rateLimitedUntil[accountId];
-      const mapped = mapBookedTransactions(accountId, body.transactions?.booked ?? []);
+      const mapped = mapBookedTransactions(accountId, data.transactions?.booked ?? []);
       fetched += mapped.length;
       transactions.push(...mapped);
       accountsSynced += 1;
+      if (accountBudgetRemaining(getHeader) === 0) {
+        exhaustedUntil = rateLimitRetryAt(getHeader, now);
+      }
     } catch (error) {
       if (error instanceof GcRateLimitError) {
         rateLimitedUntil[accountId] = error.retryAt.toISOString();
@@ -552,11 +579,11 @@ async function sync(ctx: SyncContext): Promise<SyncStats> {
     // Balance snapshot for the UI; each scope has its own budget, so a
     // balance 429 must never fail the transaction sync.
     try {
-      const body = await gcFetch<{ balances?: GcBalance[] }>(
+      const { data, getHeader } = await gcRequest<{ balances?: GcBalance[] }>(
         `/accounts/${encodeURIComponent(accountId)}/balances/`,
         token
       );
-      const picked = pickBalance(body.balances ?? []);
+      const picked = pickBalance(data.balances ?? []);
       if (picked) {
         snapshots.push({
           externalAccountId: accountId,
@@ -566,17 +593,24 @@ async function sync(ctx: SyncContext): Promise<SyncStats> {
           balanceType: picked.type,
         });
       }
+      if (accountBudgetRemaining(getHeader) === 0) {
+        exhaustedUntil ??= rateLimitRetryAt(getHeader, now);
+      }
     } catch (error) {
       // Balances have their own daily budget, so exhausting it — or a bank that
       // simply won't serve them — is expected and not worth an error log.
-      if (
-        !(error instanceof GcRateLimitError) &&
-        !(error instanceof GcAccountUnavailableError)
-      ) {
+      if (!(error instanceof GcRateLimitError) && !(error instanceof GcAccountUnavailableError)) {
         logger.warn("[integrations] gocardless balance fetch failed", {
           error: serializeError(error),
         });
       }
+    }
+
+    // The bank granted the last call it owed us today. Record the window now
+    // so the next pass skips this account instead of spending a 429, which
+    // would count against the shared per-minute limit for nothing.
+    if (exhaustedUntil) {
+      rateLimitedUntil[accountId] = exhaustedUntil.toISOString();
     }
   }
 

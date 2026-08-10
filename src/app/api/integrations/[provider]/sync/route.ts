@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { enforceRateLimit } from "@/lib/api/rate-limit-guard";
 import { lookupRequestedConnection } from "@/lib/integrations/connections";
+import { dailyCapNotice } from "@/lib/integrations/gocardless-core";
 import { requireIntegrationAccess } from "@/lib/integrations/guard";
 import { getProvider } from "@/lib/integrations/registry";
 import { runSync } from "@/lib/integrations/sync";
@@ -70,6 +71,9 @@ export async function POST(
       status: outcome.status,
       connectionId: lookup.connection.id,
       stats: outcome.stats ?? {},
+      // A pass that reached no account at all is the bank's daily cap, not a
+      // failure; say so rather than reporting a success full of zeroes.
+      note: dailyCapNotice(outcome.stats ?? {}),
       batchId: typeof batchId === "string" ? batchId : null,
     });
   } catch (error) {

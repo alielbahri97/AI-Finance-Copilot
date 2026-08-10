@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  accountBudgetRemaining,
   agreementConsentExpiry,
   agreementFor,
   assessRequisition,
   classifyAccountError,
   computeDateFrom,
   consentState,
+  dailyCapNotice,
   isAccountRateLimited,
   mapBookedTransactions,
   pickBalance,
@@ -15,6 +17,7 @@ import {
   type GcBalance,
   type GcTransaction,
 } from "@/lib/integrations/gocardless-core";
+import { getProviders } from "@/lib/integrations/registry";
 
 const ACCOUNT = "065da497-e6af-4950-88ed-2edbc0577d20";
 
@@ -295,6 +298,42 @@ describe("gocardless rate limiting", () => {
     expect(isAccountRateLimited(stored, "acc-2", now)).toBe(false);
     expect(isAccountRateLimited(stored, "acc-3", now)).toBe(false);
     expect(isAccountRateLimited(undefined, "acc-1", now)).toBe(false);
+  });
+
+  it("reads the remaining per-account budget from a successful response", () => {
+    const headers = new Map([["x-ratelimit-account-success-remaining", "0"]]);
+    expect(accountBudgetRemaining((name) => headers.get(name) ?? null)).toBe(0);
+    expect(
+      accountBudgetRemaining(() => "3")
+    ).toBe(3);
+  });
+
+  it("reports no budget rather than zero when the header is absent or unusable", () => {
+    // The header only accompanies successful account requests, and "unknown"
+    // must never be mistaken for "exhausted" — that would skip a good account.
+    expect(accountBudgetRemaining(() => null)).toBeNull();
+    expect(accountBudgetRemaining(() => "many")).toBeNull();
+  });
+
+  it("explains a pass that reached no account at all, and stays quiet otherwise", () => {
+    expect(dailyCapNotice({ accountsSynced: 0, accountsSkipped: 2 })).toMatch(
+      /limits refreshes to a few per day/i
+    );
+    expect(dailyCapNotice({ accountsSynced: 1, accountsSkipped: 1 })).toBeNull();
+    expect(dailyCapNotice({ accountsSynced: 0, accountsSkipped: 0 })).toBeNull();
+    // Providers that report no per-account counters must not trigger it.
+    expect(dailyCapNotice({ imported: 3 } as Record<string, number>)).toBeNull();
+  });
+});
+
+describe("gocardless scheduled sync budget", () => {
+  it("leaves one call per scope in reserve for manual syncs and retries", () => {
+    // Banks allow four successful calls per account per scope per 24h, and a
+    // pass spends one on /transactions/ and one on /balances/.
+    const provider = getProviders().find((entry) => entry.id === "gocardless");
+    const scheduledPerDay = 24 / (provider?.syncIntervalHours ?? 24);
+    expect(scheduledPerDay).toBeLessThan(4);
+    expect(scheduledPerDay).toBe(3);
   });
 });
 

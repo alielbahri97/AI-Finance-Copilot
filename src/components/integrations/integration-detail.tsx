@@ -290,9 +290,15 @@ function ConnectionRow({ data, connection }: { data: IntegrationCardData; connec
       });
       const body = (await response.json()) as {
         error?: string;
+        note?: string | null;
         stats?: Record<string, number>;
       };
       if (!response.ok) throw new Error(body.error ?? "Sync failed");
+      if (body.note) {
+        toast.info("No refresh available right now", { description: body.note });
+        router.refresh();
+        return;
+      }
       const summary = Object.entries(body.stats ?? {})
         .map(([key, value]) => `${key}: ${value}`)
         .join(", ");
