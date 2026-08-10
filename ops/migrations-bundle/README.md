@@ -3,7 +3,7 @@
 Applying pending Prisma migrations from any browser (including a phone),
 because the machine that has the repo cannot reach Postgres directly.
 
-There have been eight rounds. Each has its own file to paste:
+There have been nine rounds. Each has its own file to paste:
 
 | Round | Migrations | File |
 | --- | --- | --- |
@@ -14,17 +14,170 @@ There have been eight rounds. Each has its own file to paste:
 | 5 | `0019_customer_dunning` | [`apply-0019.sql`](./apply-0019.sql) |
 | 6 | `0020_net_worth` | [`apply-0020.sql`](./apply-0020.sql) |
 | 7 (superseded by 8) | `0021_forecast_scenarios` | [`apply-0021.sql`](./apply-0021.sql) |
-| **8 — do this one** | `0021` → `0026`, all six | [`apply-0021-0026.sql`](./apply-0021-0026.sql) |
+| **8 — do this one first** | `0021` → `0026`, all six | [`apply-0021-0026.sql`](./apply-0021-0026.sql) |
+| **9 — then this one** | `0027_play_billing` | [`apply-0027.sql`](./apply-0027.sql) |
 
 Run them in order; each round checks for the previous round's schema and
 refuses to run without it. Everything from "Step A" onwards describes round 1,
 but the mechanics — backup, paste the whole file, press Run, read the last
 result table — are the same for all of them.
 
-**If you are catching up today, round 8 is the only file you need.** It contains
-rounds 7's migration as well as the five after it, so you do not need to run
-`apply-0021.sql` first (and should not bother). Rounds 1–6 must already be
-applied; round 8 checks and refuses if they are not.
+## If you are catching up today, the whole answer is two files in this order
+
+1. **[`apply-0021-0026.sql`](./apply-0021-0026.sql)** (round 8). Needed by the
+   feature set that is deployed now. It contains round 7's migration as well as
+   the five after it, so you do not need to run `apply-0021.sql` first, and
+   should not bother. Rounds 1–6 must already be applied; round 8 checks and
+   refuses if they are not.
+2. **[`apply-0027.sql`](./apply-0027.sql)** (round 9). Needed only when the
+   Google Play Billing branch (`feat/play-billing`) deploys. It refuses to run
+   until round 8 has been applied. Running it early is harmless; there is just
+   no reason to.
+
+They are two files rather than one on purpose — see
+[why round 9 is separate](#why-round-9-is-a-separate-file) — and **round 8 goes
+first**, always.
+
+Independently of both, and at any point before or after them:
+**[`ops/storage/avatars-bucket.sql`](../storage/avatars-bucket.sql)**. It creates
+the Supabase Storage bucket and policies for profile photos, touches no table any
+migration touches, and is idempotent. It is not part of any round and has no
+ordering constraint at all — but **profile photo uploads fail until it has been
+run once**, so if you have never run it, run it. Running it again when you are
+unsure is harmless.
+
+---
+
+## Round 9: `0027_play_billing`
+
+The Google Play Billing schema. A workspace can be paid for on the web through
+Stripe or on a phone through Google Play, so `subscriptions` stops being a source
+of truth and becomes a resolved cache over two of them.
+
+| Migration | What it adds |
+| --- | --- |
+| `0027_play_billing` | `play_purchases` table, the `PlanSource` enum, and `subscriptions.plan_source` / `.stripe_plan` / `.stripe_status`, backfilled from the Stripe data already there |
+
+File to paste:
+
+```text
+ops/migrations-bundle/apply-0027.sql
+```
+
+### When to run it
+
+**Only when the Play Billing deployment is about to go out**, and always
+**after** round 8. Nothing on `master` or on `feat/mobile-api` reads any of it.
+Once `feat/play-billing` is deployed it becomes mandatory: `GET
+/api/billing/summary` reads `plan_source` on every call, and every entitlements
+lookup goes through the resolver that needs the Stripe columns.
+
+### Why round 9 is a separate file
+
+`0021`–`0026` are needed by the feature set being deployed now. `0027` is needed
+only by the one after it, which is still a draft pull request. Two clearly-scoped
+things to run in a stated order is easier to get right from a phone than one
+bundle whose filename no longer describes its contents — and it means you are
+never asked to apply a migration for a branch you have not decided to ship yet.
+The trade-off is that you have to remember to come back and run the second one;
+that is what step 1 of `RUN-AT-HOME.md` is for.
+
+### This round is purely additive, unlike round 8
+
+One enum, one table, three new columns. No rename, nothing dropped, nothing
+narrowed, and no pre-existing column's values changed. The three backfill
+statements only ever write into the three columns the migration has just created.
+
+That said, still take the backup. It costs nothing and this is a billing table.
+
+### The backfills, and why they are guarded twice
+
+`0027` copies `plan`/`status` into `stripe_plan`/`stripe_status` for every
+workspace that has a Stripe subscription, and sets `plan_source` to `STRIPE` or
+`TRIAL` where that is what the row already means. That is exact for every row not
+currently overridden by a complimentary grant, and the best available answer for
+the rest.
+
+Re-running it blind later would be wrong, and not obviously so: after Play
+Billing is live, `plan` and `status` hold whichever payer *won resolution*, so
+copying `plan` into `stripe_plan` a month later could record a Play tier as
+Stripe's and invent a web subscription that does not exist. The bundle therefore
+skips the whole block once `0027` is recorded as applied, and additionally scopes
+each statement so it can only ever fill in a blank. Both guards are no-ops on a
+first, clean application.
+
+### What to do, in this order
+
+1. **Back up.** Supabase → **Database → Backups**. Note the latest
+   Point-in-Time Recovery timestamp.
+2. **Check round 8 is in.** You do not have to do this by hand — step 3 refuses
+   with a named error if it is not — but if you are unsure, round 8's summary
+   table is the answer.
+3. **Paste all of it** into Supabase → **SQL Editor → New query**, in the
+   **production** project, and press **Run**.
+4. **Read the last result table.** It has 24 rows; every one should say `OK` in
+   the `result` column. Rows 10 to 13 are the backfill, and row 12 in particular
+   should say no workspace was attributed to Google Play — nobody can have
+   bought through Play before the app that sells it exists. Scroll up for the
+   migration history (expect 27 rows, `0001`–`0027`), the shape of
+   `play_purchases` and `subscriptions`, and a breakdown of how many workspaces
+   ended up in each `plan_source`.
+5. **Run [`ops/storage/avatars-bucket.sql`](../storage/avatars-bucket.sql)** if
+   you have never run it. Unrelated to this round; see the note in the intro.
+6. **Verify from the app**, *after* the Play Billing deployment is live:
+   `https://app.ballastmoney.com/api/health` should report `status: "ok"`,
+   `schema: "ok"`, and empty `missingTables`, `missingColumns` and
+   `pendingMigrations`. That deployment adds `play_purchases` and the three
+   `subscriptions` columns to `SCHEMA_CHECKS`, so it is the first build that can
+   tell you anything about `0027`. Before it, `/api/health` cannot see this round
+   at all — read the 24-row summary table instead.
+
+### If it errors
+
+**Nothing was changed** — the whole file runs inside one transaction, so a
+failure throws all of it away. Send me the full error, including `DETAIL:` and
+`HINT:` lines. Known answers:
+
+- **`This database is missing "pending_bank_connections" …`** or **`… missing
+  "profiles"."celebration_seen_at" …`** — round 8 was never applied. Run
+  [`apply-0021-0026.sql`](./apply-0021-0026.sql) first, then this file. The
+  refusal happens before anything is changed.
+- **`This database is missing the "PlanId" enum …`** — this is not an
+  ai-finance-copilot database, or it predates `0007_saas`. Stop and send it to
+  me.
+- **`canceling statement due to lock timeout`** — something is holding a lock on
+  `subscriptions`. Safe to press **Run** again.
+
+Safe to run more than once: the enum, table, columns, indexes and foreign keys
+are all guarded, and the backfills are skipped after the first time.
+
+### Rollback
+
+Rolling the **deployment** back past Play Billing is safe — older code never
+reads `play_purchases` or the three new columns. Rolling the **database** back is
+not, once any real purchase has been recorded, because `play_purchases` is then
+the only record that a customer is paying Google for something and there is no
+server-side way to cancel or refund a Play subscription. Roll forward.
+
+### Not machine-verified, and the migration itself is unproven
+
+`0027` has **never been run against a real database**, in this bundled form or in
+its original form in `prisma/migrations/`. Both were prepared without any
+database access, deliberately.
+
+What was checked mechanically, by
+[`verify-0027.mjs`](./verify-0027.mjs) next to the bundle (`node
+ops/migrations-bundle/verify-0027.mjs`, 31 checks, all passing): the file
+is one `BEGIN`/`COMMIT` with only read-only `SELECT`s after it; all six
+dollar-quoted blocks are balanced and each tag is used exactly twice; the file is
+clean UTF-8 with no BOM and no non-ASCII outside comments; the recorded checksum
+really is the LF sha256 of `prisma/migrations/0027_play_billing/migration.sql` as
+stored in git; all **46** quoted identifiers in that migration appear in the
+bundle, none missing; every column, index and foreign key is created under a
+guard; and the 25-column count the summary table asserts is the real one. The DDL
+body was transcribed from the migration file with existence guards and backfill
+scopes added and nothing else changed. Read the 24-row summary carefully rather
+than assuming.
 
 ---
 
@@ -100,6 +253,10 @@ who signed up in the meantime and silently rob them of the tour.
    `https://app.ballastmoney.com/api/health` — `status: "ok"`, `schema: "ok"`,
    empty `missingTables`, `missingColumns` and `pendingMigrations`. See the
    caveat below about which deployment you are checking against.
+6. **Round 9 comes next, but not necessarily today.**
+   [`apply-0027.sql`](./apply-0027.sql) covers `0027_play_billing` and is needed
+   only when the Play Billing branch deploys. It refuses to run until this round
+   is in, so it cannot be done out of order by accident.
 
 ### Verifying with `/api/health`, and one caveat
 
@@ -788,14 +945,23 @@ SHA-256, hex, of the exact `migration.sql` file bytes — the same thing
 | `0024_enterprise_promo` | `4235fcc9ed6099afb9c2aed7532147665c442242869d2b677366b4544086c6ac` | `apply-0021-0026.sql` |
 | `0025_celebration_seen` | `9662fb1d5d725ca96f26fb2ff7f70731635b0734c6c3ffb6d7f4391ac7628f38` | `apply-0021-0026.sql` |
 | `0026_mobile_api` | `4970b9fcedd09cf9baa658e38dee149d02f23e91669c6c85799bd79c607f1662` | `apply-0021-0026.sql` |
+| `0027_play_billing` | `d213f127397d5db6cde8488923b60f96bba8294970db00b1f828d1f60bf440bd` | `apply-0027.sql` |
 
-The six round-8 checksums are the **LF** hashes, which is what
+The six round-8 checksums and the round-9 one are the **LF** hashes, which is what
 `scripts/apply-migrations.ts` computes on Linux and macOS and what the existing
 `apply-0021.sql` already recorded. On a Windows checkout with
 `core.autocrlf=true` the files sit on disk as CRLF and hash differently, so
 `npm run db:apply` there will print a cosmetic "checksum mismatch" warning for
-all six; it neither re-runs the migration nor fails. Production is unaffected —
+all seven; it neither re-runs the migration nor fails. Production is unaffected —
 these rows are written by the SQL file, not by `db:apply`.
+
+The round-9 checksum was verified two ways, so that a Windows working tree cannot
+have quietly changed it: the LF-normalised hash of the working-tree file and the
+hash of the blob `git show
+feat/play-billing:prisma/migrations/0027_play_billing/migration.sql` produces are
+the same value, `d213f127…`, and that blob contains no CRLF at all. The same
+method reproduces the recorded `0021` and `0026` checksums exactly, which is how
+it was confirmed to be the method the tooling uses.
 
 **Important:** these checksums describe the migration files as they were when
 this bundle was generated. They were re-verified against the migration files as
