@@ -6,7 +6,51 @@ import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 import { SUPPORTED_CURRENCIES } from "@/lib/validations/profile";
 import { apiError } from "@/lib/api/response";
-import { getWorkspaceContext } from "@/lib/workspace/context";
+import {
+  serializeBusinessProfile,
+  serializePersonalProfile,
+  serializeProfile,
+} from "@/lib/api/serializers/profile";
+import { getWorkspaceContext, requireWorkspace } from "@/lib/workspace/context";
+import { editionForWorkspaceType } from "@/lib/workspace/editions";
+
+/**
+ * The profile screen: the account itself, plus whichever first-run
+ * questionnaire the current workspace's edition owns.
+ *
+ * A session is all this needs — the web page checks nothing beyond being signed
+ * in and having a workspace, and a person's own name is not a permission.
+ */
+export async function GET(request: Request) {
+  try {
+    const auth = await requireWorkspace(request);
+    if (!auth.ok) return auth.response;
+    const { user, workspace } = auth.ctx;
+
+    const profile = await getOrCreateProfile(user);
+    const [businessProfile, personalProfile] = await Promise.all([
+      prisma.businessProfile.findUnique({ where: { userId: user.id } }),
+      prisma.personalProfile.findUnique({ where: { userId: user.id } }),
+    ]);
+
+    const edition = editionForWorkspaceType(workspace.type);
+
+    return NextResponse.json({
+      profile: serializeProfile(profile),
+      edition,
+      workspace: { id: workspace.id, name: workspace.name, type: workspace.type, edition },
+      // Not behind the edition branch: the page seeds the currency form's
+      // location hint from the business profile in both editions, because a
+      // person who also runs a company has already told us where they are.
+      locationHint: businessProfile?.location ?? null,
+      supportedCurrencies: [...SUPPORTED_CURRENCIES],
+      personal: edition === "personal" ? serializePersonalProfile(personalProfile) : null,
+      business: edition === "business" ? serializeBusinessProfile(businessProfile) : null,
+    });
+  } catch (error) {
+    return apiError("GET /api/profile", "Failed to load profile", error);
+  }
+}
 
 const updateSchema = z
   .object({
