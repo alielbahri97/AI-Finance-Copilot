@@ -3,7 +3,7 @@
 Applying pending Prisma migrations from any browser (including a phone),
 because the machine that has the repo cannot reach Postgres directly.
 
-There have been seven rounds. Each has its own file to paste:
+There have been eight rounds. Each has its own file to paste:
 
 | Round | Migrations | File |
 | --- | --- | --- |
@@ -13,12 +13,159 @@ There have been seven rounds. Each has its own file to paste:
 | 4 | `0018_ai_categorization` | [`apply-0018.sql`](./apply-0018.sql) |
 | 5 | `0019_customer_dunning` | [`apply-0019.sql`](./apply-0019.sql) |
 | 6 | `0020_net_worth` | [`apply-0020.sql`](./apply-0020.sql) |
-| 7 | `0021_forecast_scenarios` | [`apply-0021.sql`](./apply-0021.sql) |
+| 7 (superseded by 8) | `0021_forecast_scenarios` | [`apply-0021.sql`](./apply-0021.sql) |
+| **8 — do this one** | `0021` → `0026`, all six | [`apply-0021-0026.sql`](./apply-0021-0026.sql) |
 
 Run them in order; each round checks for the previous round's schema and
 refuses to run without it. Everything from "Step A" onwards describes round 1,
 but the mechanics — backup, paste the whole file, press Run, read the last
 result table — are the same for all of them.
+
+**If you are catching up today, round 8 is the only file you need.** It contains
+rounds 7's migration as well as the five after it, so you do not need to run
+`apply-0021.sql` first (and should not bother). Rounds 1–6 must already be
+applied; round 8 checks and refuses if they are not.
+
+---
+
+## Round 8: `0021` through `0026`, in one paste
+
+Six migrations are unapplied at once — this is the backlog behind GitHub issue
+[#14 "Database schema out of date (pending migrations)"](https://github.com/alielbahri97/AI-Finance-Copilot/issues/14).
+One file applies all six in the right order and records all six in
+`_prisma_migrations`:
+
+| Migration | What it adds |
+| --- | --- |
+| `0021_forecast_scenarios` | `scenarios` table, `assumptions.scenario_id` |
+| `0022_personal_profile` | `personal_profiles` table (Personal first-run questionnaire) |
+| `0023_product_tour` | `profiles.tour_completed_at`, and marks today's accounts as done |
+| `0024_enterprise_promo` | `profiles.enterprise_promo_seen_at` |
+| `0025_celebration_seen` | **renames** that column to `celebration_seen_at` |
+| `0026_mobile_api` | `pending_bank_connections`, `account_deletion_requests`, two enums |
+
+File to paste:
+
+```text
+ops/migrations-bundle/apply-0021-0026.sql
+```
+
+### The ordering warning, because this round actually has one
+
+**`0025` renames the column `0024` creates.** Every previous round was purely
+additive and order only mattered for tidiness. Here it is load-bearing:
+
+- Run in order, the database ends up with exactly one column,
+  `profiles.celebration_seen_at`, and no `enterprise_promo_seen_at` at all. That
+  is the correct end state and the only name the deployed code reads.
+- Run `0025` without `0024` and it fails with "column does not exist".
+- Run `0024` after `0025` and you get a stray unused column sitting next to the
+  real one, plus a migration history that says something untrue.
+
+The single file handles this for you, and its `0024`/`0025` steps converge to the
+right end state whichever of the three starting points your database is in.
+What you must not do is paste only part of the file, reorder its steps by hand,
+or run `apply-0021.sql` and then hand-write the rest.
+
+### `0023` is the one statement that changes existing rows
+
+`0023` marks every account that exists at migration time as having completed the
+product tour, so established users are not walked through an app they already
+know. The bundle runs that `UPDATE` **only once** — it is skipped if `0023` is
+already recorded, and also skipped if any profile already has the column set.
+That guard matters: the original migration's `WHERE tour_completed_at IS NULL`
+is correct exactly once, and re-running it a week later would sweep up everyone
+who signed up in the meantime and silently rob them of the tour.
+
+### What to do, in this order
+
+1. **Back up.** Supabase → **Database → Backups**. Note the latest
+   Point-in-Time Recovery timestamp. Do it properly this round: `0025` renames a
+   column, so this is the first bundle that is not purely additive.
+2. **Paste all of it** into Supabase → **SQL Editor → New query**, in the
+   **production** project, and press **Run**. Supabase may warn that the query
+   looks destructive because it contains `ALTER TABLE ... RENAME COLUMN`.
+   Confirm.
+3. **Read the last result table.** It has 29 rows; every one should say `OK` in
+   the `result` column. Rows 16 and 17 are the rename: "celebration_seen_at
+   exists" and "the pre-rename column is gone". Scroll up for the migration
+   history (expect 26 rows, `0001`–`0026`), the shape of the new and altered
+   tables, and a count of how many accounts were marked as having done the tour.
+4. **Run the storage bucket script** if you have never run it:
+   [`ops/storage/avatars-bucket.sql`](../storage/avatars-bucket.sql), same
+   editor, same project. It is independent of the migrations and can be run
+   before or after them, but profile photo uploads fail until it has been run
+   once. It is idempotent, so running it again is harmless if you are unsure.
+5. **Verify from the app.** Load the site and check
+   `https://app.ballastmoney.com/api/health` — `status: "ok"`, `schema: "ok"`,
+   empty `missingTables`, `missingColumns` and `pendingMigrations`. See the
+   caveat below about which deployment you are checking against.
+
+### Verifying with `/api/health`, and one caveat
+
+`/api/health` compares the live database against `SCHEMA_CHECKS` in
+`src/lib/db/schema-expectations.ts` and names exactly what is missing, so it is
+the natural check. But it can only report on what the **deployed** code knows
+about, and that list has been extended:
+
+- A deployment from `master` as it stands today knows about `0021`, `0022` and
+  `0023` only. It had a blind spot: `0024` and `0025` were never added to the
+  list, so health could report `schema: "ok"` while `profiles` was missing
+  `celebration_seen_at` — a column the profile page already reads. That is
+  fixed on `feat/mobile-api`, which also adds the `0026` tables to the list.
+- So if you apply this bundle **before** the mobile-API pull request is
+  deployed, `/api/health` reporting `ok` confirms `0021`–`0023` and tells you
+  nothing about `0024`–`0026`. Trust the bundle's own 29-row summary table for
+  those, and re-check `/api/health` after that deployment goes out.
+
+### If it errors
+
+**Nothing was changed** — the whole file runs inside one transaction, so a
+failure throws all of it away and the database is exactly as it was. Send me the
+full error, including `DETAIL:` and `HINT:` lines. Known answers:
+
+- **`This database is missing "assets" …`** — round 6 was never applied. Run
+  [`apply-0020.sql`](./apply-0020.sql) first, then this file. The refusal
+  happens before anything is changed.
+- **`Neither "enterprise_promo_seen_at" nor "celebration_seen_at" exists …`** —
+  should be impossible, since the step just before adds one of them. If you see
+  it, something else dropped the column mid-transaction; send it to me and do
+  not hand-patch it.
+- **`canceling statement due to lock timeout`** — something is holding a lock on
+  `profiles`. Safe to press **Run** again.
+
+Safe to run more than once: every table, column, index, enum and foreign key is
+guarded, and the one row-changing statement is skipped after the first time.
+
+### Rollback
+
+**Instant Rollback to a pre-`0026` deployment is safe; rolling the database back
+is not.** Older code simply never reads the new tables and columns — including
+`celebration_seen_at`, whose old name no deployed build ever read. The one thing
+to know is that once the mobile-API deployment is live, the *web* bank-connect
+flow writes `pending_bank_connections` too, so a database restored to before
+`0026` breaks bank connections on the current code. If something is wrong, roll
+forward.
+
+### It also supersedes the two hand-written bundles
+
+`apply-0022.sql` and `apply-0023.sql` were written in a lighter style and, unlike
+every other file here, do **not** write `_prisma_migrations` rows — so a database
+migrated with them would still look pending to `npm run db:apply`, and
+`apply-0023.sql` re-run later would mark the tour complete for everyone who had
+signed up since. Round 8 covers both properly. They are left in place for
+history; do not use them.
+
+### Not machine-verified, unlike rounds 2 and 3
+
+Rounds 2 and 3 were replayed through a real PostgreSQL engine and diffed against
+the original migrations. This bundle was **not** — it was prepared without any
+database access, deliberately. What was checked: the file is one `BEGIN`/`COMMIT`
+with only read-only `SELECT`s after it, all ten dollar-quoted blocks are balanced,
+and every quoted identifier in all six `migration.sql` files appears in the
+bundle (16, 18, 2, 2, 3 and 37 identifiers respectively, none missing). The DDL
+bodies were transcribed from the migration files with existence guards added and
+nothing else changed. Read the 29-row summary carefully rather than assuming.
 
 ---
 
@@ -635,7 +782,20 @@ SHA-256, hex, of the exact `migration.sql` file bytes — the same thing
 | `0018_ai_categorization` | `3a670714d7c810ec2a5756b1f1ba214422e79bc2b3f310eb0a80165141079500` | `apply-0018.sql` |
 | `0019_customer_dunning` | `0cd9e7a2a9099cc862fa4323ccbe5305921cc52b7f683bc4c912ba98460a2364` | `apply-0019.sql` |
 | `0020_net_worth` | `ef31084c0ebfb00083cff17b112c6f02216cb5d5a51f72e1cf8ec47d1cc453c7` | `apply-0020.sql` |
-| `0021_forecast_scenarios` | `2dcc4989b5ae4fb39acb1b776ced3bd11b31033bfea05a621719dee7546e359c` | `apply-0021.sql` |
+| `0021_forecast_scenarios` | `2dcc4989b5ae4fb39acb1b776ced3bd11b31033bfea05a621719dee7546e359c` | `apply-0021.sql`, `apply-0021-0026.sql` |
+| `0022_personal_profile` | `e721ef88ca59fa6d50aabbd73033478df1dafc05fc7ea091c0206e9606778f3f` | `apply-0021-0026.sql` |
+| `0023_product_tour` | `97b358732783d6d8a91c07ad51a3a19ecc7fabaf31636a80f7783cf273676ff8` | `apply-0021-0026.sql` |
+| `0024_enterprise_promo` | `4235fcc9ed6099afb9c2aed7532147665c442242869d2b677366b4544086c6ac` | `apply-0021-0026.sql` |
+| `0025_celebration_seen` | `9662fb1d5d725ca96f26fb2ff7f70731635b0734c6c3ffb6d7f4391ac7628f38` | `apply-0021-0026.sql` |
+| `0026_mobile_api` | `4970b9fcedd09cf9baa658e38dee149d02f23e91669c6c85799bd79c607f1662` | `apply-0021-0026.sql` |
+
+The six round-8 checksums are the **LF** hashes, which is what
+`scripts/apply-migrations.ts` computes on Linux and macOS and what the existing
+`apply-0021.sql` already recorded. On a Windows checkout with
+`core.autocrlf=true` the files sit on disk as CRLF and hash differently, so
+`npm run db:apply` there will print a cosmetic "checksum mismatch" warning for
+all six; it neither re-runs the migration nor fails. Production is unaffected —
+these rows are written by the SQL file, not by `db:apply`.
 
 **Important:** these checksums describe the migration files as they were when
 this bundle was generated. They were re-verified against the migration files as
