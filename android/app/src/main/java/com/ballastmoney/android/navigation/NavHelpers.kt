@@ -44,3 +44,18 @@ fun NavHostController.navigateToTab(route: Route) {
         restoreState = true
     }
 }
+
+/**
+ * Back to sign-in from anywhere in the signed-out graph, leaving one entry.
+ *
+ * `inclusive` so an existing login entry is replaced rather than stacked
+ * under a second one; the graph can start at either sign-in or the reset form,
+ * so "pop back to login" is not always something that exists to pop to, and
+ * this behaves the same either way.
+ */
+fun NavHostController.navigateToLogin() {
+    navigate(LoginRoute) {
+        popUpTo(LoginRoute) { inclusive = true }
+        launchSingleTop = true
+    }
+}

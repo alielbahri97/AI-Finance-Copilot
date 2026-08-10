@@ -8,7 +8,12 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
+import com.ballastmoney.android.data.auth.AuthCallbackLink
 import com.ballastmoney.android.ui.accounts.AccountsScreen
+import com.ballastmoney.android.ui.auth.ForgotPasswordScreen
+import com.ballastmoney.android.ui.auth.LoginScreen
+import com.ballastmoney.android.ui.auth.ResetPasswordScreen
+import com.ballastmoney.android.ui.auth.SignupScreen
 import com.ballastmoney.android.ui.dashboard.DashboardScreen
 import com.ballastmoney.android.ui.shell.ComingSoonScreen
 import com.ballastmoney.android.ui.transactions.TransactionsScreen
@@ -64,9 +69,11 @@ fun BallastNavHost(
                     navController.navigate(ComingSoonRoute(webPath = "/billing", title = "Billing"))
                 },
                 onConnectProvider = { providerId ->
-                    // Connecting a bank is an OAuth handoff to the web app, which
-                    // needs the real API and a Custom Tab. Until then the screen
-                    // says so rather than opening a browser at a dead URL.
+                    // Only reached for providers other than GoCardless. The
+                    // GoCardless flow is a sheet over the accounts screen, since
+                    // it has to pick a bank before it has a URL to open, so the
+                    // screen intercepts that one and never calls this. The rest
+                    // have no mobile flow yet and are sent to the web app.
                     navController.navigate(
                         ComingSoonRoute(
                             webPath = "/integrations/$providerId",
@@ -81,6 +88,58 @@ fun BallastNavHost(
         composable<ComingSoonRoute> { entry ->
             val route = entry.toRoute<ComingSoonRoute>()
             ComingSoonScreen(title = route.title, webPath = route.webPath)
+        }
+    }
+}
+
+/**
+ * The signed-out graph: sign in, sign up, and the two halves of a password
+ * reset.
+ *
+ * A separate [NavHost] rather than four more destinations above. The shell
+ * chooses between the two graphs on the session, so signing out disposes of
+ * this one's counterpart entirely — there is no way for a back gesture to reach
+ * a dashboard belonging to the account that just left, because those entries no
+ * longer exist.
+ *
+ * [recoveryLink] both selects the start destination and is handed to the screen
+ * that needs it. When someone arrives from a reset email the first thing they
+ * should see is the new-password form, not a sign-in form asking for the
+ * password they have forgotten. It is deliberately a parameter rather than a
+ * route argument: it carries a live token, and route arguments are persisted
+ * into saved instance state.
+ */
+@Composable
+fun AuthNavHost(
+    navController: NavHostController,
+    modifier: Modifier = Modifier,
+    recoveryLink: AuthCallbackLink? = null,
+) {
+    NavHost(
+        navController = navController,
+        startDestination = if (recoveryLink != null) ResetPasswordRoute else LoginRoute,
+        modifier = modifier.fillMaxSize(),
+    ) {
+        composable<LoginRoute> {
+            LoginScreen(
+                onNavigateToSignup = { navController.navigate(SignupRoute) },
+                onNavigateToForgotPassword = { navController.navigate(ForgotPasswordRoute) },
+            )
+        }
+
+        composable<SignupRoute> {
+            SignupScreen(onNavigateToLogin = navController::navigateToLogin)
+        }
+
+        composable<ForgotPasswordRoute> {
+            ForgotPasswordScreen(onNavigateToLogin = navController::navigateToLogin)
+        }
+
+        composable<ResetPasswordRoute> {
+            ResetPasswordScreen(
+                link = recoveryLink,
+                onNavigateToLogin = navController::navigateToLogin,
+            )
         }
     }
 }

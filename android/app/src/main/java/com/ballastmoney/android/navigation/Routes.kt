@@ -60,3 +60,42 @@ data object SessionLockRoute : Route {
     /** Not a web destination; the browser has its own lock overlay. */
     override val webPath: String get() = "/lock"
 }
+
+// --- Signed out -------------------------------------------------------------
+//
+// These four live in their own graph, hosted by `AuthNavHost`, rather than as
+// destinations in the signed-in one. Two reasons. The signed-in graph is
+// rendered inside a Scaffold with a top bar and a bottom bar built from the
+// current workspace's permissions, none of which exists before there is a
+// session. And a graph that contains both means the back stack can hold a
+// dashboard entry from a previous account: signing out has to *destroy* the
+// signed-in stack, which is what swapping the whole NavHost does for free.
+
+@Serializable
+data object LoginRoute : Route {
+    override val webPath: String get() = "/login"
+}
+
+@Serializable
+data object SignupRoute : Route {
+    override val webPath: String get() = "/signup"
+}
+
+@Serializable
+data object ForgotPasswordRoute : Route {
+    override val webPath: String get() = "/forgot-password"
+}
+
+/**
+ * Reached by opening the emailed recovery link, which the manifest routes here
+ * as `ballast://auth/reset-password`.
+ *
+ * The link's contents are **not** a route argument. They include a live access
+ * token, and a route argument is serialised into the back stack's saved state,
+ * which Android writes to disk. It is passed to the screen as a parameter
+ * instead, so it lives only as long as the composition.
+ */
+@Serializable
+data object ResetPasswordRoute : Route {
+    override val webPath: String get() = "/reset-password"
+}

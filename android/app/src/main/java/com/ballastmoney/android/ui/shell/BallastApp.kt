@@ -17,6 +17,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,27 +34,35 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.rememberNavController
 import com.ballastmoney.android.core.domain.ThemePreference
 import com.ballastmoney.android.core.model.SessionBootstrap
+import com.ballastmoney.android.data.auth.AuthCallbackLink
 import com.ballastmoney.android.designsystem.component.BallastBottomSheet
 import com.ballastmoney.android.designsystem.component.BallastButton
 import com.ballastmoney.android.designsystem.theme.BallastSpacing
 import com.ballastmoney.android.designsystem.theme.BallastTextStyles
 import com.ballastmoney.android.designsystem.theme.BallastTheme
 import com.ballastmoney.android.designsystem.theme.ballastColors
+import com.ballastmoney.android.navigation.AuthNavHost
 import com.ballastmoney.android.navigation.BallastNavHost
 import com.ballastmoney.android.navigation.DashboardRoute
 import com.ballastmoney.android.navigation.NavItems
 import com.ballastmoney.android.navigation.currentWebPath
 import com.ballastmoney.android.navigation.navigateToTab
+import com.ballastmoney.android.ui.auth.rememberAuthCallbackLink
 import com.ballastmoney.android.ui.lock.SessionLockScreen
 import kotlinx.coroutines.launch
 
 /**
- * The whole app below the activity: theme, then one of four mutually exclusive
+ * The whole app below the activity: theme, then one of five mutually exclusive
  * states.
  *
- * The lock is checked before anything else and replaces the tree rather than
- * covering it, so no screen behind it is composed, keeps collecting, or can flash
- * into view during a transition.
+ * The order of the branches is the design.
+ *
+ * "Not known yet" comes first, because Supabase reads the stored session off
+ * disk asynchronously and every other branch would be a guess until it has.
+ * Signed-out comes next, because there is nothing to lock and nothing to
+ * bootstrap without a session. Only then the lock, which replaces the tree
+ * rather than covering it, so no screen behind it is composed, keeps
+ * collecting, or can flash into view during a transition.
  */
 @Composable
 fun BallastApp(
@@ -71,8 +80,21 @@ fun BallastApp(
     BallastTheme(darkTheme = darkTheme) {
         SystemBarAppearance(darkTheme = darkTheme)
 
+        val authCallback = rememberAuthCallbackLink()
+        // A confirmation link has to be redeemed by somebody, and the shell is
+        // the only thing composed on every branch. Recovery links are ignored
+        // here and handled by the reset screen — see RootViewModel.
+        LaunchedEffect(authCallback) { viewModel.onAuthCallback(authCallback) }
+
         val session = state.session
         when {
+            state.isSignedIn == null -> LoadingScreen(modifier = modifier)
+
+            state.isSignedIn == false -> SignedOutApp(
+                authCallback = authCallback,
+                modifier = modifier,
+            )
+
             state.isLocked -> SessionLockScreen(
                 biometricUnlockEnabled = state.biometricUnlockEnabled,
                 onUnlocked = viewModel::unlock,
@@ -96,6 +118,30 @@ fun BallastApp(
             )
         }
     }
+}
+
+/**
+ * Sign in, sign up and password reset, in their own navigation graph.
+ *
+ * The [NavHostController] is created here rather than hoisted, so the whole
+ * signed-out back stack is discarded the moment a session appears — there is no
+ * way to gesture back into a half-filled sign-up form from inside the app.
+ *
+ * A recovery callback that is not a recovery link is dropped: a confirmation
+ * link carries a session that supabase-kt has already restored by the time this
+ * composes, which means [BallastApp] is not on this branch at all.
+ */
+@Composable
+private fun SignedOutApp(
+    authCallback: AuthCallbackLink?,
+    modifier: Modifier = Modifier,
+) {
+    val navController = rememberNavController()
+    AuthNavHost(
+        navController = navController,
+        modifier = modifier,
+        recoveryLink = authCallback?.takeIf { it.isRecovery && it.hasCredentials },
+    )
 }
 
 /**

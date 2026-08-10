@@ -42,6 +42,15 @@ import androidx.compose.ui.unit.dp
  * The prompt fires by itself on arrival. Making the user tap "Unlock" before the
  * system sheet appears adds a step to something that happens several times a day,
  * and the sheet is cancellable anyway.
+ *
+ * ### Locking is not signing out
+ *
+ * Everything this screen gates is interface. The Supabase session stays in
+ * encrypted storage with auto-refresh still running, so [onUnlocked] is a
+ * fingerprint and not a password — which is the only reason a 45-second
+ * threshold is tolerable rather than infuriating. [onSignOut] is the separate,
+ * deliberate action that ends the session, and it is the only control here that
+ * does.
  */
 @Composable
 fun SessionLockScreen(
