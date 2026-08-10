@@ -5,18 +5,7 @@ local.properties
 captures/
 .cxx/
 
-# The Gradle wrapper is STILL not checked in, and it should be as soon as
-# anyone can generate it.
-#
-# It stays ignored only because it could not be produced: this machine's proxy
-# does not reach services.gradle.org, so Gradle itself cannot be installed and
-# `gradle wrapper --gradle-version 8.14.3` cannot be run. The jar is a binary
-# and inventing one is not an option. On a machine with normal network access,
-# run that command once, delete these three lines, and commit the results —
-# gradle-wrapper.properties already pins the version it should generate.
-gradle/wrapper/gradle-wrapper.jar
-gradlew
-gradlew.bat
+# Gradle wrapper is checked in (generated on a home network).
 
 # IDE
 .idea/

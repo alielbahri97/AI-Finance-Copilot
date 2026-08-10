@@ -5,8 +5,8 @@
   cold start. Everything else lives in the Compose colour scheme.
 
   Values are the web app's tokens converted from oklch() to sRGB:
-  #005ADB is `--primary` / the web manifest theme_color, and #E9F3FF is the
-  web manifest background_color.
+  #005ADB is the primary CSS token / the web manifest theme_color, and
+  #E9F3FF is the web manifest background_color.
 -->
 <resources>
     <color name="ballast_brand">#FF005ADB</color>

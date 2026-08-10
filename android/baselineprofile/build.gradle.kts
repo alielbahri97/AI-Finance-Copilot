@@ -39,6 +39,12 @@ dependencies {
     implementation(libs.androidx.benchmark.macro.junit4)
 }
 
+baselineProfile {
+    // No Gradle Managed Device is configured, so profile generation runs on
+    // whatever emulator or handset is attached.
+    useConnectedDevices = true
+}
+
 androidComponents {
     onVariants { variant ->
         val artifactsLoader = variant.artifacts.getBuiltArtifactsLoader()

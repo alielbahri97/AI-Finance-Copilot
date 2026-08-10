@@ -24,7 +24,7 @@ import java.time.Instant
 @Entity(
     tableName = "transactions",
     indices = [
-        Index(value = ["workspaceId", "date"]),
+        Index(value = ["workspaceId", "dateEpochMillis"]),
         Index(value = ["workspaceId", "categoryId"]),
     ],
 )

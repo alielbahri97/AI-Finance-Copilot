@@ -207,9 +207,3 @@ dependencies {
     androidTestImplementation(libs.kotlinx.coroutines.test)
     kspAndroidTest(libs.hilt.compiler)
 }
-
-baselineProfile {
-    // No Gradle Managed Device is configured, so profile generation runs on
-    // whatever emulator or handset is attached.
-    useConnectedDevices = true
-}
