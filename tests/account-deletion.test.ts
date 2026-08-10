@@ -38,7 +38,13 @@ const billing = vi.hoisted(() => ({
   cancelSubscription: vi.fn(),
 }));
 const providers = vi.hoisted(() => ({ getProviderHooks: vi.fn(), revoke: vi.fn() }));
-const mail = vi.hoisted(() => ({ isEmailConfigured: vi.fn(), sendEmail: vi.fn() }));
+const mail = vi.hoisted(() => ({
+  isEmailConfigured: vi.fn(),
+  sendEmail: vi.fn(),
+  // Renders the body it was given, so a test can assert what the account holder
+  // was actually told rather than only that something was sent.
+  renderAlertEmail: vi.fn((options: { bodyText: string }) => `<html>${options.bodyText}</html>`),
+}));
 const audit = vi.hoisted(() => ({ recordAudit: vi.fn() }));
 const db = vi.hoisted(() => ({
   findRequest: vi.fn(),
@@ -51,6 +57,7 @@ const db = vi.hoisted(() => ({
   findProfile: vi.fn(),
   deleteProfiles: vi.fn(),
   deleteWorkspaces: vi.fn(),
+  findPlayPurchases: vi.fn(),
 }));
 
 vi.mock("@/lib/prisma", () => ({
@@ -63,6 +70,7 @@ vi.mock("@/lib/prisma", () => ({
     },
     workspaceMember: { findMany: db.findMembers },
     subscription: { findMany: db.findSubscriptions },
+    playPurchase: { findMany: db.findPlayPurchases },
     integrationConnection: { findMany: db.findConnections },
     profile: { findUnique: db.findProfile, deleteMany: db.deleteProfiles },
     workspace: { deleteMany: db.deleteWorkspaces },
@@ -87,7 +95,7 @@ vi.mock("@/lib/integrations/crypto", () => ({ decryptSecret: () => "plaintext-to
 vi.mock("@/lib/notifications/email", () => ({
   isEmailConfigured: mail.isEmailConfigured,
   sendEmail: mail.sendEmail,
-  renderAlertEmail: () => "<html>alert</html>",
+  renderAlertEmail: mail.renderAlertEmail,
 }));
 vi.mock("@/lib/workspace/audit", () => ({ recordAudit: audit.recordAudit }));
 
@@ -216,6 +224,7 @@ beforeEach(() => {
     return { ...scheduledRow(), ...data };
   });
   db.findSubscriptions.mockResolvedValue([]);
+  db.findPlayPurchases.mockResolvedValue([]);
   db.findConnections.mockResolvedValue([]);
   db.findProfile.mockResolvedValue({ email: USER.email });
   db.deleteProfiles.mockImplementation(async () => {
@@ -452,6 +461,61 @@ describe("requesting a deletion", () => {
         currentPeriodEnd: "2026-09-01T00:00:00.000Z",
       },
     ]);
+  });
+
+  /**
+   * A Play subscription cannot be cancelled from a server — the Google Play
+   * Developer API has no such call — so the only honest thing to do is tell the
+   * user, before they commit, that they have to cancel it themselves, and where.
+   */
+  it("reports a Google Play subscription the server cannot cancel for them", async () => {
+    process.env.GOOGLE_PLAY_PACKAGE_NAME = "com.ballastmoney.app";
+    db.findPlayPurchases.mockResolvedValue([
+      {
+        workspaceId: PERSONAL.id,
+        plan: "PREMIUM",
+        productId: "personal_premium",
+        state: "SUBSCRIPTION_STATE_ACTIVE",
+        expiryTime: new Date("2026-09-01T00:00:00.000Z"),
+        workspace: { name: "Ada" },
+      },
+    ]);
+
+    const response = await requestDeletion(jsonRequest("POST", { confirm: "DELETE" }));
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      warnings: { playSubscriptions: Record<string, unknown>[] };
+    };
+    expect(body.warnings.playSubscriptions).toEqual([
+      {
+        workspaceId: PERSONAL.id,
+        workspaceName: "Ada",
+        plan: "PREMIUM",
+        productId: "personal_premium",
+        state: "SUBSCRIPTION_STATE_ACTIVE",
+        expiresAt: "2026-09-01T00:00:00.000Z",
+        manageUrl:
+          "https://play.google.com/store/account/subscriptions?sku=personal_premium&package=com.ballastmoney.app",
+      },
+    ]);
+    delete process.env.GOOGLE_PLAY_PACKAGE_NAME;
+  });
+
+  it("does not warn about a Play subscription that has already expired", async () => {
+    db.findPlayPurchases.mockResolvedValue([
+      {
+        workspaceId: PERSONAL.id,
+        plan: "PREMIUM",
+        productId: "personal_premium",
+        state: "SUBSCRIPTION_STATE_EXPIRED",
+        expiryTime: new Date("2026-07-01T00:00:00.000Z"),
+        workspace: { name: "Ada" },
+      },
+    ]);
+
+    const body = await (await requestDeletion(jsonRequest("POST", { confirm: "DELETE" }))).json();
+    expect(body.warnings.playSubscriptions).toEqual([]);
   });
 
   it("emails the account holder that the clock is running", async () => {
@@ -714,6 +778,49 @@ describe("executing a deletion", () => {
 
     expect(mail.sendEmail).toHaveBeenCalledTimes(1);
     expect(mail.sendEmail.mock.calls[0][0]).toBe(USER.email);
+  });
+
+  // The deletion goes ahead — a data deletion request must not be refusable on
+  // the strength of a third-party billing state — but the live monthly charge is
+  // counted, logged and named in the confirmation email, because only the
+  // subscriber can stop it.
+  it("records a Play subscription it cannot cancel and says so in the email", async () => {
+    db.findPlayPurchases.mockResolvedValue([
+      {
+        workspaceId: PERSONAL.id,
+        plan: "PREMIUM",
+        productId: "personal_premium",
+        state: "SUBSCRIPTION_STATE_ACTIVE",
+        expiryTime: new Date("2026-09-01T00:00:00.000Z"),
+        workspace: { name: "Ada" },
+      },
+    ]);
+
+    const outcome = await executeAccountDeletion(scheduledRow());
+
+    expect(outcome.status).toBe("COMPLETED");
+    expect(outcome.playSubscriptionsToCancel).toBe(1);
+    expect(db.deleteProfiles).toHaveBeenCalled();
+    const { bodyText } = mail.renderAlertEmail.mock.lastCall![0];
+    expect(bodyText).toContain("Google Play");
+    expect(bodyText).toContain("cancel");
+  });
+
+  it("does not tell someone with no Play subscription to cancel one", async () => {
+    await executeAccountDeletion(scheduledRow());
+
+    const { bodyText } = mail.renderAlertEmail.mock.lastCall![0];
+    expect(bodyText).not.toContain("Google Play");
+  });
+
+  it("finishes the deletion when the Play lookup fails", async () => {
+    db.findPlayPurchases.mockRejectedValue(new Error("connect ECONNREFUSED 10.0.0.7:5432"));
+
+    const outcome = await executeAccountDeletion(scheduledRow());
+
+    expect(outcome.status).toBe("COMPLETED");
+    expect(outcome.playSubscriptionsToCancel).toBe(0);
+    expect(db.deleteProfiles).toHaveBeenCalled();
   });
 
   it("finishes the deletion when Stripe is down", async () => {

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { apiError } from "@/lib/api/response";
 import {
   ACCOUNT_DELETION_GRACE_PERIOD_DAYS,
+  activePlaySubscriptions,
   activeSubscriptions,
   assessReauthentication,
   assessWorkspaces,
@@ -113,6 +114,9 @@ export async function POST(request: Request) {
           activeSubscriptions: await activeSubscriptions(
             disposition.soleOccupancy.map((w) => w.id)
           ),
+          playSubscriptions: await activePlaySubscriptions(
+            disposition.soleOccupancy.map((w) => w.id)
+          ),
           workspacesToDelete: disposition.soleOccupancy,
         },
       });
@@ -159,7 +163,11 @@ export async function POST(request: Request) {
       },
     });
 
-    const subscriptions = await activeSubscriptions(disposition.soleOccupancy.map((w) => w.id));
+    const workspaceIdsToDelete = disposition.soleOccupancy.map((w) => w.id);
+    const subscriptions = await activeSubscriptions(workspaceIdsToDelete);
+    // Reported separately because the remedy is different: a Play subscription
+    // cannot be cancelled from a server, so the user has to do it themselves.
+    const playSubscriptions = await activePlaySubscriptions(workspaceIdsToDelete);
 
     await recordAccountAudit(user.id, "account.deletion_requested", {
       requestId: created.id,
@@ -179,6 +187,7 @@ export async function POST(request: Request) {
       request: serializeDeletionRequest(created),
       warnings: {
         activeSubscriptions: subscriptions,
+        playSubscriptions,
         workspacesToDelete: disposition.soleOccupancy,
       },
     });

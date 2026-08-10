@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 
 import { trackEvent } from "@/lib/analytics";
+import { refreshResolvedSubscription } from "@/lib/billing/play/sync";
 import { planFromPriceId } from "@/lib/billing/plans";
 import { convertReferral } from "@/lib/billing/referrals";
 import { getStripe, mapStripeStatus, subscriptionPeriodEnd } from "@/lib/billing/stripe";
@@ -76,6 +77,13 @@ export async function POST(request: Request) {
 
       case "customer.subscription.deleted": {
         const subscription = event.data.object;
+        // Read the workspaces first: once the Stripe id is cleared there is no
+        // way back to them, and each one has to be re-resolved afterwards in
+        // case Google Play is still paying for it.
+        const affected = await prisma.subscription.findMany({
+          where: { stripeSubscriptionId: subscription.id },
+          select: { workspaceId: true },
+        });
         await prisma.subscription.updateMany({
           where: { stripeSubscriptionId: subscription.id },
           data: {
@@ -83,10 +91,15 @@ export async function POST(request: Request) {
             status: "CANCELED",
             stripeSubscriptionId: null,
             stripePriceId: null,
+            stripePlan: null,
+            stripeStatus: "CANCELED",
             currentPeriodEnd: null,
             cancelAtPeriodEnd: false,
           },
         });
+        for (const row of affected) {
+          await refreshResolvedSubscription(row.workspaceId);
+        }
         break;
       }
 
@@ -96,7 +109,7 @@ export async function POST(request: Request) {
         if (customerId) {
           await prisma.subscription.updateMany({
             where: { stripeCustomerId: customerId, status: "PAST_DUE" },
-            data: { status: "ACTIVE" },
+            data: { status: "ACTIVE", stripeStatus: "ACTIVE" },
           });
         }
         break;
@@ -108,7 +121,7 @@ export async function POST(request: Request) {
         if (customerId) {
           await prisma.subscription.updateMany({
             where: { stripeCustomerId: customerId, stripeSubscriptionId: { not: null } },
-            data: { status: "PAST_DUE" },
+            data: { status: "PAST_DUE", stripeStatus: "PAST_DUE" },
           });
         }
         break;
@@ -137,14 +150,20 @@ async function syncSubscription(
   // the tier is stored, because the workspace already knows its edition.
   const matched = (priceId && planFromPriceId(priceId)) || null;
 
+  const status = mapStripeStatus(subscription.status);
   const data = {
     stripeCustomerId: customerId,
     stripeSubscriptionId: subscription.id,
     stripePriceId: priceId,
-    status: mapStripeStatus(subscription.status),
+    // Stripe's own tier and status, which resolution reads, and the resolved
+    // cache, which it overwrites a moment later. Both are written here so that
+    // a workspace with no Play purchase behaves exactly as it always did even
+    // if the re-resolution below fails.
+    stripeStatus: status,
+    status,
     currentPeriodEnd: subscriptionPeriodEnd(subscription),
     cancelAtPeriodEnd: subscription.cancel_at_period_end,
-    ...(matched ? { plan: matched.planId } : {}),
+    ...(matched ? { plan: matched.planId, stripePlan: matched.planId, planSource: "STRIPE" as const } : {}),
   };
 
   // Metadata: new checkouts carry workspaceId; pre-workspace subscriptions
@@ -160,10 +179,18 @@ async function syncSubscription(
       update: data,
       create: { workspaceId, ...data },
     });
+    // Re-resolve, because Stripe is no longer the only payer: a complimentary
+    // grant or a higher-tier Play subscription still wins, and writing Stripe's
+    // tier over the top of either would be a silent downgrade.
+    await refreshResolvedSubscription(workspaceId);
     return;
   }
 
   // Fall back to matching by Stripe ids when metadata is missing.
+  const matchedRows = await prisma.subscription.findMany({
+    where: { OR: [{ stripeSubscriptionId: subscription.id }, { stripeCustomerId: customerId }] },
+    select: { workspaceId: true },
+  });
   const updated = await prisma.subscription.updateMany({
     where: { OR: [{ stripeSubscriptionId: subscription.id }, { stripeCustomerId: customerId }] },
     data,
@@ -172,5 +199,9 @@ async function syncSubscription(
     logger.warn("stripe webhook could not match subscription to a local workspace", {
       stripeSubscriptionId: subscription.id,
     });
+    return;
+  }
+  for (const row of matchedRows) {
+    await refreshResolvedSubscription(row.workspaceId);
   }
 }

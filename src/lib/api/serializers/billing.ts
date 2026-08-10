@@ -14,17 +14,31 @@ import type { MoneyString, TimestampString } from "@/lib/api/wire";
 import type { Entitlements, Usage } from "@/lib/billing/entitlements";
 import { overriddenPlanForEmail } from "@/lib/billing/plan-overrides";
 import type { Plan, PlanId, PlanLimits } from "@/lib/billing/plans";
+import type { PlanSource as StoredPlanSource } from "@/generated/prisma/client";
 import type { Edition } from "@/lib/branding";
 
 /**
  * Where the workspace's current plan comes from.
  *
- * `google_play` is part of the union so a client can switch on it from the
- * first release, but nothing returns it yet: there is no Play Billing
- * integration in this codebase, and inventing a heuristic for one would be a
- * guess a client would then depend on.
+ * `google_play` became real with Play Billing: it is what a workspace paid for
+ * inside the Android app reports, and it decides which management affordance a
+ * client should offer — the Stripe Billing Portal, a Play deep link, or nothing
+ * at all for a complimentary account.
  */
 export type PlanSource = "stripe" | "google_play" | "complimentary" | "trial" | "free";
+
+/** The stored enum, as the wire spells it. */
+const PLAN_SOURCE_WIRE: Record<StoredPlanSource, PlanSource> = {
+  FREE: "free",
+  TRIAL: "trial",
+  COMPLIMENTARY: "complimentary",
+  STRIPE: "stripe",
+  GOOGLE_PLAY: "google_play",
+};
+
+export function planSourceToWire(source: StoredPlanSource): PlanSource {
+  return PLAN_SOURCE_WIRE[source];
+}
 
 export interface PlanSourceInput {
   /** Email of the workspace OWNER, which is what a complimentary grant keys on. */
@@ -34,14 +48,37 @@ export interface PlanSourceInput {
   /** Present only once Stripe has actually created a subscription. */
   stripeSubscriptionId: string | null | undefined;
   isTrial: boolean;
+  /**
+   * What the entitlements resolver decided, when the caller has it. It knows
+   * about Google Play, which none of the other inputs can see. The Stripe/trial
+   * heuristics below remain for callers that only hold a Subscription row.
+   */
+  resolvedSource?: StoredPlanSource | null;
 }
 
 export function resolvePlanSource(input: PlanSourceInput): PlanSource {
   if (overriddenPlanForEmail(input.ownerEmail, input.edition)) return "complimentary";
+  const resolved = input.resolvedSource ? PLAN_SOURCE_WIRE[input.resolvedSource] : null;
+  // A paying source is authoritative. "free" and "trial" fall through to the
+  // heuristics so a caller passing a resolver result and a caller passing none
+  // agree on those two.
+  if (resolved && resolved !== "free" && resolved !== "trial") return resolved;
   if (input.stripeSubscriptionId && input.planId !== "FREE") return "stripe";
   if (input.isTrial) return "trial";
   return "free";
 }
+
+/**
+ * Which prices a client should show.
+ *
+ * `eur_list` means the `monthlyPrice` figures in `plans` are what this customer
+ * pays. `google_play` means they are not: Google converts a base price per
+ * country and applies its own rounding and tax rules, so the amount a Play
+ * subscriber is charged is only knowable from Play's `ProductDetails` on the
+ * device. The server never asserts an expected amount, and this field says so
+ * out loud rather than leaving a client to infer it.
+ */
+export type PriceSource = "eur_list" | "google_play";
 
 export interface SerializedEntitlements {
   planId: PlanId;

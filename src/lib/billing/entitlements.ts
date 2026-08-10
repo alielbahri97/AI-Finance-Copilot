@@ -4,7 +4,7 @@ import { cache } from "react";
 
 import { logger, serializeError } from "@/lib/logger";
 
-import type { Subscription, UsageRecord } from "@/generated/prisma/client";
+import type { PlanSource, Subscription, UsageRecord } from "@/generated/prisma/client";
 import { DEFAULT_EDITION, type Edition } from "@/lib/branding";
 import { prisma } from "@/lib/prisma";
 import {
@@ -14,7 +14,18 @@ import {
 } from "@/lib/workspace/editions";
 
 import { overriddenPlanForEmail } from "./plan-overrides";
-import { getPlan, TRIAL_DAYS, trialPlan, type Plan, type PlanId } from "./plans";
+import { getPlan, TRIAL_DAYS, type Plan, type PlanId } from "./plans";
+import {
+  livePlayPurchases,
+  playCandidateFromRow,
+  playSummaryFromRows,
+  type PlaySubscriptionSummary,
+} from "./play/purchases";
+import {
+  hasEntitlingStripeSubscription,
+  resolveEntitlement,
+  type SubscriptionLike,
+} from "./resolution";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -46,6 +57,17 @@ export interface Entitlements {
   cancelAtPeriodEnd: boolean;
   currentPeriodEnd: string | null;
   hasStripeCustomer: boolean;
+  /** Which payer the resolved plan came from. */
+  planSource: PlanSource;
+  /**
+   * True while Stripe is paying for this workspace, whatever won resolution.
+   * The Android client uses this to hide its purchase buttons: charging someone
+   * a second time through Play because the web subscription was invisible is the
+   * most expensive mistake available here.
+   */
+  hasActiveStripeSubscription: boolean;
+  /** The workspace's Play subscription, if it has one. */
+  play: PlaySubscriptionSummary | null;
   period: string;
   usage: Usage;
 }
@@ -70,27 +92,30 @@ async function getOrCreateUsage(workspaceId: string, period: string): Promise<Us
 }
 
 /**
- * Resolves the effective plan: paid Stripe plan > local trial > Free.
+ * Resolves the effective plan from the Subscription row alone.
+ *
+ * This is the cache-only view: paid plan on the row, then the local trial, then
+ * Free — which is what it has always done, and what the admin revenue roll-up
+ * wants, since that reads a hundred rows at a time and the cache is exactly the
+ * figure it is rolling up.
+ *
+ * Anything deciding what a customer may actually *do* should call
+ * `getEntitlements`, which resolves over every payer including Google Play. See
+ * `resolveEntitlement` in ./resolution for the full order.
  *
  * The edition only decides which tier the card-free trial grants (Pro for
  * Business, Plus for Personal); a paid plan is honoured as stored either way.
  */
 export function resolvePlanId(
-  subscription: Subscription,
+  subscription: SubscriptionLike,
   edition: Edition = DEFAULT_EDITION,
   now = new Date()
 ): {
   planId: PlanId;
   isTrial: boolean;
 } {
-  const paidStatuses = ["ACTIVE", "TRIALING", "PAST_DUE"];
-  if (subscription.plan !== "FREE" && paidStatuses.includes(subscription.status)) {
-    return { planId: subscription.plan, isTrial: subscription.status === "TRIALING" };
-  }
-  if (subscription.trialEndsAt && subscription.trialEndsAt > now) {
-    return { planId: trialPlan(edition), isTrial: true };
-  }
-  return { planId: "FREE", isTrial: false };
+  const resolved = resolveEntitlement({ subscription, edition, now });
+  return { planId: resolved.planId, isTrial: resolved.isTrial };
 }
 
 /**
@@ -103,9 +128,13 @@ export function resolvePlanId(
  * Complimentary email overrides (see plan-overrides) win over Stripe/trial
  * for workspaces owned by allowlisted addresses, and are persisted so the
  * billing UI stays consistent.
+ *
+ * Google Play is resolved here too, from the workspace's live play_purchases
+ * rows rather than from the cached row, so an entitlement is never a stale
+ * figure — see ./resolution for the order the payers are considered in.
  */
 export const getEntitlements = cache(async (workspaceId: string): Promise<Entitlements> => {
-  const [subscription, usage, workspace, owner] = await Promise.all([
+  const [subscription, usage, workspace, owner, playRows] = await Promise.all([
     getOrCreateSubscription(workspaceId),
     getOrCreateUsage(workspaceId, currentPeriod()),
     prisma.workspace.findUnique({ where: { id: workspaceId }, select: { type: true } }),
@@ -113,25 +142,38 @@ export const getEntitlements = cache(async (workspaceId: string): Promise<Entitl
       where: { workspaceId, role: "OWNER" },
       select: { profile: { select: { email: true } } },
     }),
+    livePlayPurchases(workspaceId).catch(() => []),
   ]);
   const period = currentPeriod();
+  const now = new Date();
   const workspaceType = workspace?.type ?? DEFAULT_WORKSPACE_TYPE;
   const edition = editionForWorkspaceType(workspaceType);
   const overridePlanId = overriddenPlanForEmail(owner?.profile.email, edition);
-  const resolved = overridePlanId
-    ? { planId: overridePlanId, isTrial: false }
-    : resolvePlanId(subscription, edition);
+  const resolved = resolveEntitlement({
+    subscription,
+    play: playRows.map((row) => playCandidateFromRow(row, now)),
+    overridePlanId,
+    edition,
+    now,
+  });
   const { planId, isTrial } = resolved;
+  const playWon = resolved.source === "GOOGLE_PLAY";
 
   if (
     overridePlanId &&
-    (subscription.plan !== overridePlanId || subscription.status !== "ACTIVE")
+    (subscription.plan !== overridePlanId ||
+      subscription.status !== "ACTIVE" ||
+      subscription.planSource !== "COMPLIMENTARY")
   ) {
-    // Persist so Billing and admin MRR reflect the grant; ignore races.
+    // Persist so Billing and admin MRR reflect the grant; ignore races. Only
+    // the three resolved-cache columns are written: Stripe's own tier and
+    // status, and the Play rows, are left exactly as they were, so the grant
+    // can be withdrawn without having destroyed the record of what the customer
+    // actually pays for.
     void prisma.subscription
       .update({
         where: { workspaceId },
-        data: { plan: overridePlanId, status: "ACTIVE" },
+        data: { plan: overridePlanId, status: "ACTIVE", planSource: "COMPLIMENTARY" },
       })
       .catch((error) => {
         logger.error("[billing] failed to persist complimentary plan", {
@@ -149,10 +191,18 @@ export const getEntitlements = cache(async (workspaceId: string): Promise<Entitl
     edition,
     isTrial,
     trialEndsAt: subscription.trialEndsAt?.toISOString() ?? null,
-    subscriptionStatus: overridePlanId ? "ACTIVE" : subscription.status,
-    cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
-    currentPeriodEnd: subscription.currentPeriodEnd?.toISOString() ?? null,
+    // These three describe the winning payer. For Stripe and the trial they are
+    // read from the row, unchanged, because the Stripe webhook keeps them
+    // current. For Play they come from the resolver, which read the purchase
+    // rows a moment ago and is therefore never behind the cache.
+    subscriptionStatus: playWon ? resolved.status : overridePlanId ? "ACTIVE" : subscription.status,
+    cancelAtPeriodEnd: playWon ? resolved.cancelAtPeriodEnd : subscription.cancelAtPeriodEnd,
+    currentPeriodEnd: (playWon ? resolved.currentPeriodEnd : subscription.currentPeriodEnd)
+      ?.toISOString() ?? null,
     hasStripeCustomer: Boolean(subscription.stripeCustomerId),
+    planSource: resolved.source,
+    hasActiveStripeSubscription: hasEntitlingStripeSubscription(subscription),
+    play: playSummaryFromRows(playRows, now),
     period,
     usage: {
       aiMessages: usage.aiMessages,

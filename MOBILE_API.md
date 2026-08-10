@@ -362,7 +362,8 @@ Requires `view_billing`.
 ```json
 {
   "entitlements": { "...": "as in bootstrap" },
-  "planSource": "stripe",
+  "planSource": "google_play",
+  "priceSource": "google_play",
   "plans": [ { "id": "PRO", "edition": "business", "name": "Pro", "description": "...", "monthlyPriceEur": 29, "monthlyPrice": "29.00", "limits": {}, "highlights": ["..."] } ],
   "usage": {
     "aiMessages":         { "used": 12, "limit": 100 },
@@ -371,18 +372,127 @@ Requires `view_billing`.
     "invoiceExtractions": { "used": 0,  "limit": 0 },
     "exports":            { "used": 1,  "limit": null }
   },
-  "billingConfigured": true
+  "billingConfigured": true,
+  "play": {
+    "configured": true,
+    "packageName": "com.ballastmoney.app",
+    "obfuscatedAccountId": "9f2c…64 hex chars",
+    "obfuscatedProfileId": "41ab…64 hex chars",
+    "products": [ { "productId": "business_pro", "basePlanId": "business-pro-monthly", "planId": "PRO", "planName": "Pro" } ],
+    "subscription": { "productId": "business_pro", "basePlanId": "business-pro-monthly", "state": "SUBSCRIPTION_STATE_ACTIVE", "expiresAt": "2026-09-01T00:00:00.000Z", "autoRenewing": true, "acknowledged": true, "entitling": true }
+  },
+  "management": {
+    "source": "google_play",
+    "canPurchaseInApp": true,
+    "blockedReason": null,
+    "portalAvailable": false,
+    "playManageUrl": "https://play.google.com/store/account/subscriptions?sku=business_pro&package=com.ballastmoney.app"
+  }
 }
 ```
 
 `planSource` is one of `stripe`, `google_play`, `complimentary`, `trial`,
-`free`. `google_play` is in the union so a client can switch on it from the
-first release, but nothing returns it yet — there is no Play Billing
-integration in this codebase. A meter with `limit: 0` does not exist in this
-edition and should be hidden rather than shown as "0 / 0"; `limit: null` is
-unlimited. `billingConfigured` false means the server has no Stripe keys, so
-say so rather than opening a checkout that will fail. `plans` lists only the
-current edition's tiers. Errors: `403` without `view_billing`.
+`free`. A meter with `limit: 0` does not exist in this edition and should be
+hidden rather than shown as "0 / 0"; `limit: null` is unlimited.
+`billingConfigured` false means the server has no Stripe keys, so say so rather
+than opening a checkout that will fail. `plans` lists only the current edition's
+tiers. Errors: `403` without `view_billing`.
+
+**`priceSource`** says whether the `monthlyPrice` figures in `plans` are what
+this customer actually pays. `eur_list` means yes. `google_play` means no: Google
+converts a base price into each country's currency with its own rounding and tax
+handling, so a Play subscriber's real price exists only in Play's
+`ProductDetails` on the device. Render from `ProductDetails` and treat the euro
+figures as a fallback for a plan nobody has bought yet.
+
+**`play`** is everything needed to launch a billing flow. `products` is already
+filtered to this workspace's edition, so a Personal workspace never sees a
+business product; pass those ids to `queryProductDetailsAsync`. Set
+`obfuscatedAccountId` and `obfuscatedProfileId` on the `BillingFlowParams`
+exactly as given — they are a hash of the Supabase user id and of the workspace
+id, they are what ties a purchase to a *workspace* rather than to a Google
+account, and `/api/billing/play/verify` refuses a purchase whose identifiers do
+not match. `configured: false` means this server has no Play credentials and
+verification would answer `503`. `subscription` is the workspace's current Play
+purchase, with Play's own state string, or `null`.
+
+**`management`** says which affordance to show, and is the thing that stops a
+double charge:
+
+- `canPurchaseInApp: false` means **hide every purchase button**, and
+  `blockedReason` says why. `MANAGED_ON_WEB` is a workspace Stripe is already
+  paying for: show "managed on the web" and send the user to
+  `POST /api/billing/portal`. `COMPLIMENTARY` is a granted plan with nothing to
+  buy. `PLAY_NOT_CONFIGURED` and `NO_PRODUCTS` mean the server cannot sell here.
+- `portalAvailable: true` means `POST /api/billing/portal` will return a Stripe
+  Billing Portal URL.
+- `playManageUrl` is where a Play subscriber cancels or changes payment method.
+  There is no server-side cancellation for Play, so this link is the whole of the
+  management affordance.
+
+### `POST /api/billing/play/verify`
+
+Grants the workspace what it just paid Google for. Requires `view_billing` and
+an `OWNER` or `ADMIN` role, the same as starting a Stripe checkout.
+
+Call it after `onPurchasesUpdated` gives you a purchase, and again for every
+token `queryPurchasesAsync` returns on each app resume. Do **not** acknowledge
+the purchase in the client: the server acknowledges it, so an entitlement and an
+acknowledgement can never diverge. Until it is acknowledged Google refunds and
+revokes the purchase after three days, which is the desired outcome for a
+purchase the server refused.
+
+Body: `{"purchaseToken": "...", "productId": "business_pro"}`. `productId` is
+optional and only cross-checked; what was bought is read from Google.
+
+```json
+{
+  "ok": true,
+  "purchase": { "productId": "business_pro", "basePlanId": "business-pro-monthly", "state": "SUBSCRIPTION_STATE_ACTIVE", "planId": "PRO", "planName": "Pro", "autoRenewing": true, "expiresAt": "2026-09-01T00:00:00.000Z", "cancelAtPeriodEnd": false, "acknowledged": true, "alreadyKnown": false },
+  "entitlements": { "planId": "PRO", "planName": "Pro", "planSource": "google_play" },
+  "manageUrl": "https://play.google.com/store/account/subscriptions?sku=business_pro&package=com.ballastmoney.app"
+}
+```
+
+Idempotent: the same token can be posted any number of times and
+`alreadyKnown` tells you it had been seen before. `entitlements` is the
+workspace's *resolved* plan, which can be higher than what this purchase grants
+— a complimentary grant or a higher Stripe tier still wins — so render that
+rather than `purchase.planId`.
+
+Errors, all with an `error` string safe to show and a `code`:
+
+- `400` `INVALID_REQUEST` — no `purchaseToken` in the body.
+- `400` `PURCHASE_IDENTIFIERS_MISSING` — the purchase carries no obfuscated
+  identifiers, so it cannot be placed. A client that did not set them; not
+  retryable without a new purchase.
+- `403` `FORBIDDEN` — a `MEMBER` tried to buy a plan.
+- `404` `PURCHASE_NOT_FOUND` — Google does not recognise the token. Stop
+  presenting it.
+- `409` `PURCHASE_USER_MISMATCH` — bought by a different Ballast account.
+- `409` `PURCHASE_WORKSPACE_MISMATCH` — bought for a different workspace of the
+  same account. See the limitation in section 8: the second workspace has to be
+  paid for on the web.
+- `409` `PRODUCT_NOT_OFFERED` — not a product this workspace's edition sells.
+- `409` `PURCHASE_NOT_ACTIVE` — recorded but not entitling, with Play's own
+  `state` alongside the code: a pending purchase becomes active later, an
+  on-hold one needs the payment method fixed in Play. Retry on the next resume.
+- `409` `STRIPE_SUBSCRIPTION_ACTIVE` with `"refundExpected": true` — the
+  workspace is already paid for on the web. The purchase was **not**
+  acknowledged, so Google refunds it automatically within three days. Show the
+  Stripe portal instead. `management.canPurchaseInApp` exists so a client never
+  reaches this.
+- `429` `RATE_LIMITED` — with `Retry-After`.
+- `502` `PLAY_UNAVAILABLE` — Google could not be reached. Retry with backoff.
+- `503` `PLAY_NOT_CONFIGURED` — this server has no Play credentials.
+
+### `POST /api/billing/play/notifications`
+
+Not for clients. Google Cloud Pub/Sub pushes Real-time Developer Notifications
+here, authenticated by the OIDC token on the push rather than by a Ballast
+session. It answers `401` to anything else, and `200`/`202` when it has finished
+with a message so Pub/Sub stops redelivering. Listed only so nobody mistakes it
+for part of the app's surface.
 
 ### `POST /api/integrations/gocardless/link`
 
@@ -467,13 +577,21 @@ workspace role grants. See section 6.
 { "request": { "...": "as above" },
   "warnings": {
     "activeSubscriptions": [ { "workspaceId": "...", "workspaceName": "...", "plan": "PRO", "status": "ACTIVE", "currentPeriodEnd": "..." } ],
+    "playSubscriptions":   [ { "workspaceId": "...", "workspaceName": "...", "plan": "PREMIUM", "productId": "personal_premium", "state": "SUBSCRIPTION_STATE_ACTIVE", "expiresAt": "...", "manageUrl": "https://play.google.com/store/account/subscriptions?sku=…" } ],
     "workspacesToDelete":  [ { "id": "...", "name": "...", "memberCount": 1 } ]
   } }
 ```
 
 Show `warnings` before the user commits: those workspaces will be deleted and
-those subscriptions cancelled. Repeating the call returns the existing request
-with `"alreadyScheduled": true` rather than making a second one.
+those Stripe subscriptions cancelled. Repeating the call returns the existing
+request with `"alreadyScheduled": true` rather than making a second one.
+
+`playSubscriptions` is different in kind and has to be presented differently.
+Nothing on the server can cancel a Google Play subscription — the Play Developer
+API has no such call, only the subscriber can do it — so each entry is something
+**the user must cancel themselves**, at `manageUrl`, or keep being charged for a
+product that no longer exists. Say so plainly next to the confirmation, and open
+that link for them.
 
 Errors: `400` with `code: "INVALID_CONFIRMATION"` if `confirm` is not exactly
 `DELETE`; `401` with `code: "REAUTH_REQUIRED"` if the user last authenticated
@@ -519,6 +637,16 @@ can warn, and cancelled at Stripe for real when the deletion executes, but only
 for workspaces that are actually being deleted: a subscription on a workspace
 that survives belongs to the members who stay.
 
+A **Google Play subscription cannot be cancelled** by this server at all, and the
+deletion still goes ahead. Blocking a data deletion on a third-party billing
+state was the alternative and is worse — it makes the account undeletable for a
+reason the user cannot act on from here. Instead it is surfaced at every step: in
+the `playSubscriptions` warnings before the user commits, as a paragraph in the
+deletion-completed email telling them exactly where in the Play Store to cancel,
+and as an error-level log line when the deletion executes, so support has a
+record if the charge continues. A refund, if one is owed, is issued by hand in
+Play Console.
+
 What is erased: the Profile row and everything cascading from it, workspaces
 nobody else occupies, and the Supabase Auth user. Bank and OAuth consents are
 revoked at each provider first, while the tokens still exist to revoke with.
@@ -556,18 +684,26 @@ check them.
 The key set is cached for 10 minutes with a 30-second refetch cooldown, so an
 unknown key id cannot be used to hammer the auth server.
 
-### Database migration
+### Database migrations
 
 `prisma/migrations/0026_mobile_api` adds two tables, `pending_bank_connections`
 and `account_deletion_requests`. It must be applied before deploying: the
 GoCardless flow writes to the first on every connect, including the web one.
 
-### Scheduled job
+`prisma/migrations/0027_play_billing` adds the `play_purchases` table and three
+columns to `subscriptions` — `plan_source`, `stripe_plan` and `stripe_status` —
+and backfills them from the Stripe data already there. It must be applied before
+deploying: `GET /api/billing/summary` reads `plan_source` on every call.
+
+### Scheduled jobs
 
 `vercel.json` gains a daily cron at 02:00 UTC hitting
 `/api/cron/account-deletions`, which executes deletions whose grace period has
-expired. It authenticates with the existing `CRON_SECRET`. Without it, requests
-are recorded and can be cancelled but are never carried out.
+expired, and one at 03:00 UTC hitting `/api/cron/play-acknowledge`, which retries
+Google Play acknowledgements that failed. Both authenticate with the existing
+`CRON_SECRET`. Without it, deletion requests are recorded and cancellable but
+never carried out, and a failed acknowledgement is only retried when the client
+next re-presents the purchase token.
 
 ### GoCardless redirect URI
 
@@ -577,9 +713,108 @@ pre-registered allow-list, so `NEXT_PUBLIC_APP_URL` is the only thing that
 decides where users come back to. Preview deployments work without registering
 anything.
 
+### Google Play Billing
+
+Four environment variables, all optional and all documented in `.env.example`:
+`GOOGLE_PLAY_PACKAGE_NAME`, `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`,
+`GOOGLE_PLAY_PUBSUB_AUDIENCE` and the optional
+`GOOGLE_PLAY_PUBSUB_SERVICE_ACCOUNT`. None is read at import time: without them
+the app builds and runs, `play.configured` is `false`, and the two Play endpoints
+answer `503` rather than crashing — the same shape as `billingConfigured` for
+missing Stripe keys. The Play Console work they depend on is in section 8.
+
 ### Everything else
 
 No other new environment variables. `SUPABASE_SERVICE_ROLE_KEY` and
 `CRON_SECRET` already exist and are reused. `SUPABASE_SERVICE_ROLE_KEY` is what
 removes the Supabase Auth user on deletion; without it the data is erased but
 the login survives, which is logged as an error for a human to finish.
+
+---
+
+## 8. Google Play Billing
+
+### The products to create in Play Console
+
+Four auto-renewing subscriptions, each with exactly one monthly base plan and no
+offers. Product ids are matched literally by the server, so they must be typed
+exactly as below.
+
+- `business_pro`, base plan `business-pro-monthly` — grants Business Pro, listed
+  at EUR 19/month.
+- `business_team`, base plan `business-team-monthly` — grants Business, listed at
+  EUR 49/month.
+- `personal_plus`, base plan `personal-plus-monthly` — grants Personal Plus,
+  listed at EUR 4.99/month.
+- `personal_premium`, base plan `personal-premium-monthly` — grants Personal
+  Premium, listed at EUR 8.99/month.
+
+Business Enterprise has no Play product and must not be given one: it is
+contact-sales with no price to charge.
+
+Do **not** add a free-trial or introductory offer. The app already grants a local
+14-day trial at signup, before any purchase exists; a Play trial on top would be
+a second, independent source of trial state that can disagree with it.
+
+Also required, and only doable by hand: a Pub/Sub topic for Real-time Developer
+Notifications, named on the app's Monetization setup page, with a **push**
+subscription pointing at `<NEXT_PUBLIC_APP_URL>/api/billing/play/notifications`
+and OIDC authentication enabled; and a service account granted "View financial
+data" and "Manage orders and subscriptions" under Users and permissions.
+
+**Play Billing cannot be exercised from a locally signed debug build.** The
+purchase flow requires license testers configured in Play Console and a build
+distributed through at least the internal testing track, matched by application
+id and signing key. Nothing about it can be tested from `./gradlew
+installDebug`, which is a reason to create the Play Console app entry early
+rather than at the end.
+
+### How a plan is resolved when two payers exist
+
+A workspace can be paid for through Stripe on the web and through Google Play on
+a phone. The server resolves one plan from every source, highest priority first:
+
+1. A complimentary grant on the workspace owner's email address.
+2. Whichever of Stripe and Google Play grants the **higher tier** while in a
+   currently entitling state. Ties are broken by the later period end.
+3. The local 14-day trial.
+4. Free.
+
+Resolution is by tier rank, never by recency, which is what stops an out-of-order
+notification from downgrading a paying customer. In each conflict case:
+
+- Play Premium against Stripe Plus resolves to Premium, and the reverse to
+  Premium as well; the customer always keeps the better of what they pay for.
+- A Play subscription in its grace period **keeps** access, because the renewal
+  is merely being retried. One on account hold **loses** access until the payment
+  method is fixed, and gets it back without a new purchase.
+- A cancelled Play subscription keeps access until it expires, with
+  `cancelAtPeriodEnd` set.
+- A refund or chargeback cuts access **immediately**, not at period end.
+- A complimentary grant does not erase the paid subscription underneath it: the
+  Stripe columns and the Play purchase rows are left intact, so the grant can be
+  withdrawn and the real subscription reappears.
+
+### Known limitations, shipped deliberately
+
+**One Google account cannot pay for two workspaces.** Play subscriptions are per
+Google account per product, so a single Google account cannot hold two
+simultaneously active subscriptions of the same product id. This is a capability
+Stripe has and Play does not, and it bites here because owning two workspaces is
+itself a paid feature. The server detects the case through the obfuscated profile
+id and answers `409 PURCHASE_WORKSPACE_MISMATCH`, whose message tells the user
+the second workspace must be paid for on the web. There is no way to solve it
+inside Play, and a client should surface that message rather than treating it as
+a generic failure.
+
+**A Play subscription cannot be cancelled or refunded from the server.** The
+management affordance is the Play Store deep link, and account deletion reports
+the subscription rather than stopping it. See section 6.
+
+**A notification about a token the server has never seen cannot be placed.** On
+an upgrade Google issues a new token linked to the old one and that link is
+enough, but a first purchase whose verification never reached the server has
+nothing to attribute it to: the obfuscated identifiers are one-way hashes. Such a
+notification is acknowledged and dropped, and the purchase is picked up when the
+client next re-presents it. Because nothing is acknowledged in the meantime, the
+failure mode is Google refunding the customer, not an unpaid entitlement.
