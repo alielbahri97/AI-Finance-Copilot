@@ -68,6 +68,15 @@ export const SCHEMA_CHECKS: SchemaCheck[] = [
     columns: ["tour_completed_at"],
     migration: "0023_product_tour",
   },
+  // 0024 added enterprise_promo_seen_at and 0025 renamed it, so only the later
+  // name is queryable. The table-only entry keeps 0024 named: a database that
+  // is missing it is missing the rename that follows too.
+  { table: "profiles", columns: [], migration: "0024_enterprise_promo" },
+  {
+    table: "profiles",
+    columns: ["celebration_seen_at"],
+    migration: "0025_celebration_seen",
+  },
 ];
 
 export interface SchemaDrift {
