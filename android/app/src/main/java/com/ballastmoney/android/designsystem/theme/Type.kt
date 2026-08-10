@@ -2,33 +2,40 @@ package com.ballastmoney.android.designsystem.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.ballastmoney.android.R
 
 /**
- * The two families the design uses.
+ * The two families the design uses: Inter for everything, JetBrains Mono for
+ * code, matching the web app.
  *
- * The web app loads Inter (variable) for everything and JetBrains Mono for code
- * blocks. No font binaries ship with this module yet, so both fall back to the
- * platform faces.
+ * Static weights rather than the variable face. Compose resolves a weight by
+ * picking the closest declared [Font], so the four weights the type scale
+ * actually names — Normal, Medium, SemiBold, Bold — are each shipped as their
+ * own file. A variable font would be one smaller file, but `res/font` support
+ * for named instances needs API 26+ *and* an XML family declaring each
+ * variation, and the four static faces cost about 1.7 MB with none of that
+ * fragility.
  *
- * To adopt the real faces later:
- *   1. Drop the files into `app/src/main/res/font/` — for example
- *      `inter_variable.ttf` and `jetbrains_mono.ttf`. Resource names must be
- *      lowercase with underscores.
- *   2. Replace the right-hand side of [sans] with
- *      `FontFamily(Font(R.font.inter_variable))` and of [mono] with
- *      `FontFamily(Font(R.font.jetbrains_mono))`, importing
- *      `androidx.compose.ui.text.font.Font` and `com.ballastmoney.android.R`.
- *
- * That is the whole change: nothing else in the design system names a family.
+ * Both families are SIL Open Font License 1.1; the licences ship in the APK
+ * under `assets/licenses/`.
  */
 object BallastFontFamilies {
-    val sans: FontFamily = FontFamily.SansSerif
+    val sans: FontFamily = FontFamily(
+        Font(R.font.inter_regular, FontWeight.Normal),
+        Font(R.font.inter_medium, FontWeight.Medium),
+        Font(R.font.inter_semibold, FontWeight.SemiBold),
+        Font(R.font.inter_bold, FontWeight.Bold),
+    )
 
     /** Code and identifiers only. Money uses [sans] — see [BallastTextStyles]. */
-    val mono: FontFamily = FontFamily.Monospace
+    val mono: FontFamily = FontFamily(
+        Font(R.font.jetbrains_mono_regular, FontWeight.Normal),
+        Font(R.font.jetbrains_mono_medium, FontWeight.Medium),
+    )
 }
 
 /**

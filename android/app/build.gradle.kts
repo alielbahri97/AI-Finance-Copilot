@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -9,6 +10,33 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.baselineprofile)
 }
+
+/**
+ * Supabase project credentials.
+ *
+ * Read from `android/secrets.properties` — which is gitignored and never
+ * committed — falling back to environment variables so a CI runner can supply
+ * them without a file, and finally to empty strings so that a checkout with no
+ * credentials still *builds*. It will not sign in: `SupabaseConfig` treats an
+ * empty value as a hard, explicitly-worded configuration failure rather than
+ * letting Supabase fail later with something cryptic.
+ *
+ * The names mirror the web app's `.env`, minus the `NEXT_PUBLIC_` prefix that
+ * only means something to Next.js. The anon key is a publishable key and ends
+ * up readable inside the APK no matter what; it is kept out of git because a
+ * key in a repository is a key nobody ever rotates, not because shipping it is
+ * itself a leak.
+ */
+val secretsFile = rootProject.file("secrets.properties")
+val secrets = Properties().apply {
+    if (secretsFile.exists()) secretsFile.inputStream().use { load(it) }
+}
+
+fun secret(key: String, env: String): String =
+    secrets.getProperty(key) ?: System.getenv(env) ?: ""
+
+val supabaseUrl: String = secret("supabase.url", "BALLAST_SUPABASE_URL")
+val supabaseAnonKey: String = secret("supabase.anonKey", "BALLAST_SUPABASE_ANON_KEY")
 
 android {
     namespace = "com.ballastmoney.android"
@@ -23,6 +51,9 @@ android {
 
         testInstrumentationRunner = "com.ballastmoney.android.HiltTestRunner"
         vectorDrawables.useSupportLibrary = true
+
+        buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
     }
 
     buildFeatures {
@@ -38,7 +69,11 @@ android {
             // 10.0.2.2 is the host machine as seen from the Android emulator,
             // which is where `npm run dev` serves the Next.js app.
             buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:3000\"")
-            buildConfigField("boolean", "USE_FAKE_DATA", "true")
+            // False now that the endpoints exist: a debug build talks to the
+            // dev server. Flip to true to browse the seeded sample dataset
+            // without a backend — the fakes are still compiled in and still
+            // bound behind this flag.
+            buildConfigField("boolean", "USE_FAKE_DATA", "false")
         }
         release {
             isMinifyEnabled = true
@@ -48,10 +83,7 @@ android {
                 "proguard-rules.pro",
             )
             buildConfigField("String", "API_BASE_URL", "\"https://app.ballastmoney.com\"")
-            // Still true: the JSON API this client will consume does not exist
-            // yet. Flip to false in the same change that lands the real
-            // network repositories.
-            buildConfigField("boolean", "USE_FAKE_DATA", "true")
+            buildConfigField("boolean", "USE_FAKE_DATA", "false")
         }
     }
 
@@ -144,6 +176,10 @@ dependencies {
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.ktor.client.auth)
     implementation(libs.ktor.client.logging)
+
+    // Auth only. No postgrest-kt on purpose: authorization lives in the API.
+    implementation(platform(libs.supabase.bom))
+    implementation(libs.supabase.auth)
 
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)

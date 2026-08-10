@@ -5,9 +5,15 @@ local.properties
 captures/
 .cxx/
 
-# The Gradle wrapper JAR is a binary and is not checked in here; run
-# `gradle wrapper --gradle-version 8.14.3` once, or let Android Studio
-# generate it on first sync. gradle-wrapper.properties pins the version.
+# The Gradle wrapper is STILL not checked in, and it should be as soon as
+# anyone can generate it.
+#
+# It stays ignored only because it could not be produced: this machine's proxy
+# does not reach services.gradle.org, so Gradle itself cannot be installed and
+# `gradle wrapper --gradle-version 8.14.3` cannot be run. The jar is a binary
+# and inventing one is not an option. On a machine with normal network access,
+# run that command once, delete these three lines, and commit the results —
+# gradle-wrapper.properties already pins the version it should generate.
 gradle/wrapper/gradle-wrapper.jar
 gradlew
 gradlew.bat
@@ -21,3 +27,9 @@ gradlew.bat
 *.jks
 *.keystore
 keystore.properties
+
+# Supabase project URL and anon key, read by app/build.gradle.kts into
+# BuildConfig. Machine-specific and not ours to publish, so it stays out of git;
+# see README.md, "Supabase credentials", for the file's contents. CI can set
+# BALLAST_SUPABASE_URL and BALLAST_SUPABASE_ANON_KEY instead.
+secrets.properties

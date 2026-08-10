@@ -8,6 +8,20 @@
 # Compose BOM 2026.06.01 resolves to Compose 1.11.x, which is the last line
 # that builds against compileSdk 36 — Compose 1.12 requires compileSdk 37 and
 # AGP 9.
+#
+# ## Which of these have been checked against a real resolver
+#
+# Half of them, and the half is not arbitrary. This machine's network reaches
+# Maven Central (through an internal mirror) but **not** Google's Maven
+# repository — see `README.md`, "Toolchain", for the full story. So:
+#
+#  - Verified to exist as published artifacts: kotlin, coroutines,
+#    kotlinxSerialization, ktor, hilt, junit5, turbine, coil, vico, supabase.
+#  - **Still unverified**, because `maven.google.com` could not be reached:
+#    agp, ksp, androidxHilt, composeBom, composeMaterialIcons and every
+#    `androidx*` line. These remain as the previous author pinned them from
+#    release notes. Expect the first successful `:app:compileDebugKotlin` on a
+#    machine with Google Maven access to be the first real test of them.
 ##
 
 [versions]
@@ -53,6 +67,13 @@ kotlinxSerialization = "1.11.0"
 ktor = "3.5.2"
 coil = "3.5.0"
 vico = "3.2.3"
+# supabase-kt 3.7.0 is the current release and is built against Ktor 3.x, which
+# is why the app and the SDK can share one HttpClient engine. Only `auth-kt` is
+# taken: `postgrest-kt` is deliberately absent, because every authorization
+# rule this app obeys (workspace scoping, roles, permissions, edition and plan
+# gating) lives in the Next.js API, and talking to Postgres directly would
+# bypass all of it.
+supabase = "3.7.0"
 
 junit5 = "5.14.4"
 junit4 = "4.13.2"
@@ -114,6 +135,11 @@ ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx
 ktor-client-logging = { module = "io.ktor:ktor-client-logging", version.ref = "ktor" }
 ktor-client-auth = { module = "io.ktor:ktor-client-auth", version.ref = "ktor" }
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
+
+# --- Supabase --------------------------------------------------------------
+# The BOM keeps auth-kt and the core module on one version.
+supabase-bom = { module = "io.github.jan-tennert.supabase:bom", version.ref = "supabase" }
+supabase-auth = { module = "io.github.jan-tennert.supabase:auth-kt" }
 
 # --- UI libraries ----------------------------------------------------------
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
