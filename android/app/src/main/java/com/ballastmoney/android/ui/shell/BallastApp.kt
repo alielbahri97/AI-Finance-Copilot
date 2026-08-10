@@ -80,18 +80,19 @@ fun BallastApp(
     BallastTheme(darkTheme = darkTheme) {
         SystemBarAppearance(darkTheme = darkTheme)
 
+        // The shell is the only thing composed on every branch, so it is where
+        // an emailed link is handed over. What happens to it is the
+        // ViewModel's decision, not this composable's — see onAuthCallback.
         val authCallback = rememberAuthCallbackLink()
-        // A confirmation link has to be redeemed by somebody, and the shell is
-        // the only thing composed on every branch. Recovery links are ignored
-        // here and handled by the reset screen — see RootViewModel.
         LaunchedEffect(authCallback) { viewModel.onAuthCallback(authCallback) }
+        val recoveryLink by viewModel.recoveryLink.collectAsStateWithLifecycle()
 
         val session = state.session
         when {
             state.isSignedIn == null -> LoadingScreen(modifier = modifier)
 
             state.isSignedIn == false -> SignedOutApp(
-                authCallback = authCallback,
+                recoveryLink = recoveryLink,
                 modifier = modifier,
             )
 
@@ -127,20 +128,21 @@ fun BallastApp(
  * signed-out back stack is discarded the moment a session appears — there is no
  * way to gesture back into a half-filled sign-up form from inside the app.
  *
- * A recovery callback that is not a recovery link is dropped: a confirmation
- * link carries a session that supabase-kt has already restored by the time this
- * composes, which means [BallastApp] is not on this branch at all.
+ * [recoveryLink] is non-null only when the app was opened by a password-reset
+ * email, and it changes where the graph starts. Confirmation links never reach
+ * here: they carry a session, which puts [BallastApp] on a different branch
+ * entirely.
  */
 @Composable
 private fun SignedOutApp(
-    authCallback: AuthCallbackLink?,
+    recoveryLink: AuthCallbackLink?,
     modifier: Modifier = Modifier,
 ) {
     val navController = rememberNavController()
     AuthNavHost(
         navController = navController,
         modifier = modifier,
-        recoveryLink = authCallback?.takeIf { it.isRecovery && it.hasCredentials },
+        recoveryLink = recoveryLink,
     )
 }
 

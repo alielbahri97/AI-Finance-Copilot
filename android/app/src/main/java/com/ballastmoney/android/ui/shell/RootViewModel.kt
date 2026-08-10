@@ -15,6 +15,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -89,8 +90,26 @@ class RootViewModel @Inject constructor(
 
     private val bootstrapState = MutableStateFlow(Bootstrap())
 
-    /** The confirmation link already redeemed, so it is not redeemed twice. */
+    /** The callback already acted on, so it is not acted on twice. */
     private var handledCallback: AuthCallbackLink? = null
+
+    private val _recoveryLink = MutableStateFlow<AuthCallbackLink?>(null)
+
+    /**
+     * The reset link waiting to be spent, if the app was opened by one.
+     *
+     * Held here rather than read from the intent at the point of use, because a
+     * link is good for exactly one password change and the launching intent is
+     * not: it outlives the reset, so a user who signs out later in the same
+     * session would be shown the new-password form again, wired to a link
+     * Supabase has already invalidated. This is cleared the moment a session
+     * appears, which is the moment the link stops being worth anything.
+     *
+     * Kept out of [RootUiState] on purpose — that is a snapshot the whole shell
+     * reads, and this is a live credential only one screen has any business
+     * with.
+     */
+    val recoveryLink: StateFlow<AuthCallbackLink?> = _recoveryLink.asStateFlow()
 
     val uiState: StateFlow<RootUiState> = combine(
         signedIn,
@@ -126,7 +145,12 @@ class RootViewModel @Inject constructor(
         // sign-in and a session restored after a reinstall alike.
         viewModelScope.launch {
             signedIn.collect { authed ->
-                if (authed == true) bootstrap()
+                if (authed != true) return@collect
+                // Spent, expired, or simply no longer relevant: whichever it
+                // is, there is a session now and the link cannot produce a
+                // better one.
+                _recoveryLink.value = null
+                bootstrap()
             }
         }
     }
@@ -154,23 +178,34 @@ class RootViewModel @Inject constructor(
     }
 
     /**
-     * Turns an email-confirmation link into a session.
+     * Routes a `ballast://auth/...` callback to whichever half of the app can
+     * use it.
      *
-     * Only confirmation links. A recovery link must **not** be redeemed here:
-     * it would sign the user in and the shell would drop them into the app,
-     * which is precisely the screen they cannot use until they have chosen a
-     * new password. Those are handed to the reset screen instead, which spends
-     * the link and sets the password in one operation.
+     * A confirmation link is redeemed immediately: its only purpose is to bring
+     * the user back signed in. A recovery link is deliberately **not** —
+     * redeeming it here would sign them in and the shell would drop them into
+     * the app, which is exactly the screen they cannot use until they have
+     * chosen a new password. It is parked in [recoveryLink] for the reset
+     * screen, which spends it and sets the password in one operation.
      *
-     * Guarded on the link itself rather than a boolean so that a second,
-     * different link arriving in the same process is still acted on, while a
+     * A recovery link with no credentials is parked too, rather than discarded:
+     * it is an expired or already-used link, and it carries Supabase's own
+     * explanation, which the reset screen can show instead of an empty form.
+     *
+     * Guarded on the link itself rather than on a boolean, so a second,
+     * different link arriving in the same process is still acted on while a
      * recomposition handing back the same one is not.
      */
     fun onAuthCallback(link: AuthCallbackLink?) {
-        if (link == null || link.isRecovery || !link.hasCredentials) return
-        if (link == handledCallback) return
+        if (link == null || link == handledCallback) return
         handledCallback = link
-        viewModelScope.launch { authRepository.completeEmailConfirmation(link) }
+        if (link.isRecovery) {
+            _recoveryLink.value = link
+            return
+        }
+        if (link.hasCredentials) {
+            viewModelScope.launch { authRepository.completeEmailConfirmation(link) }
+        }
     }
 
     fun selectWorkspace(workspaceId: String) {

@@ -124,6 +124,13 @@ object AuthErrorMapper {
      * having tapped "cancel". Matched on the simple name so this file does not
      * have to depend on the credentials library while passkeys are switched
      * off.
+     *
+     * That is a debt, not a design: R8 runs in full mode in release builds and
+     * may rename those classes, in which case the match silently stops working
+     * and a cancelled prompt becomes an error message. Enabling
+     * [PasskeySupport.ENABLED] must therefore also mean replacing this with a
+     * real `is GetCredentialCancellationException` check — the dependency is
+     * already declared, so it costs an import and a keep rule less.
      */
     private fun webAuthnName(error: Throwable): String {
         val simpleName = error::class.simpleName.orEmpty()
