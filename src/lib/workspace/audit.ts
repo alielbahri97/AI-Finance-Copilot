@@ -27,8 +27,12 @@ export type AuditAction =
   | "data.import_undone"
   | "data.invoice_deleted"
   | "data.invoice_reminder_sent"
+  | "integration.connect_started"
   | "integration.connected"
-  | "integration.disconnected";
+  | "integration.disconnected"
+  | "account.deletion_requested"
+  | "account.deletion_cancelled"
+  | "account.deleted";
 
 /**
  * Records a security-relevant event. Never throws — an audit failure must not
