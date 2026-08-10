@@ -24,7 +24,8 @@ import com.ballastmoney.android.designsystem.theme.BallastTextStyles
 import com.ballastmoney.android.designsystem.theme.BallastTheme
 import com.ballastmoney.android.designsystem.theme.ballastColors
 
-private val CardShape = RoundedCornerShape(BallastRadius.lg)
+/** `rounded-xl`, which the shadcn scale derives as `--radius + 4px`, so 16dp. */
+private val CardShape = RoundedCornerShape(BallastRadius.xl)
 
 /**
  * The container everything on a dashboard sits in.

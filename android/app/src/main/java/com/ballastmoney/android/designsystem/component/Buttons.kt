@@ -53,7 +53,15 @@ enum class ButtonVariant { PRIMARY, SECONDARY, OUTLINE, GHOST, DESTRUCTIVE, LINK
 
 enum class ButtonSize { SMALL, DEFAULT, LARGE }
 
-private val ButtonShape = RoundedCornerShape(BallastRadius.lg)
+/**
+ * `rounded-xl` on the web, which the shadcn scale derives as `--radius + 4px` and
+ * therefore 16dp rather than the 12dp `--radius` itself suggests. The small size
+ * is the exception: it asks for `rounded-lg`, the bare token.
+ */
+private fun ButtonSize.shape() = when (this) {
+    ButtonSize.SMALL -> RoundedCornerShape(BallastRadius.lg)
+    ButtonSize.DEFAULT, ButtonSize.LARGE -> RoundedCornerShape(BallastRadius.xl)
+}
 
 private class ButtonPalette(
     val container: Color,
@@ -130,7 +138,7 @@ fun BallastButton(
             .height(size.height())
             .scale(pressScale),
         enabled = enabled && !loading,
-        shape = ButtonShape,
+        shape = size.shape(),
         colors = ButtonDefaults.buttonColors(
             containerColor = palette.container,
             contentColor = palette.content,

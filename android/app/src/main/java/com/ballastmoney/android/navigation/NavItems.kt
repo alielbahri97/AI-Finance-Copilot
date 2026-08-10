@@ -4,6 +4,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.automirrored.outlined.ShowChart
 import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Analytics
 import androidx.compose.material.icons.outlined.Balance
@@ -18,7 +19,6 @@ import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.UploadFile
-import androidx.compose.material.icons.outlined.Wallet
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.ballastmoney.android.core.model.EditionFeature
 import com.ballastmoney.android.core.model.Editions
@@ -117,7 +117,7 @@ object NavItems {
         NavItem(
             webPath = "/budgets",
             title = "Budgets",
-            icon = Icons.Outlined.Wallet,
+            icon = Icons.Outlined.AccountBalanceWallet,
             section = NavSection.MONEY,
             feature = EditionFeature.BUDGETS,
             permission = Permission.VIEW_REPORTS,
