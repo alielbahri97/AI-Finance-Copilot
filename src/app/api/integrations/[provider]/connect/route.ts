@@ -4,10 +4,14 @@ import { NextResponse } from "next/server";
 
 import { getEntitlements } from "@/lib/billing/entitlements";
 import { bankQuotaRefusal, checkBankConnectionQuota } from "@/lib/integrations/bank-quota";
-import { GC_REQUISITION_COOKIE, STATE_COOKIE } from "@/lib/integrations/cookies";
+import { STATE_COOKIE } from "@/lib/integrations/cookies";
 import { isEncryptionConfigured } from "@/lib/integrations/crypto";
 import { canAddConnection, multiInstanceRefusal } from "@/lib/integrations/identity";
 import { appUrl, buildAuthUrl } from "@/lib/integrations/oauth";
+import {
+  createPendingConnection,
+  mintConnectionReference,
+} from "@/lib/integrations/pending-connections";
 import { createRequisition } from "@/lib/integrations/providers/gocardless";
 import {
   editionAllowsProvider,
@@ -91,25 +95,24 @@ export async function GET(
       if (!institution) {
         return backToIntegrations("Pick a bank first, then connect.");
       }
-      const reference = `${user.id}:${randomBytes(8).toString("hex")}`;
+      const reference = mintConnectionReference(user.id);
       const { requisitionId, link } = await createRequisition(institution, reference);
-      const response = NextResponse.redirect(link);
-      // The cookie carries both halves of the pending connection: the
-      // requisition to finalize and the reference GoCardless echoes back as
-      // `ref`, which is what ties the callback to this attempt rather than to
-      // another bank the user started connecting in a different tab.
-      response.cookies.set(GC_REQUISITION_COOKIE, `${requisitionId}.${reference}`, {
-        httpOnly: true,
-        // "lax" rather than "strict": the bank sends the user back with a
-        // top-level cross-site GET, which a strict cookie would not survive.
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        // Approving in a banking app (push notification, then a code) regularly
-        // takes longer than the 15 minutes this used to allow.
-        maxAge: 1800,
-        path: "/",
+      // Both halves of the pending connection — the requisition to finalize and
+      // the reference GoCardless echoes back as `ref` — are kept server-side.
+      // A cookie had one slot, so a second bank started in another tab
+      // overwrote the first and that tab's callback could no longer be matched;
+      // one row per attempt lets both finish. It is also what a native client
+      // can use, having no cookie jar of ours to carry.
+      await createPendingConnection({
+        workspaceId: ctx.workspace.id,
+        userId: user.id,
+        provider: provider.id,
+        requisitionId,
+        reference,
+        institutionId: institution,
+        link,
       });
-      return response;
+      return NextResponse.redirect(link);
     }
 
     if (provider.flow !== "oauth2") {

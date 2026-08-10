@@ -4,6 +4,12 @@ import { recordBankAccounts } from "@/lib/integrations/bank-accounts";
 import { saveConnection } from "@/lib/integrations/connections";
 import { GC_REQUISITION_COOKIE, STATE_COOKIE } from "@/lib/integrations/cookies";
 import { appUrl, exchangeCode } from "@/lib/integrations/oauth";
+import {
+  findPendingByReference,
+  markPendingCompleted,
+  pendingBelongsTo,
+  pendingConnectionRefusal,
+} from "@/lib/integrations/pending-connections";
 import { getProviderHooks } from "@/lib/integrations/providers";
 import { finalizeRequisition } from "@/lib/integrations/providers/gocardless";
 import { getProvider } from "@/lib/integrations/registry";
@@ -59,24 +65,26 @@ export async function GET(
     }
 
     if (provider.flow === "redirect" && provider.id === "gocardless") {
-      const pending = request.cookies.get(GC_REQUISITION_COOKIE)?.value;
+      // GoCardless echoes the reference we sent as `ref`, and that is what the
+      // attempt is now stored under: a row per attempt rather than one cookie
+      // slot, so a second bank started in another tab no longer overwrites the
+      // first, and a native client has something to finalize with.
+      const pending = query.ref ? await findPendingByReference(query.ref) : null;
       if (!pending) {
         return finish("The connection session expired. Try again.");
       }
-      // "<requisitionId>.<reference>" — split on the first separator only, so a
-      // reference that ever contains a dot cannot truncate into a mismatch.
-      const separator = pending.indexOf(".");
-      const requisitionId = separator === -1 ? pending : pending.slice(0, separator);
-      const reference = separator === -1 ? "" : pending.slice(separator + 1);
-      if (!requisitionId) {
-        return finish("The connection session expired. Try again.");
-      }
-      // GoCardless echoes the reference we sent as `ref`. When it is present it
-      // must match this attempt, otherwise we would attach one bank's accounts
-      // to another bank's connection.
-      if (query.ref && reference && query.ref !== reference) {
+      if (!pendingBelongsTo(pending, scope)) {
         return finish("That bank approval belongs to a different connection attempt. Try again.");
       }
+      if (pending.status === "COMPLETED" && pending.connectionId) {
+        // A reloaded callback must land on the connection it already made.
+        return finish(undefined, provider.id, pending.connectionId);
+      }
+      const refusal = pendingConnectionRefusal(pending);
+      if (refusal) {
+        return finish(refusal.error);
+      }
+      const requisitionId = pending.requisitionId;
 
       const finalized = await finalizeRequisition(requisitionId);
       // Keyed by institution, not by requisition: renewing consent mints a new
@@ -110,6 +118,7 @@ export async function GET(
         connectionId: connection.id,
         institution: finalized.institutionName ?? finalized.institutionId,
       });
+      if (pending) await markPendingCompleted(pending.id, connection.id);
       return finish(undefined, provider.id, connection.id);
     }
 
