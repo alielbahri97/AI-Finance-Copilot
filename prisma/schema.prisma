@@ -76,6 +76,28 @@ enum SyncRunStatus {
   FAILED
 }
 
+/// Lifecycle of a bank consent the user has been sent away to approve.
+enum PendingConnectionStatus {
+  /// Waiting for the user to come back from the bank.
+  PENDING
+  /// Finalized into an IntegrationConnection.
+  COMPLETED
+  /// The bank refused, or finalizing threw. `error` says why.
+  FAILED
+}
+
+/// Lifecycle of a user's request to delete their account.
+enum AccountDeletionStatus {
+  /// Requested and inside the grace period; the user can still cancel.
+  SCHEDULED
+  /// The user changed their mind before the grace period ran out.
+  CANCELLED
+  /// The data has been erased. The row itself is kept as the record that it was.
+  COMPLETED
+  /// Erasure was attempted and did not finish. `lastError` says why.
+  FAILED
+}
+
 /// Plan tiers across both editions. FREE is shared (its limits differ per
 /// edition); PRO/BUSINESS/ENTERPRISE are Business-edition tiers and
 /// PLUS/PREMIUM are Personal-edition tiers. Which set applies is decided by
@@ -231,6 +253,7 @@ model Workspace {
   savingsGoals           SavingsGoal[]
   assets                 Asset[]
   integrationConnections IntegrationConnection[]
+  pendingBankConnections PendingBankConnection[]
 
   @@index([type])
   @@map("workspaces")
@@ -340,6 +363,7 @@ model Profile {
   referralReceived       Referral?               @relation("Referred")
   analyticsEvents        AnalyticsEvent[]
   integrationConnections IntegrationConnection[]
+  pendingBankConnections PendingBankConnection[]
   businessProfile        BusinessProfile?
   personalProfile        PersonalProfile?
   helpMessages           HelpMessage[]
@@ -523,6 +547,84 @@ model SyncRun {
 
   @@index([connectionId, startedAt(sort: Desc)])
   @@map("sync_runs")
+}
+
+/// A bank consent the user has been sent away to approve but has not come back
+/// from yet.
+///
+/// This replaces the httpOnly cookie the GoCardless flow used to carry the
+/// requisition in. The cookie could only ever hold one attempt, so starting a
+/// second connection in another tab silently overwrote the first and the
+/// finished one attached its accounts to the wrong bank. It also cannot work at
+/// all for a native client, which has no cookie jar between the bank's browser
+/// and the app.
+///
+/// The reference is the handshake secret: it is minted here, sent to the bank,
+/// echoed back as `ref`, and is what proves a callback belongs to this attempt.
+model PendingBankConnection {
+  id            String                  @id @default(cuid())
+  workspaceId   String                  @map("workspace_id")
+  userId        String                  @map("user_id") @db.Uuid
+  provider      String                  @default("gocardless")
+  /// The provider's id for the consent being approved.
+  requisitionId String                  @map("requisition_id")
+  /// Unguessable per-attempt nonce, echoed back by the bank.
+  reference     String                  @unique
+  institutionId String                  @map("institution_id")
+  /// Where the user was sent to approve. Kept so a client can resume.
+  link          String
+  status        PendingConnectionStatus @default(PENDING)
+  /// Set once finalizing succeeds, so a replayed callback is a no-op rather
+  /// than a second connection.
+  connectionId  String?                 @map("connection_id")
+  error         String?
+  /// Same 30-minute window the cookie used to give.
+  expiresAt     DateTime                @map("expires_at")
+  completedAt   DateTime?               @map("completed_at")
+  createdAt     DateTime                @default(now()) @map("created_at")
+  updatedAt     DateTime                @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  profile   Profile   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, userId, status])
+  @@index([expiresAt])
+  @@map("pending_bank_connections")
+}
+
+/// A user's request to delete their account, and the record that it happened.
+///
+/// Deliberately has no foreign key to Profile. Every other user-owned table
+/// cascades away with the profile, which is the point — but then nothing would
+/// be left to show the request was received and honoured. A plain uuid column
+/// (the same shape `Profile.referredById` already uses) lets the row outlive
+/// the account it deleted.
+model AccountDeletionRequest {
+  id           String                @id @default(cuid())
+  /// The Supabase user id. No relation: this row must survive the deletion.
+  userId       String                @map("user_id") @db.Uuid
+  /// SHA-256 of the lower-cased email. Enough to answer "was this address
+  /// deleted, and when" without keeping the address itself.
+  emailHash    String                @map("email_hash")
+  status       AccountDeletionStatus @default(SCHEDULED)
+  /// Free-text reason the user optionally gave. Cleared on completion.
+  reason       String?
+  requestedAt  DateTime              @default(now()) @map("requested_at")
+  /// End of the grace period: when the sweep may erase the data.
+  scheduledFor DateTime              @map("scheduled_for")
+  cancelledAt  DateTime?             @map("cancelled_at")
+  completedAt  DateTime?             @map("completed_at")
+  /// Failures are retried by the next sweep rather than lost.
+  attempts     Int                   @default(0)
+  lastError    String?               @map("last_error")
+  createdAt    DateTime              @default(now()) @map("created_at")
+  updatedAt    DateTime              @updatedAt @map("updated_at")
+
+  /// One live request per user; enforced in code against the non-terminal
+  /// statuses, indexed here for the sweep.
+  @@index([userId])
+  @@index([status, scheduledFor])
+  @@map("account_deletion_requests")
 }
 
 /// The workspace's billing state. Free/trial workspaces have a row with no

@@ -77,6 +77,8 @@ export const SCHEMA_CHECKS: SchemaCheck[] = [
     columns: ["celebration_seen_at"],
     migration: "0025_celebration_seen",
   },
+  { table: "pending_bank_connections", columns: [], migration: "0026_mobile_api" },
+  { table: "account_deletion_requests", columns: [], migration: "0026_mobile_api" },
 ];
 
 export interface SchemaDrift {
