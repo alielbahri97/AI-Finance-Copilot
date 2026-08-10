@@ -755,6 +755,25 @@ recorded per workspace (`AuditLog`) and visible to owners/admins in *Settings �
   resolves the workspace context (authenticated user + database-verified membership +
   permission check) and scopes each query/mutation by the workspace id (deletes/updates use
   `deleteMany`/ownership pre-checks so a foreign id yields 404).
+- **Two ways to authenticate** — the browser uses the `@supabase/ssr` cookie session.
+  Native clients, which have no cookie jar the Supabase helpers can drive, send
+  `Authorization: Bearer <supabase access token>` instead; the token is verified locally
+  against the project's published JWKS (issuer, audience, expiry and signature), with the
+  key set cached in-process, so there is no auth-server round trip per request. The two are
+  alternatives, not layers: a request presenting a token is answered on the token alone and
+  never falls back to the cookie. Workspace selection accepts an `X-Ballast-Workspace`
+  header ahead of the cookie, through the same sanitisation and the same per-request
+  membership check — both are hints and neither grants anything. See
+  [MOBILE_API.md](MOBILE_API.md) for the full contract.
+- **Account deletion** — users can delete their account from the app or from the public
+  `/delete-account` page, which works without installing anything (a Google Play
+  requirement). A request schedules the deletion seven days out and can be cancelled until
+  then; it needs a re-authentication no older than fifteen minutes, and is refused while
+  the user is the last owner of a workspace other people are still in. A daily cron
+  (`/api/cron/account-deletions`) carries out the ones whose grace period has expired,
+  revoking bank consents and cancelling Stripe subscriptions on the way. All that survives
+  is a hashed-email record that the deletion happened, plus audit entries in other people's
+  workspaces with the user id nulled out. See [MOBILE_API.md](MOBILE_API.md).
 - **Security headers** — set globally in `next.config.ts`: a CSP restricted to self plus
   Supabase/Plaid origins, HSTS (2 years, preload-ready), `X-Frame-Options: DENY`,
   `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`
