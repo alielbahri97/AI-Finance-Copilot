@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+
+    <application
+        android:name=".BallastApplication"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Ballast">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.Ballast"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Supabase sends password-reset and email-confirmation links back
+                 to this scheme; `AuthCallbackParser` reads the token or code out
+                 of the URL. A custom scheme rather than an App Link because an
+                 App Link needs a verified assetlinks.json served from
+                 app.ballastmoney.com, which needs the Play signing certificate
+                 fingerprint, and an unverified App Link degrades to a
+                 disambiguation dialog.
+
+                 The launch mode is left alone deliberately: an emailed link
+                 starts a fresh MainActivity whose intent carries the URL, which
+                 needs no onNewIntent override in the activity. Both URLs must
+                 also be listed under Authentication > URL Configuration >
+                 Redirect URLs in the Supabase dashboard. -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="ballast"
+                    android:host="auth" />
+            </intent-filter>
+        </activity>
+
+        <!-- Required so Macrobenchmark can capture a Baseline Profile from a
+             release build on a non-rooted device. -->
+        <profileable
+            android:shell="true"
+            tools:targetApi="29" />
+    </application>
+
+</manifest>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  A deliberately minimal platform theme. The app is edge-to-edge on every API
+  level (API 36 removes the opt-out entirely), so the system bars are
+  transparent and Compose draws behind them. The only job left for the XML
+  theme is the cold-start window background, which must match the Compose
+  background colour or the launch flashes.
+-->
+<resources>
+    <style name="Theme.Ballast" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/ballast_window_background_light</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+    </style>
+</resources>

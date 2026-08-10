@@ -1,0 +1,24 @@
+# Gradle / Android build output
+.gradle/
+build/
+local.properties
+captures/
+.cxx/
+
+# Gradle wrapper is checked in (generated on a home network).
+
+# IDE
+.idea/
+*.iml
+*.hprof
+
+# Keystores must never be committed
+*.jks
+*.keystore
+keystore.properties
+
+# Supabase project URL and anon key, read by app/build.gradle.kts into
+# BuildConfig. Machine-specific and not ours to publish, so it stays out of git;
+# see README.md, "Supabase credentials", for the file's contents. CI can set
+# BALLAST_SUPABASE_URL and BALLAST_SUPABASE_ANON_KEY instead.
+secrets.properties

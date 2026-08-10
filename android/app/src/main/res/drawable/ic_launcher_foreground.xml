@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adaptive-icon foreground. The launcher canvas is 108x108 with only the middle
+  72x72 guaranteed visible, so the 24x24 mark is scaled 2.7x (giving a 45.9 x
+  43.74 mark) and translated so its bounding-box centre (12, 13.1) lands on
+  (54, 54). That keeps the whole mark inside the safe zone on every mask.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <group
+        android:scaleX="2.7"
+        android:scaleY="2.7"
+        android:translateX="21.6"
+        android:translateY="18.63">
+        <path
+            android:fillColor="@color/ballast_brand"
+            android:pathData="M4.6 5 H19.4 C20.0075 5 20.5 5.4925 20.5 6.1 C20.5 6.7075 20.0075 7.2 19.4 7.2 H4.6 C3.9925 7.2 3.5 6.7075 3.5 6.1 C3.5 5.4925 3.9925 5 4.6 5 Z" />
+        <path
+            android:fillColor="@color/ballast_brand"
+            android:pathData="M7.6 9.2 H16.4 C17.0075 9.2 17.5 9.6925 17.5 10.3 C17.5 10.9075 17.0075 11.4 16.4 11.4 H7.6 C6.9925 11.4 6.5 10.9075 6.5 10.3 C6.5 9.6925 6.9925 9.2 7.6 9.2 Z" />
+        <path
+            android:fillColor="@color/ballast_brand"
+            android:pathData="M11.35 11 H12.65 V15.4 H11.35 Z" />
+        <path
+            android:fillColor="@color/ballast_brand"
+            android:pathData="M14.9 18.3 C14.9 19.9017 13.6017 21.2 12 21.2 C10.3983 21.2 9.1 19.9017 9.1 18.3 C9.1 16.6983 10.3983 15.4 12 15.4 C13.6017 15.4 14.9 16.6983 14.9 18.3 Z" />
+    </group>
+</vector>
