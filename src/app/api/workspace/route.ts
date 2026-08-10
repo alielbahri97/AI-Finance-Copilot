@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { apiError } from "@/lib/api/response";
+import {
+  serializeMember,
+  serializeWorkspace,
+  type SerializedMember,
+} from "@/lib/api/serializers/workspace";
 import { getEntitlements, upgradeError } from "@/lib/billing/entitlements";
 import { ensureDefaultCategories } from "@/lib/categories";
 import { logger, serializeError } from "@/lib/logger";
@@ -9,11 +14,16 @@ import { prisma } from "@/lib/prisma";
 import { getUser } from "@/lib/supabase/server";
 import { recordAudit } from "@/lib/workspace/audit";
 import { requireWorkspace, WORKSPACE_COOKIE } from "@/lib/workspace/context";
-import { defaultWorkspaceName, WORKSPACE_TYPES } from "@/lib/workspace/editions";
+import {
+  defaultWorkspaceName,
+  editionHasFeature,
+  WORKSPACE_TYPES,
+} from "@/lib/workspace/editions";
 import {
   creationBlockReason,
   getWorkspaceCreationPolicy,
 } from "@/lib/workspace/limits";
+import { countSeats } from "@/lib/workspace/team";
 
 /**
  * Workspace-level settings the owner/admin can change. Every field is
@@ -29,6 +39,59 @@ const settingsSchema = z
   .refine((value) => Object.values(value).some((field) => field !== undefined), {
     message: "Nothing to update",
   });
+
+/**
+ * The workspace, its people, and how many seats that uses.
+ *
+ * `members` is null rather than empty in the Personal edition: there is nobody
+ * to list, and null says "this workspace has no team" while `[]` would read as
+ * "the team is empty". Seat usage is always reported — it is a plan figure, not
+ * a member detail — and counts pending invitations, because the plan does.
+ */
+export async function GET(request: Request) {
+  try {
+    const auth = await requireWorkspace(request);
+    if (!auth.ok) return auth.response;
+    const { workspace } = auth.ctx;
+
+    const sharing = editionHasFeature(workspace.type, "team");
+
+    const [entitlements, seats, memberRows] = await Promise.all([
+      getEntitlements(workspace.id),
+      countSeats(workspace.id),
+      sharing
+        ? prisma.workspaceMember.findMany({
+            where: { workspaceId: workspace.id },
+            orderBy: { joinedAt: "asc" },
+            select: {
+              id: true,
+              userId: true,
+              role: true,
+              permissions: true,
+              joinedAt: true,
+              profile: { select: { fullName: true, email: true } },
+            },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const members: SerializedMember[] | null = sharing
+      ? memberRows.map((member) => serializeMember(member, workspace.type))
+      : null;
+
+    return NextResponse.json({
+      workspace: serializeWorkspace(workspace),
+      members,
+      seats: {
+        used: seats.members + seats.pending,
+        limit: entitlements.plan.limits.seats,
+        planName: entitlements.plan.name,
+      },
+    });
+  } catch (error) {
+    return apiError("GET /api/workspace", "Failed to load the workspace", error);
+  }
+}
 
 const createSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
