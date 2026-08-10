@@ -6,9 +6,14 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import type { Workspace, WorkspaceRole } from "@/generated/prisma/client";
+import {
+  requestedWorkspaceHeader,
+  resolveRequestUser,
+  WORKSPACE_HEADER,
+  type HeaderCarrier,
+} from "@/lib/auth/request";
 import { getOrCreateProfile } from "@/lib/data";
 import { prisma } from "@/lib/prisma";
-import { getUser } from "@/lib/supabase/server";
 
 import {
   applyEditionPermissions,
@@ -19,7 +24,8 @@ import {
 import { personalWorkspaceId } from "./ids";
 import { resolvePermissions, type Permission } from "./permissions";
 
-export { personalWorkspaceId };
+export { personalWorkspaceId, WORKSPACE_HEADER };
+export type { HeaderCarrier };
 
 /**
  * Holds the id of the user's currently selected workspace. The cookie is a
@@ -88,48 +94,99 @@ async function findDefaultMembership(userId: string): Promise<MembershipWithWork
 }
 
 /**
+ * The workspace the caller is asking for, in preference order:
+ *
+ *   1. the `X-Ballast-Workspace` header, for clients that cannot set cookies;
+ *   2. the selection cookie, which is what the web app has always used;
+ *   3. nothing, leaving the caller to fall back to the default workspace.
+ *
+ * Every source is attacker-controlled and every source goes through the same
+ * sanitisation. None of them grants anything: the id is only ever used to look
+ * up a membership row, which is what actually decides access.
+ */
+async function requestedWorkspaceId(request?: HeaderCarrier): Promise<string | null> {
+  const fromHeader = sanitizeWorkspaceId(await requestedWorkspaceHeader(request));
+  if (fromHeader) return fromHeader;
+
+  try {
+    const store = await cookies();
+    return sanitizeWorkspaceId(
+      store.get(WORKSPACE_COOKIE)?.value ?? store.get(LEGACY_WORKSPACE_COOKIE)?.value
+    );
+  } catch {
+    // No cookie scope (a token-only request evaluated outside a route, a unit
+    // test). The header and the default workspace still apply.
+    return null;
+  }
+}
+
+/**
  * THE security core: resolves the authenticated user and their currently
  * selected workspace, verifying membership in the database on every request.
  * Every API route and server-side data fetch that touches business data must
  * go through this (or requireWorkspace below). Per-request memoized.
  *
+ * `request` is optional. Route handlers may pass theirs to be explicit about
+ * which request is being authorized; server components have none to pass and
+ * read the ambient request instead. Both paths see the same headers, so the
+ * argument changes nothing but clarity — and passing it keeps the memo keyed
+ * per request object rather than per render.
+ *
  * Returns null when there is no authenticated user.
  */
-export const getWorkspaceContext = cache(async (): Promise<WorkspaceContext | null> => {
-  const user = await getUser();
-  if (!user) return null;
+export const getWorkspaceContext = cache(
+  async (request?: HeaderCarrier): Promise<WorkspaceContext | null> => {
+    const user = await resolveRequestUser(request);
+    if (!user) return null;
 
-  const store = await cookies();
-  const requested = sanitizeWorkspaceId(
-    store.get(WORKSPACE_COOKIE)?.value ?? store.get(LEGACY_WORKSPACE_COOKIE)?.value
-  );
+    const requested = await requestedWorkspaceId(request);
 
-  let membership = requested ? await findMembership(user.id, requested) : null;
-  if (!membership) membership = await findDefaultMembership(user.id);
+    let membership = requested ? await findMembership(user.id, requested) : null;
+    if (!membership) membership = await findDefaultMembership(user.id);
 
-  if (!membership) {
-    // Fresh signup whose first request skipped the dashboard layout: create
-    // the profile + personal workspace, then resolve again.
-    await getOrCreateProfile(user);
-    membership = await findDefaultMembership(user.id);
-    if (!membership) return null;
+    if (!membership) {
+      // Fresh signup whose first request skipped the dashboard layout: create
+      // the profile + personal workspace, then resolve again.
+      await getOrCreateProfile(user);
+      membership = await findDefaultMembership(user.id);
+      if (!membership) return null;
+    }
+
+    return {
+      user,
+      workspace: membership.workspace,
+      role: membership.role,
+      memberId: membership.id,
+      permissions: applyEditionPermissions(
+        membership.workspace.type,
+        resolvePermissions(membership.role, membership.permissions)
+      ),
+    };
   }
-
-  return {
-    user,
-    workspace: membership.workspace,
-    role: membership.role,
-    memberId: membership.id,
-    permissions: applyEditionPermissions(
-      membership.workspace.type,
-      resolvePermissions(membership.role, membership.permissions)
-    ),
-  };
-});
+);
 
 export type WorkspaceAuthResult =
   | { ok: true; ctx: WorkspaceContext }
   | { ok: false; response: NextResponse };
+
+/** True for a Request/NextRequest, false for a Permission string. */
+function isHeaderCarrier(value: unknown): value is HeaderCarrier {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "headers" in value &&
+    typeof (value as HeaderCarrier).headers?.get === "function"
+  );
+}
+
+function splitGuardArgs(
+  args: readonly unknown[]
+): { request?: HeaderCarrier; required: Permission[] } {
+  if (args.length > 0 && isHeaderCarrier(args[0])) {
+    return { request: args[0], required: args.slice(1) as Permission[] };
+  }
+  return { required: args as Permission[] };
+}
 
 /**
  * API-route guard: 401 without a session, 403 when the member lacks any of
@@ -138,11 +195,22 @@ export type WorkspaceAuthResult =
  *   const auth = await requireWorkspace("edit_transactions");
  *   if (!auth.ok) return auth.response;
  *   const { user, workspace } = auth.ctx;
+ *
+ * A route handler may pass its request first, which is what a Bearer client
+ * needs for the workspace header to be read from the right place:
+ *
+ *   const auth = await requireWorkspace(request, "edit_transactions");
  */
+export async function requireWorkspace(...required: Permission[]): Promise<WorkspaceAuthResult>;
 export async function requireWorkspace(
+  request: HeaderCarrier,
   ...required: Permission[]
+): Promise<WorkspaceAuthResult>;
+export async function requireWorkspace(
+  ...args: [HeaderCarrier, ...Permission[]] | Permission[]
 ): Promise<WorkspaceAuthResult> {
-  const ctx = await getWorkspaceContext();
+  const { request, required } = splitGuardArgs(args);
+  const ctx = await getWorkspaceContext(request);
   if (!ctx) {
     return {
       ok: false,
@@ -176,8 +244,22 @@ export async function requireWorkspace(
 export async function requireEditionFeature(
   feature: EditionFeature,
   ...required: Permission[]
+): Promise<WorkspaceAuthResult>;
+export async function requireEditionFeature(
+  request: HeaderCarrier,
+  feature: EditionFeature,
+  ...required: Permission[]
+): Promise<WorkspaceAuthResult>;
+export async function requireEditionFeature(
+  ...args: [HeaderCarrier, EditionFeature, ...Permission[]] | [EditionFeature, ...Permission[]]
 ): Promise<WorkspaceAuthResult> {
-  const auth = await requireWorkspace(...required);
+  const request = isHeaderCarrier(args[0]) ? (args[0] as HeaderCarrier) : undefined;
+  const rest = (request ? args.slice(1) : args) as [EditionFeature, ...Permission[]];
+  const [feature, ...required] = rest;
+
+  const auth = request
+    ? await requireWorkspace(request, ...required)
+    : await requireWorkspace(...required);
   if (!auth.ok) return auth;
   if (!editionHasFeature(auth.ctx.workspace.type, feature)) {
     return {
