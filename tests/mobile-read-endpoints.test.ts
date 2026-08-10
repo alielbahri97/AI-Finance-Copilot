@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GET as billingGet } from "@/app/api/billing/summary/route";
 import { GET as dashboardGet } from "@/app/api/dashboard/route";
@@ -197,6 +197,9 @@ function entitlements(overrides: Record<string, unknown> = {}) {
     cancelAtPeriodEnd: false,
     currentPeriodEnd: "2026-09-01T00:00:00.000Z",
     hasStripeCustomer: true,
+    planSource: "STRIPE",
+    hasActiveStripeSubscription: true,
+    play: null,
     period: "2026-08",
     usage: {
       aiMessages: 12,
@@ -1466,7 +1469,10 @@ describe("resolving where a plan came from", () => {
     expect(resolvePlanSource({ ...base, ownerEmail: null })).toBe("free");
   });
 
-  it("never reports google_play, which does not exist yet", () => {
+  // google_play is real now, but only the entitlements resolver can see a Play
+  // purchase, so nothing is ever inferred from a Subscription row alone. The
+  // resolver-driven cases live in tests/play-billing.test.ts.
+  it("never infers google_play from a Subscription row alone", () => {
     const inputs = [
       base,
       { ...base, isTrial: true },
@@ -1539,6 +1545,8 @@ describe("the billing summary", () => {
         planId: "PRO",
         isTrial: true,
         trialEndsAt: "2026-08-24T00:00:00.000Z",
+        planSource: "TRIAL",
+        hasActiveStripeSubscription: false,
       })
     );
 
@@ -1549,7 +1557,12 @@ describe("the billing summary", () => {
 
   it("reports a free workspace as free", async () => {
     domain.getEntitlements.mockResolvedValue(
-      entitlements({ plan: getPlan("FREE", "business"), planId: "FREE" })
+      entitlements({
+        plan: getPlan("FREE", "business"),
+        planId: "FREE",
+        planSource: "FREE",
+        hasActiveStripeSubscription: false,
+      })
     );
 
     const body = await (await billingGet(get("/api/billing/summary"))).json();
@@ -1584,6 +1597,188 @@ describe("the billing summary", () => {
     expect(body.plans.find((plan: { id: string }) => plan.id === "PLUS").monthlyPrice).toBe("4.99");
     // Personal has no invoices, so the meter is present but reads zero of zero.
     expect(body.usage.invoiceExtractions.limit).toBe(0);
+  });
+
+  /**
+   * The Google Play half. This is what an Android client reads to decide whether
+   * to show purchase buttons at all, which is the difference between a customer
+   * who already pays on the web being charged twice and not.
+   */
+  describe("the Google Play block", () => {
+    beforeEach(() => {
+      process.env.GOOGLE_PLAY_PACKAGE_NAME = "com.ballastmoney.app";
+      process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON = JSON.stringify({
+        client_email: "play@ballast.iam.gserviceaccount.com",
+        private_key: "-----BEGIN PRIVATE KEY-----\nx\n-----END PRIVATE KEY-----\n",
+      });
+      process.env.STRIPE_SECRET_KEY = "sk_test_123";
+      db.findFirstMember.mockResolvedValue({ profile: { email: "owner@example.com" } });
+    });
+
+    afterEach(() => {
+      delete process.env.GOOGLE_PLAY_PACKAGE_NAME;
+      delete process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON;
+      delete process.env.STRIPE_SECRET_KEY;
+    });
+
+    it("lists the products this edition sells, with the identifiers to buy them with", async () => {
+      const body = await (await billingGet(get("/api/billing/summary"))).json();
+
+      expect(body.play.configured).toBe(true);
+      expect(body.play.packageName).toBe("com.ballastmoney.app");
+      expect(body.play.products).toEqual([
+        {
+          productId: "business_pro",
+          basePlanId: "business-pro-monthly",
+          planId: "PRO",
+          planName: "Pro",
+        },
+        {
+          productId: "business_team",
+          basePlanId: "business-team-monthly",
+          planId: "BUSINESS",
+          planName: "Business",
+        },
+      ]);
+      // Supplied ready-made so a client never reimplements the hashing.
+      expect(body.play.obfuscatedAccountId).toEqual(expect.stringMatching(/^[0-9a-f]{64}$/));
+      expect(body.play.obfuscatedProfileId).toEqual(expect.stringMatching(/^[0-9a-f]{64}$/));
+      expect(body.play.obfuscatedProfileId).not.toBe(body.play.obfuscatedAccountId);
+    });
+
+    it("never offers a business product to a personal workspace", async () => {
+      authorize(
+        context({
+          workspace: {
+            id: "ws-2",
+            name: "Personal",
+            type: "PERSONAL",
+            currency: "EUR",
+            aiCategorizationEnabled: true,
+            autoDunningEnabled: false,
+          },
+        })
+      );
+      domain.getEntitlements.mockResolvedValue(
+        entitlements({
+          plan: getPlan("PLUS", "personal"),
+          planId: "PLUS",
+          edition: "personal",
+          workspaceType: "PERSONAL",
+        })
+      );
+
+      const body = await (await billingGet(get("/api/billing/summary"))).json();
+      expect(body.play.products.map((product: { productId: string }) => product.productId)).toEqual(
+        ["personal_plus", "personal_premium"]
+      );
+    });
+
+    // The single most expensive mistake available: a Stripe customer installs the
+    // app, taps upgrade, and is charged twice.
+    it("forbids in-app purchase while Stripe is paying, and points at the portal", async () => {
+      db.findSubscription.mockResolvedValue({ stripeSubscriptionId: "sub_123" });
+
+      const body = await (await billingGet(get("/api/billing/summary"))).json();
+      expect(body.planSource).toBe("stripe");
+      expect(body.management).toMatchObject({
+        source: "stripe",
+        canPurchaseInApp: false,
+        blockedReason: "MANAGED_ON_WEB",
+        portalAvailable: true,
+        playManageUrl: null,
+      });
+    });
+
+    it("allows in-app purchase for a workspace nobody is paying for", async () => {
+      domain.getEntitlements.mockResolvedValue(
+        entitlements({
+          plan: getPlan("FREE", "business"),
+          planId: "FREE",
+          planSource: "FREE",
+          hasActiveStripeSubscription: false,
+          hasStripeCustomer: false,
+        })
+      );
+
+      const body = await (await billingGet(get("/api/billing/summary"))).json();
+      expect(body.management).toMatchObject({
+        source: "free",
+        canPurchaseInApp: true,
+        blockedReason: null,
+        portalAvailable: false,
+      });
+    });
+
+    it("offers a Play subscriber the Play deep link, and says prices come from Play", async () => {
+      domain.getEntitlements.mockResolvedValue(
+        entitlements({
+          plan: getPlan("PRO", "business"),
+          planId: "PRO",
+          planSource: "GOOGLE_PLAY",
+          hasActiveStripeSubscription: false,
+          hasStripeCustomer: false,
+          play: {
+            purchaseToken: "token-1",
+            productId: "business_pro",
+            basePlanId: "business-pro-monthly",
+            state: "SUBSCRIPTION_STATE_ACTIVE",
+            expiryTime: new Date("2026-09-01T00:00:00.000Z"),
+            autoRenewing: true,
+            acknowledged: true,
+            entitling: true,
+          },
+        })
+      );
+
+      const body = await (await billingGet(get("/api/billing/summary"))).json();
+      expect(body.planSource).toBe("google_play");
+      // Google converts the base price per country, so the euro list price in
+      // `plans` is not what this customer pays and the response says so.
+      expect(body.priceSource).toBe("google_play");
+      expect(body.play.subscription).toEqual({
+        productId: "business_pro",
+        basePlanId: "business-pro-monthly",
+        state: "SUBSCRIPTION_STATE_ACTIVE",
+        expiresAt: "2026-09-01T00:00:00.000Z",
+        autoRenewing: true,
+        acknowledged: true,
+        entitling: true,
+      });
+      expect(body.management.playManageUrl).toBe(
+        "https://play.google.com/store/account/subscriptions?sku=business_pro&package=com.ballastmoney.app"
+      );
+      expect(body.management.canPurchaseInApp).toBe(true);
+    });
+
+    it("says euro list prices apply to everyone else", async () => {
+      const body = await (await billingGet(get("/api/billing/summary"))).json();
+      expect(body.priceSource).toBe("eur_list");
+    });
+
+    it("gives a complimentary account neither affordance", async () => {
+      db.findFirstMember.mockResolvedValue({ profile: { email: "alihbahri@gmail.com" } });
+
+      const body = await (await billingGet(get("/api/billing/summary"))).json();
+      expect(body.management).toMatchObject({
+        source: "complimentary",
+        canPurchaseInApp: false,
+        blockedReason: "COMPLIMENTARY",
+        portalAvailable: false,
+        playManageUrl: null,
+      });
+    });
+
+    it("tells a client not to try buying when this server has no Play credentials", async () => {
+      delete process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON;
+
+      const body = await (await billingGet(get("/api/billing/summary"))).json();
+      expect(body.play.configured).toBe(false);
+      expect(body.management).toMatchObject({
+        canPurchaseInApp: false,
+        blockedReason: "PLAY_NOT_CONFIGURED",
+      });
+    });
   });
 
   it("answers 500 with a safe message when the subscription lookup fails", async () => {

@@ -22,6 +22,13 @@ export type AuditAction =
   | "billing.checkout_started"
   | "billing.portal_opened"
   | "billing.plan_changed"
+  /// A Google Play purchase token was checked against Google and accepted.
+  | "billing.play_purchase_verified"
+  /// A Google Play purchase was refused: wrong workspace, wrong product, or a
+  /// Stripe subscription already pays for this workspace.
+  | "billing.play_purchase_rejected"
+  /// A real-time developer notification from Google Play was applied.
+  | "billing.play_notification"
   | "data.export"
   | "data.transactions_deleted"
   | "data.import_undone"
