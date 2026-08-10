@@ -27,7 +27,6 @@ object AuthCopy {
     const val LOGIN_SUBMIT = "Sign in"
     const val LOGIN_ERROR_TITLE = "Sign in failed"
     const val FORGOT_PASSWORD_LINK = "Forgot password?"
-    const val REMEMBER_EMAIL = "Remember email"
     const val NO_ACCOUNT = "No account yet?"
     const val CREATE_ONE = "Create one"
 
