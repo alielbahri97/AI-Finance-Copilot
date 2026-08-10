@@ -10,13 +10,24 @@ import kotlinx.serialization.Serializable
  * hand-parsed arguments. The R8 keep rule for this package exists because the
  * library reflects over these classes to build and read argument bundles.
  */
-sealed interface Route
+sealed interface Route {
+    /**
+     * The equivalent web URL. It is the identity a [NavItem] is matched on, so
+     * the bottom bar can tell which tab is selected without a second lookup
+     * table, and it keeps the two clients' navigation comparable by eye.
+     */
+    val webPath: String
+}
 
 @Serializable
-data object DashboardRoute : Route
+data object DashboardRoute : Route {
+    override val webPath: String get() = "/dashboard"
+}
 
 @Serializable
-data object TransactionsRoute : Route
+data object TransactionsRoute : Route {
+    override val webPath: String get() = "/transactions"
+}
 
 /**
  * Banks and accounts. On the web this lives at `/integrations` and covers every
@@ -24,7 +35,9 @@ data object TransactionsRoute : Route
  * providers and their accounts, hence the name.
  */
 @Serializable
-data object AccountsRoute : Route
+data object AccountsRoute : Route {
+    override val webPath: String get() = "/integrations"
+}
 
 /**
  * A destination that exists in the product but not yet in this client. Carries
@@ -33,7 +46,7 @@ data object AccountsRoute : Route
  */
 @Serializable
 data class ComingSoonRoute(
-    val webPath: String,
+    override val webPath: String,
     val title: String,
 ) : Route
 
@@ -43,4 +56,7 @@ data class ComingSoonRoute(
  * preserved and nothing behind it can be reached or read.
  */
 @Serializable
-data object SessionLockRoute : Route
+data object SessionLockRoute : Route {
+    /** Not a web destination; the browser has its own lock overlay. */
+    override val webPath: String get() = "/lock"
+}
