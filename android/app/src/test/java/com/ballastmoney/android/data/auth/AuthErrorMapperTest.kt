@@ -109,12 +109,6 @@ class AuthErrorMapperTest {
     @Test
     @DisplayName("credential-manager cancellations map onto the ported names")
     fun credentialManagerCancellationIsSilent() {
-        // androidx.credentials reports a dismissed sheet with these class names
-        // rather than as a NotAllowedError. Constructed here rather than
-        // imported so the test does not need the credentials library.
-        class GetCredentialCancellationException : RuntimeException("activity is cancelled")
-        class CreateCredentialCancellationException : RuntimeException("user cancelled")
-
         assertSame(
             AuthErrorMessage.Cancelled,
             AuthErrorMapper.describe(GetCredentialCancellationException()),
@@ -190,3 +184,13 @@ class AuthErrorMapperTest {
         )
     }
 }
+
+// androidx.credentials reports a dismissed sheet with these class names rather
+// than as a NotAllowedError, and AuthErrorMapper matches on the name so that it
+// need not depend on the credentials library while passkeys are off. Declared
+// here rather than imported for the same reason, and at file level rather than
+// inside the test so that `simpleName` is unambiguous.
+
+private class GetCredentialCancellationException : RuntimeException("activity is cancelled")
+
+private class CreateCredentialCancellationException : RuntimeException("user cancelled")

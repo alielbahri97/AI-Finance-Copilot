@@ -47,11 +47,11 @@ object SupabaseConfig {
     /**
      * Pure, so the wording can be exercised without `BuildConfig`.
      *
-     * A URL that is present but does not start with a scheme is treated as
-     * missing rather than passed through: supabase-kt accepts a bare host, but
-     * someone who has pasted `https://id.supabase.co/auth/v1` — a mistake the
-     * SDK rejects with its own message — is better served by being told the
-     * shape it wants here.
+     * The one shape check beyond emptiness is for an `/auth/v1` suffix. That is
+     * the mistake people actually make — the module path is what the Supabase
+     * dashboard shows next to the key — and supabase-kt rejects it with a
+     * message about a malformed host, which points at the wrong thing. A bare
+     * host with no scheme is left alone, because the SDK accepts it.
      */
     fun inspect(url: String, anonKey: String): SupabaseConfiguration {
         val trimmedUrl = url.trim()
