@@ -39,7 +39,10 @@ Inside `app/src/main/java/com/ballastmoney/android`:
 | `data/fake` | The in-memory dataset and the fake repositories |
 | `data/local` | Room entities, DAOs, the outbox table |
 | `data/preferences` | DataStore-backed settings and session-lock state |
-| `data/remote` | Ktor client configuration and the endpoint list |
+| `data/remote` | Ktor client, the endpoint list, DTOs and the wire mappers |
+| `data/repository` | The real repository implementations and the paging mediator |
+| `data/auth` | Supabase authentication, encrypted session storage, error mapping |
+| `data/bank` | The GoCardless connect flow and its pending-connection record |
 | `designsystem` | Theme tokens, brand mark, primitives |
 | `navigation` | Type-safe routes and the navigation table |
 | `session` | Session lock and biometric unlock |
@@ -240,6 +243,78 @@ response is *the page actually served*, so asking for page 40 of a three-page
 set returns page 3 rather than an empty list. The mediator compares what it
 asked for with what it got and stops; without that it would page forever against
 a clamped tail.
+
+## Authentication
+
+Real Supabase authentication, `auth-kt` only. **`postgrest-kt` is deliberately
+absent**: every authorization rule this app obeys — workspace scoping, roles,
+permissions, edition and plan gating — lives in the Next.js API, and querying
+Postgres from the client would bypass all of it. Supabase is used for exactly
+one thing: turning a password into an access token that the API will accept.
+
+Four screens in `ui/auth`: sign in, sign up, forgot password, reset password.
+Sign-up carries the edition choice into user metadata as `workspace_type`, and a
+referral code the same way, because that metadata is the only thing that
+survives the email-confirmation round trip — the account is created on the
+device and finished by a click in an email that may open on a different one.
+
+The session lives in `EncryptedSharedPreferences` rather than plain
+preferences, behind a `SessionStorage` implementation handed to the Supabase
+client. `AuthErrorMapper` ports the web app's mapping — roughly a dozen codes,
+including unconfirmed email, banned account and a cancelled biometric prompt —
+keeping the web app's wording, because that copy is real product value and
+"Error: invalid_credentials" is not.
+
+The session lock is wired to the real session and only gates the interface: the
+Supabase session stays alive and valid behind the lock, so unlocking is
+instant rather than a re-authentication.
+
+### What passkeys still need
+
+Written up and mapped, switched off behind `PasskeySupport.ENABLED = false`.
+supabase-kt exposes `auth.passkeys` but drives no platform prompt, so the
+WebAuthn ceremony would have to be run by hand through `androidx.credentials`.
+Three prerequisites are outside this repository, and all three need the user:
+
+- the Play App Signing certificate's SHA-256 fingerprint, as an
+  `android:apk-key-hash:<base64url>` origin allow-listed on the Supabase side;
+- a `delegate_permission/common.get_login_creds` relation for
+  `com.ballastmoney.android` in `assetlinks.json` served from
+  `app.ballastmoney.com/.well-known/`;
+- Passkeys enabled in the Supabase project's Auth settings.
+
+The error copy for every passkey and WebAuthn failure is already ported and
+tested, so flipping the flag once the ceremony exists needs no copy work. The
+one implementation trap is recorded in `data/auth/Passkeys.kt`: a native app
+must **not** put an `origin` field in the request JSON, because Credential
+Manager derives it from the signing certificate and treating the call as a
+privileged-browser request fails at the platform.
+
+## Connecting a bank
+
+`ui/bank` and `data/bank` implement the GoCardless flow: pick a country, pick an
+institution from `GET /api/integrations/gocardless/institutions`, then
+`POST .../link` for a consent URL and `POST .../finalize` with the reference the
+link call returned.
+
+The consent page opens in a **Chrome Custom Tab**, never a WebView. Banks block
+embedded web views for credential entry, so a WebView would not degrade — the
+user would reach their bank and be told to use a real browser, with the app
+looking broken.
+
+Two behaviours are worth knowing before reading the code:
+
+- **The bank returns to the *web* callback, not to the app.** A signed-out phone
+  user therefore sees the web login page for a moment at the end of the flow.
+  That is accepted rather than worked around: whatever the tab shows is ignored,
+  and the app calls `finalize` itself on resume with the reference it kept. It
+  is idempotent, so this is correct whether or not the browser had a session.
+- **Users abandon bank consent constantly.** The pending connection is a record
+  on disk, so returning to the foreground polls `finalize` even if the process
+  was killed behind the browser. It gives up on a deadline rather than
+  retrying forever, and consent expiry and per-account rate-limit windows are
+  shown as information — a rate limit means "these balances are today's, come
+  back tomorrow", which is not a failure the user did anything to cause.
 
 ## Money
 
