@@ -7,6 +7,9 @@ import { timestamp, timestampOrNull, type TimestampString } from "@/lib/api/wire
 import type { HeaderCarrier } from "@/lib/auth/request";
 import { verifySupabaseAccessToken, type SupabaseJwtClaims } from "@/lib/auth/bearer";
 import { extractBearerToken } from "@/lib/auth/token";
+import { playPackageName } from "@/lib/billing/play/config";
+import { playManagementUrl } from "@/lib/billing/play/products";
+import { playEntitlement } from "@/lib/billing/play/state";
 import { getStripe, isBillingConfigured } from "@/lib/billing/stripe";
 import { decryptSecret } from "@/lib/integrations/crypto";
 import { getProviderHooks } from "@/lib/integrations/providers";
@@ -308,6 +311,67 @@ export async function activeSubscriptions(
   }));
 }
 
+export interface PlaySubscriptionWarning {
+  workspaceId: string;
+  workspaceName: string;
+  plan: string;
+  productId: string;
+  /** Play's own state string. */
+  state: string;
+  expiresAt: TimestampString | null;
+  /** Where the user has to go to cancel it, because the server cannot. */
+  manageUrl: string | null;
+}
+
+/**
+ * Google Play subscriptions on workspaces about to disappear.
+ *
+ * Reported separately from the Stripe ones because the remedy is different, and
+ * the difference is the whole point: **a Play subscription cannot be cancelled
+ * server-side.** There is no such call in the Google Play Developer API — only
+ * the subscriber can cancel, from the Play Store — so deleting the account would
+ * otherwise leave a live monthly charge for a product that no longer exists.
+ *
+ * The choice made here is to surface it, loudly, at every step: in the warnings
+ * before the user commits, in the deletion email, and as an error-level log line
+ * when the deletion executes. Blocking the deletion on it was the alternative and
+ * is worse — a deletion request must not be refusable on the strength of a
+ * third-party billing state, which is exactly the kind of thing Play's own data
+ * deletion policy exists to prevent.
+ */
+export async function activePlaySubscriptions(
+  workspaceIds: string[]
+): Promise<PlaySubscriptionWarning[]> {
+  if (workspaceIds.length === 0) return [];
+  const packageName = playPackageName();
+  const now = new Date();
+  const rows = await prisma.playPurchase.findMany({
+    where: { workspaceId: { in: workspaceIds }, retiredAt: null, revokedAt: null },
+    select: {
+      workspaceId: true,
+      plan: true,
+      productId: true,
+      state: true,
+      expiryTime: true,
+      workspace: { select: { name: true } },
+    },
+  });
+  return rows
+    .filter(
+      (row) =>
+        playEntitlement({ state: row.state, expiryTime: row.expiryTime, now }).entitling
+    )
+    .map((row) => ({
+      workspaceId: row.workspaceId,
+      workspaceName: row.workspace?.name ?? row.workspaceId,
+      plan: row.plan,
+      productId: row.productId,
+      state: row.state,
+      expiresAt: timestampOrNull(row.expiryTime),
+      manageUrl: packageName ? playManagementUrl(row.productId, packageName) : null,
+    }));
+}
+
 /**
  * Records a security event in every workspace the user is still a member of.
  * An account disappearing is the other members' business too, and in the
@@ -380,7 +444,11 @@ export async function sendDeletionRequestedEmail(
   );
 }
 
-export async function sendDeletionCompletedEmail(email: string | null): Promise<void> {
+export async function sendDeletionCompletedEmail(
+  email: string | null,
+  /** True when a Google Play subscription is still live and only the user can stop it. */
+  playSubscriptionNeedsCancelling = false
+): Promise<void> {
   await notify(
     email,
     "Your Ballast account has been deleted",
@@ -389,6 +457,12 @@ export async function sendDeletionCompletedEmail(email: string | null): Promise<
       bodyText:
         "Your Ballast account and the financial data in it have been permanently deleted. " +
         "This cannot be undone and there is nothing left to restore.\n\n" +
+        (playSubscriptionNeedsCancelling
+          ? "One thing is left for you to do. Your subscription was bought through Google Play, " +
+            "and Google only lets the subscriber cancel it — we cannot do it for you. " +
+            "Open the Play Store, go to Payments and subscriptions, then Subscriptions, and cancel Ballast, " +
+            "or you will keep being charged for it.\n\n"
+          : "") +
         "We keep a record that a deletion happened, holding only a one-way hash of your email address, " +
         "and audit entries in shared workspaces that still belong to other people. Those no longer name you.\n\n" +
         "You are welcome back any time — a new account starts empty.",
@@ -409,6 +483,12 @@ export interface DeletionOutcome {
   revokedConnections: number;
   revocationFailures: number;
   cancelledSubscriptions: number;
+  /**
+   * Live Google Play subscriptions on the workspaces that were deleted. Not
+   * cancelled — they cannot be, from a server — only reported, so the user is
+   * told to cancel them in the Play Store and support has a record if they don't.
+   */
+  playSubscriptionsToCancel: number;
   deletedWorkspaces: number;
   orphanedWorkspaces: string[];
   authUserDeleted: boolean;
@@ -551,6 +631,7 @@ export async function executeAccountDeletion(
     revokedConnections: 0,
     revocationFailures: 0,
     cancelledSubscriptions: 0,
+    playSubscriptionsToCancel: 0,
     deletedWorkspaces: 0,
     orphanedWorkspaces: [],
     authUserDeleted: false,
@@ -583,6 +664,26 @@ export async function executeAccountDeletion(
     const soleOccupancyIds = disposition.soleOccupancy.map((w) => w.id);
     outcome.cancelledSubscriptions = await cancelSubscriptions(soleOccupancyIds);
 
+    // Play subscriptions cannot be cancelled from here, so they are recorded
+    // before the rows cascade away with their workspace. Error level on purpose:
+    // it means a real person is still being charged for a product they no longer
+    // have, and the only remedy runs through the Play Store or a Play Console
+    // refund somebody has to issue by hand.
+    const playSubscriptions = await activePlaySubscriptions(soleOccupancyIds).catch(() => []);
+    outcome.playSubscriptionsToCancel = playSubscriptions.length;
+    if (playSubscriptions.length > 0) {
+      logger.error("account_deletion_play_subscription_not_cancellable", {
+        userId,
+        requestId: request.id,
+        subscriptions: playSubscriptions.map((subscription) => ({
+          workspaceId: subscription.workspaceId,
+          productId: subscription.productId,
+          state: subscription.state,
+          expiresAt: subscription.expiresAt,
+        })),
+      });
+    }
+
     // Written before the Profile goes: the row keeps the workspace's history
     // intact, and the cascade's SetNull on user_id is what anonymises it.
     const survivingIds = [...disposition.surviving, ...disposition.blocking].map((w) => w.id);
@@ -612,12 +713,16 @@ export async function executeAccountDeletion(
       },
     });
 
-    await sendDeletionCompletedEmail(profile?.email ?? null);
+    await sendDeletionCompletedEmail(
+      profile?.email ?? null,
+      outcome.playSubscriptionsToCancel > 0
+    );
 
     logger.info("account_deletion_completed", {
       requestId: request.id,
       deletedWorkspaces: outcome.deletedWorkspaces,
       cancelledSubscriptions: outcome.cancelledSubscriptions,
+      playSubscriptionsToCancel: outcome.playSubscriptionsToCancel,
       revokedConnections: outcome.revokedConnections,
       revocationFailures: outcome.revocationFailures,
       authUserDeleted: outcome.authUserDeleted,
